@@ -35,14 +35,14 @@ toList a = go a []
        go (Append l r) rest = go l $! go r rest
        go (AList xs)   rest = xs ++ rest
 
-parTreeLike :: Int -> Int -> (Int -> P a) -> P (AList a)
+parTreeLike :: Int -> Int -> (Int -> Par a) -> Par (AList a)
 parTreeLike min max fn
  | max - min <= threshold = do
       l <- mapM fn [min..max]
       seqList r0 l `seq` return (AList l)
  | otherwise  = do
-      rght <- forkR $ parTreeLike (mid+1) max fn
-      left <- forkR $ parTreeLike min mid fn
+      rght <- forkR_ $ parTreeLike (mid+1) max fn
+      left <- forkR_ $ parTreeLike min mid fn
       r <- get rght
       l <- get left
       return (l `append` r)
@@ -52,21 +52,21 @@ parTreeLike min max fn
 threshold = 1
 
 
-runMandel :: Int -> Int -> Int -> P PixMap
-runMandel max_row max_col max_depth = do
-  l <- parTreeLike 0 (max_row-1) $ \y ->
-          let l = [ mandelStep y x | x <- [0.. max_col-1] ] in
+runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par PixMap
+runMandel minX minY maxX maxY winX winY max_depth = do
+  l <- parTreeLike 0 (winY-1) $ \y -> do
+          let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)
-  return (createPixmap (fromIntegral max_col) (fromIntegral max_row) (fromIntegral max_depth) (map prettyRGB (concat (toList l))))
+  return (createPixmap (fromIntegral winX) (fromIntegral winY)
+                       (fromIntegral max_depth)
+                       (map prettyRGB (concat (toList l))))
   where
     mandelStep i j = mandel max_depth z
-        where z = ((fromIntegral j * r_scale) / fromIntegral max_row + r_origin) :+
-                  ((fromIntegral i * c_scale) / fromIntegral max_col + c_origin)
+        where z = ((fromIntegral j * r_scale) / fromIntegral winY + minY) :+
+                  ((fromIntegral i * c_scale) / fromIntegral winX + minX)
 
-    r_origin = -2.0  :: Double
-    r_scale  =  4.0  :: Double
-    c_origin = -2.0  :: Double
-    c_scale =   4.0  :: Double
+    r_scale  =  maxY - minY  :: Double
+    c_scale =   maxX - minX  :: Double
 
     prettyRGB::Int -> (Int,Int,Int)
     prettyRGB s = let t = (max_depth - s) in (s,t,t)
@@ -74,5 +74,8 @@ runMandel max_row max_col max_depth = do
 main = do args <- getArgs
           hSetBinaryMode stdout True
           case args of
-           []      -> print $ runP $ runMandel 3 3 3   -- Should output 24.
-           [a,b,c] -> print $ runP $ runMandel (read a) (read b) (read c)
+           []      -> print $ runPar $ runMandel (-2) (-2) 2 2 3 3 3
+           [minX,minY,maxX,maxY,winX,winY,depth] ->
+              print $ runPar $ runMandel (read minX) (read minY)
+                                       (read maxX) (read maxY)
+                                       (read winX) (read winY) (read depth)
