@@ -1,14 +1,66 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification #-}
 
-module ParCont (
-    P,
-    runP, -- :: P a -> a
-    new,  -- :: P (Var a)
-    get,  -- :: Var a -> P a
-    put,  -- :: Var a -> a -> P a
-    fork, -- :: P a -> P a
+-- | This module provides a deterministic parallelism monad, @Par@.
+-- @Par@ is for speeding up pure computations; it cannot be used for
+-- IO (for that, see @Control.Concurrent@).  The result of a given
+-- @Par@ computation is always the same - ie. it is deterministic, but
+-- the computation may be performed more quickly if there are
+-- processors available to share the work.
+--
+-- For example, the following program fragment computes the values of
+-- @(f x)@ and @(g x)@ in parallel, and returns a pair of their results:
+--
+-- >  runPar $ do
+-- >      a <- par (f x)
+-- >      b <- par (g x)
+-- >      return (a,b)
+--
+-- @Par@ can be used for specifying pure parallel computations in
+-- which the order of the computation is not known beforehand;
+-- that is, the programmer specifies how information flows from one
+-- part of the computation to another, but not the order in which
+-- computations will be evaluated at runtime.  Information flow is
+-- described using "variables" called @PVar@s, which support 'put' and
+-- 'get' operations.  For example, the following defines a small
+-- network with 4 data values in a diamond-shaped data flow:
+--
+-- >   runPar $ do
+-- >       [a,b,c,d] <- sequence [new,new,new,new]
+-- >       fork $ do x <- get a; put b (x+1)
+-- >       fork $ do x <- get a; put c (x+2)
+-- >       fork $ do x <- get b; y <- get c; put d (x+y)
+-- >       fork $ do put a (3 :: Int)
+-- >       get d
+--
+-- The result of this computation is always 9.  The 'get' operation
+-- waits until its input is available; multiple 'put's to the same
+-- @PVar@ are not allowed, and result in a runtime error.  Values
+-- stored in @PVar@s are usually fully evaluated (although there are
+-- ways provided to pass lazy values if necessary).
+--
+-- Unlike @Control.Parallel@, in @Control.Monad.Par@, parallelism is
+-- not combined with laziness, so sharing and granulairty are
+-- completely under the control of the programmer.  New units of
+-- parallel work are only created by @fork@, @par@, and a few other
+-- combinators.
+--
+-- The implementation is based on a work-stealing scheduler that
+-- divides the work as evenly as possible betwen the available
+-- processors at runtime.
+--
+
+module Control.Monad.Par (
+    Par,
+    runPar,
+    new,
+    get,
+    put,
+    fork,
+    par,
     forkR,
+    forkR_,
+    put_,
   ) where
 
 import Control.Monad.Reader as R
@@ -16,13 +68,13 @@ import Control.Monad
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent
-import GHC.Conc
+import GHC.Conc hiding (par)
 import Text.Printf
+import Control.DeepSeq
 
 -- ---------------------------------------------------------------------------
 
-data Trace = Yield Trace
-           | forall a . Get (PVar a) (a -> Trace)
+data Trace = forall a . Get (PVar a) (a -> Trace)
            | forall a . Put (PVar a) a Trace
            | forall a . New (PVar a -> Trace)
            | Fork Trace Trace
@@ -30,7 +82,6 @@ data Trace = Yield Trace
 
 sched :: Sched -> Trace -> IO ()
 sched queue t = case t of
-    Yield t'   -> sched queue t'
     New f -> do
       r <- newIORef (Right [])
       sched queue (f (PVar r))
@@ -118,59 +169,101 @@ data Sched = Sched
 
 -- type SchedR = R.ReaderT Sched IO
 
-newtype P a = P {
+newtype Par a = Par {
     runCont :: (a -> Trace) -> Trace
 }
 
-instance Functor P where
-    fmap f m = P $ \c -> runCont m (c . f)
+instance Functor Par where
+    fmap f m = Par $ \c -> runCont m (c . f)
 
-instance Monad P where
-    return a = P ($ a)
-    m >>= k  = P $ \c -> runCont m $ \a -> runCont (k a) c
+instance Monad Par where
+    return a = Par ($ a)
+    m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
 
 newtype PVar a = PVar (IORef (Either a [a -> Trace]))
 
-new :: P (PVar a)
-new  = P $ New
-
-runP :: P a -> a
-runP x = unsafePerformIO $ do
+runPar :: Par a -> a
+runPar x = unsafePerformIO $ do
    let n = numCapabilities
    workpools <- replicateM n $ newIORef []
    idle <- newIORef []
    let (main:others) = [ Sched { no=x, workpool=wp, idle, scheds=(main:others) }
                        | (x,wp) <- zip [1..] workpools ]
-   r <- newIORef (error "runP completed prematurely without a result")
+   r <- newIORef (error "runPar completed prematurely without a result")
    forM_ (zip [2..] others) $ \(cpu,sched) -> forkOnIO cpu $ reschedule sched
    sched main $
      runCont x $ \a -> unsafePerformIO (writeIORef r a >> return Done)
    readIORef r
 
-fork :: P () -> P ()
-fork p = P $ \c -> Fork (runCont p (\_ -> Done)) (c ())
+-- | forks a computation to happen in parallel.  The forked
+-- computation may exchange values with other computations using
+-- @PVar@s.
+fork :: Par () -> Par ()
+fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 
 -- -----------------------------------------------------------------------------
 
+-- | creates a new @PVar@
+new :: Par (PVar a)
+new  = Par $ New
 
-get :: PVar a -> P a
-get v = P $ \c -> Get v c
+-- | read the value in a @PVar@.  The 'get' can only return when the
+-- value has been written by a prior or parallel @put@ to the same
+-- @PVar@.
+get :: PVar a -> Par a
+get v = Par $ \c -> Get v c
 
-put :: PVar a -> a -> P ()
-put v !a = P $ \c -> Put v a (c ())
+-- | like 'put', but only head-strict rather than fully-strict.
+put_ :: PVar a -> a -> Par ()
+put_ v !a = Par $ \c -> Put v a (c ())
 
+-- | put a value into a @PVar@.  Multiple 'put's to the same @PVar@
+-- are not allowed, and result in a runtime error.
+--
+-- 'put' fully evaluates its argument, which therefore must be an
+-- instance of 'NFData'.  The idea is that this forces the work to
+-- happen when we expect it, rather than being passed to the consumer
+-- of the @PVar@ and performed later, which often results in less
+-- parallelism than expected.
+--
+-- Sometimes partial strictness is more appropriate: see 'put_'.
+--
+put :: NFData a => PVar a -> a -> Par ()
+put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 -- -----------------------------------------------------------------------------
 
-forkR :: P a -> P (PVar a)
+-- | Like 'forkR', but the result is only head-strict, not fully-strict.
+forkR_ :: Par a -> Par (PVar a)
+forkR_ p = do
+  r <- new
+  fork (p >>= put_ r)
+  return r
+
+-- | Like 'fork', but returns a @PVar@ that can be used to query the
+-- result of the forked computataion.
+forkR :: NFData a => Par a -> Par (PVar a)
 forkR p = do
   r <- new
   fork (p >>= put r)
   return r
 
-test = do
-  print (runP $ return 3)
-  print (runP $ do r <- new; put r 3; get r)
-  print (runP $ do r <- new; fork (put r 3); get r)
-  print ((runP $ do r <- new; get r)  :: Int)
+-- | equivalent to @forkR . return@
+par :: NFData a => a -> Par (PVar a)
+par a = forkR (return a)
 
+-- -----------------------------------------------------------------------------
+
+test = do
+  print (runPar $ return 3)
+  print (runPar $ do r <- new; put r (3 :: Int); get r)
+  print (runPar $ do r <- new; fork (put r (3::Int)); get r)
+  print ((runPar $ do r <- new; get r)  :: Int)
+
+test2 =  runPar $ do
+      [a,b,c,d] <- sequence [new,new,new,new]
+      fork $ do x <- get a; put b (x+1)
+      fork $ do x <- get a; put c (x+2)
+      fork $ do x <- get b; y <- get c; put d (x+y)
+      fork $ do put a (3 :: Int)
+      get d
