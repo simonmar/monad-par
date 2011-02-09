@@ -39,7 +39,7 @@
 -- stored in @PVar@s are usually fully evaluated (although there are
 -- ways provided to pass lazy values if necessary).
 --
--- Unlike @Control.Parallel@, in @Control.Monad.Par@, parallelism is
+-- Unlike @Control.Parallel@, in @Control.Monad.Par@ parallelism is
 -- not combined with laziness, so sharing and granulairty are
 -- completely under the control of the programmer.  New units of
 -- parallel work are only created by @fork@, @par@, and a few other
@@ -57,6 +57,7 @@ module Control.Monad.Par (
     get,
     put,
     fork,
+    both,
     par,
     forkR,
     forkR_,
@@ -201,6 +202,11 @@ runPar x = unsafePerformIO $ do
 fork :: Par () -> Par ()
 fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 
+-- > both a b >> c  ==   both (a >> c) (b >> c)
+-- is this useful for anything?
+both :: Par a -> Par a -> Par a
+both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
+
 -- -----------------------------------------------------------------------------
 
 -- | creates a new @PVar@
@@ -267,3 +273,8 @@ test2 =  runPar $ do
       fork $ do x <- get b; y <- get c; put d (x+y)
       fork $ do put a (3 :: Int)
       get d
+
+test3 = runPar $ do
+   a <- new
+   put a (3::Int)
+   both (return 1) (return 2)
