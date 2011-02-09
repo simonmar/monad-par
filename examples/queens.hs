@@ -14,9 +14,8 @@ nqueens nq = step 0 []
     step !n b
        | n >= threshold = return (iterate gen [b] !! (nq - n))
        | otherwise = do
-          vs <- forM (gen [b]) $ \b -> forkR (step (n+1) b)
-          rs <- mapM get vs
-          return $! (concat rs `using` seqList r0)
+          rs <- parMap (step (n+1)) (gen [b])
+          return (concat rs)
 
     safe :: Int -> Int -> [Int] -> Bool
     safe x d []    = True

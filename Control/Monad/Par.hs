@@ -12,8 +12,8 @@
 -- @(f x)@ and @(g x)@ in parallel, and returns a pair of their results:
 --
 -- >  runPar $ do
--- >      a <- par (f x)
--- >      b <- par (g x)
+-- >      a <- pval (f x)
+-- >      b <- pval (g x)
 -- >      return (a,b)
 --
 -- @Par@ can be used for specifying pure parallel computations in
@@ -53,18 +53,16 @@
 module Control.Monad.Par (
     Par,
     runPar,
+    fork,
     new,
     get,
-    put,
-    fork,
+    put, put_,
     both,
-    par,
-    forkR,
-    forkR_,
-    put_,
+    pval,
+    forkPut, forkPut_,
+    parMap,
   ) where
 
-import Control.Monad.Reader as R
 import Control.Monad
 import Data.IORef
 import System.IO.Unsafe
@@ -168,8 +166,6 @@ data Sched = Sched
     }
 --  deriving Show
 
--- type SchedR = R.ReaderT Sched IO
-
 newtype Par a = Par {
     runCont :: (a -> Trace) -> Trace
 }
@@ -239,24 +235,27 @@ put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 -- -----------------------------------------------------------------------------
 
--- | Like 'forkR', but the result is only head-strict, not fully-strict.
-forkR_ :: Par a -> Par (PVar a)
-forkR_ p = do
+-- | Like 'forkPut', but the result is only head-strict, not fully-strict.
+forkPut_ :: Par a -> Par (PVar a)
+forkPut_ p = do
   r <- new
   fork (p >>= put_ r)
   return r
 
 -- | Like 'fork', but returns a @PVar@ that can be used to query the
 -- result of the forked computataion.
-forkR :: NFData a => Par a -> Par (PVar a)
-forkR p = do
+forkPut :: NFData a => Par a -> Par (PVar a)
+forkPut p = do
   r <- new
   fork (p >>= put r)
   return r
 
 -- | equivalent to @forkR . return@
-par :: NFData a => a -> Par (PVar a)
-par a = forkR (return a)
+pval :: NFData a => a -> Par (PVar a)
+pval a = forkPut (return a)
+
+parMap :: NFData b => (a -> Par b) -> [a] -> Par [b]
+parMap f xs = mapM (forkPut . f) xs >>= mapM get
 
 -- -----------------------------------------------------------------------------
 
