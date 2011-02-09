@@ -3,14 +3,14 @@ import System.Environment
 import Control.Monad
 import Control.Seq
 
-import ParCont
+import Control.Monad.Par
 
-nqueens :: Int -> P [[Int]]
+nqueens :: Int -> Par [[Int]]
 nqueens nq = step 0 []
   where
     threshold = 5
 
-    step :: Int -> [Int] -> P [[Int]]
+    step :: Int -> [Int] -> Par [[Int]]
     step !n b
        | n >= threshold = return (iterate gen [b] !! (nq - n))
        | otherwise = do
@@ -28,4 +28,4 @@ nqueens nq = step 0 []
 
 main = do
   [n] <- fmap (fmap read) getArgs
-  print (length (runP (nqueens n)))
+  print (length (runPar (nqueens n)))
