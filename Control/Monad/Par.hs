@@ -59,7 +59,7 @@ module Control.Monad.Par (
     put, put_,
     both,
     pval,
-    forkPut, forkPut_,
+    spawn, spawn_,
     parMap,
   ) where
 
@@ -235,27 +235,27 @@ put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 -- -----------------------------------------------------------------------------
 
--- | Like 'forkPut', but the result is only head-strict, not fully-strict.
-forkPut_ :: Par a -> Par (PVar a)
-forkPut_ p = do
+-- | Like 'spawn', but the result is only head-strict, not fully-strict.
+spawn_ :: Par a -> Par (PVar a)
+spawn_ p = do
   r <- new
   fork (p >>= put_ r)
   return r
 
 -- | Like 'fork', but returns a @PVar@ that can be used to query the
 -- result of the forked computataion.
-forkPut :: NFData a => Par a -> Par (PVar a)
-forkPut p = do
+spawn :: NFData a => Par a -> Par (PVar a)
+spawn p = do
   r <- new
   fork (p >>= put r)
   return r
 
 -- | equivalent to @forkR . return@
 pval :: NFData a => a -> Par (PVar a)
-pval a = forkPut (return a)
+pval a = spawn (return a)
 
 parMap :: NFData b => (a -> Par b) -> [a] -> Par [b]
-parMap f xs = mapM (forkPut . f) xs >>= mapM get
+parMap f xs = mapM (spawn . f) xs >>= mapM get
 
 -- -----------------------------------------------------------------------------
 
