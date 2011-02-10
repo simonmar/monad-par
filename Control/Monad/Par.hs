@@ -82,21 +82,23 @@ data Trace = forall a . Get (PVar a) (a -> Trace)
 sched :: Sched -> Trace -> IO ()
 sched queue t = case t of
     New f -> do
-      r <- newIORef (Right [])
+      r <- newIORef Empty
       sched queue (f (PVar r))
     Get (PVar v) c -> do
       e <- readIORef v
       case e of
-         Left a   -> sched queue (c a)
-         Right cs -> do
+         Full a   -> sched queue (c a)
+         _other -> do
            r <- atomicModifyIORef v $ \e -> case e of
-                        Left a   -> (Left a, sched queue (c a))
-                        Right cs -> (Right (c:cs), reschedule queue)
+                        Empty    -> (Blocked [c], reschedule queue)
+                        Full a   -> (Full a,       sched queue (c a))
+                        Blocked cs -> (Blocked (c:cs), reschedule queue)
            r
     Put (PVar v) a t  -> do
       cs <- atomicModifyIORef v $ \e -> case e of
-               Left a   -> error "multiple put"
-               Right cs -> (Left a, cs)
+               Empty    -> (Full a, [])
+               Full a   -> error "multiple put"
+               Blocked cs -> (Full a, cs)
       mapM_ (pushWork queue. ($a)) cs
       sched queue t
     Fork child parent -> do
@@ -177,7 +179,9 @@ instance Monad Par where
     return a = Par ($ a)
     m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
 
-newtype PVar a = PVar (IORef (Either a [a -> Trace]))
+newtype PVar a = PVar (IORef (PVal a))
+
+data PVal a = Full a | Empty | Blocked [a -> Trace]
 
 runPar :: Par a -> a
 runPar x = unsafePerformIO $ do
