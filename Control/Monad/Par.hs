@@ -161,7 +161,7 @@ pushWork queue@Sched { workpool, idle } t = do
     r -- wake one up
 
 data Sched = Sched
-    { no       :: Int,
+    { no       :: {-# UNPACK #-} !Int,
       workpool :: IORef [Trace],
       idle     :: IORef [MVar Bool],
       scheds   :: [Sched]
