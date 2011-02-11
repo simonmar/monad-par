@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification #-}
+{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing #-}
 
 -- | This module provides a deterministic parallelism monad, @Par@.
 -- @Par@ is for speeding up pure computations; it cannot be used for
@@ -68,8 +69,8 @@ import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent
 import GHC.Conc hiding (par)
-import Text.Printf
 import Control.DeepSeq
+-- import Text.Printf
 
 -- ---------------------------------------------------------------------------
 
@@ -97,7 +98,7 @@ sched queue t = case t of
     Put (PVar v) a t  -> do
       cs <- atomicModifyIORef v $ \e -> case e of
                Empty    -> (Full a, [])
-               Full a   -> error "multiple put"
+               Full _   -> error "multiple put"
                Blocked cs -> (Full a, cs)
       mapM_ (pushWork queue. ($a)) cs
       sched queue t
@@ -151,8 +152,8 @@ steal q@Sched{ idle, scheds, no=my_no } = do
            Nothing -> go xs
 
 pushWork :: Sched -> Trace -> IO ()
-pushWork queue@Sched { workpool, idle } t = do
-  atomicModifyIORef workpool $ \ts -> (t:ts, ts)
+pushWork Sched { workpool, idle } t = do
+  atomicModifyIORef workpool $ \ts -> (t:ts, ())
   idles <- readIORef idle
   when (not (null idles)) $ do
     r <- atomicModifyIORef idle (\is -> case is of
