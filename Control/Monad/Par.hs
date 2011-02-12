@@ -80,39 +80,44 @@ import Test.HUnit
 
 -- ---------------------------------------------------------------------------
 
-data Trace = forall a . Get (PVar a) (a -> Trace)
-           | forall a . Put (PVar a) a Trace
-           | forall a . New (PVar a -> Trace)
-           | Fork Trace Trace
-           | Done
+type Trace = Sched -> IO ()
 
-sched :: Sched -> Trace -> IO ()
-sched queue t = case t of
-    New f -> do
-      r <- newIORef Empty
-      sched queue (f (PVar r))
-    Get (PVar v) c -> do
+traceGet :: PVar a -> (a -> Trace) -> Trace
+traceGet (PVar v) c queue = do
       e <- readIORef v
       case e of
-         Full a   -> sched queue (c a)
+         Full a   -> c a queue
          _other -> do
            r <- atomicModifyIORef v $ \e -> case e of
                         Empty    -> (Blocked [c], reschedule queue)
-                        Full a   -> (Full a,       sched queue (c a))
+                        Full a   -> (Full a,       c a queue)
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
            r
-    Put (PVar v) a t  -> do
+
+traceNew :: (PVar a -> Trace) -> Trace
+traceNew f sched = do
+      r <- newIORef Empty
+      f (PVar r) sched
+
+{-# INLINE tracePut #-}
+tracePut :: PVar a -> a -> (() -> Trace) -> Trace
+tracePut (PVar v) a t queue = do
       cs <- atomicModifyIORef v $ \e -> case e of
-               Empty    -> (Full a, [])
-               Full _   -> error "multiple put"
-               Blocked cs -> (Full a, cs)
+               Empty      -> (f, [])
+               Full _     -> error "multiple put"
+               Blocked cs -> (f, cs)
       mapM_ (pushWork queue. ($a)) cs
-      sched queue t
-    Fork child parent -> do
-         pushWork queue child
-         sched queue parent
-    Done ->
-         reschedule queue
+      t () queue
+  where
+      f = Full a
+
+traceFork :: Trace -> Trace -> Trace
+traceFork child parent queue = do
+     pushWork queue child
+     parent queue
+
+traceDone :: Trace
+traceDone queue = reschedule queue
 
 reschedule :: Sched -> IO ()
 reschedule queue@Sched{ workpool } = do
@@ -122,7 +127,7 @@ reschedule queue@Sched{ workpool } = do
            (t:ts') -> (ts', Just t)
   case e of
     Nothing -> steal queue
-    Just t  -> sched queue t
+    Just t  -> t queue
 
 steal :: Sched -> IO ()
 steal q@Sched{ idle, scheds, no=my_no } = do
@@ -154,8 +159,9 @@ steal q@Sched{ idle, scheds, no=my_no } = do
          case r of
            Just t  -> do
               -- printf "cpu %d got work from cpu %d\n" my_no (no x)
-              sched q t
+              t q
            Nothing -> go xs
+
 
 pushWork :: Sched -> Trace -> IO ()
 pushWork Sched { workpool, idle } t = do
@@ -230,7 +236,7 @@ runPar x = unsafePerformIO $ do
              then reschedule state
              else do
                   rref <- newIORef Empty
-                  sched state $ runCont (x >>= put_ (PVar rref)) (const Done)
+                  runCont (x >>= put_ (PVar rref)) (const traceDone) state
                   readIORef rref >>= putMVar m
 
    r <- takeMVar m
@@ -242,18 +248,18 @@ runPar x = unsafePerformIO $ do
 -- computation may exchange values with other computations using
 -- @PVar@s.
 fork :: Par () -> Par ()
-fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
+fork p = Par $ \c -> traceFork (runCont p (\_ -> traceDone)) (c ())
 
 -- > both a b >> c  ==   both (a >> c) (b >> c)
 -- is this useful for anything?
 both :: Par a -> Par a -> Par a
-both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
+both a b = Par $ \c -> traceFork (runCont a c) (runCont b c)
 
 -- -----------------------------------------------------------------------------
 
 -- | creates a new @PVar@
 new :: Par (PVar a)
-new  = Par $ New
+new  = Par $ traceNew
 
 -- Not sure yet if we want this for PVars:
 --newFilled :: NFData a => a -> Par (PVar a)
@@ -272,11 +278,11 @@ newFilled x =
 -- value has been written by a prior or parallel @put@ to the same
 -- @PVar@.
 get :: PVar a -> Par a
-get v = Par $ \c -> Get v c
+get v = Par $ \c -> traceGet v c
 
 -- | like 'put', but only head-strict rather than fully-strict.
 put_ :: PVar a -> a -> Par ()
-put_ v !a = Par $ \c -> Put v a (c ())
+put_ v !a = Par $ \c q -> tracePut v a c q
 
 -- | put a value into a @PVar@.  Multiple 'put's to the same @PVar@
 -- are not allowed, and result in a runtime error.
@@ -290,7 +296,7 @@ put_ v !a = Par $ \c -> Put v a (c ())
 -- Sometimes partial strictness is more appropriate: see 'put_'.
 --
 put :: NFData a => PVar a -> a -> Par ()
-put v a = deepseq a (Par $ \c -> Put v a (c ()))
+put v a = deepseq a (Par $ \c q -> tracePut v a c q)
 
 -- -----------------------------------------------------------------------------
 -- Derived functions
