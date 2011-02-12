@@ -7,7 +7,7 @@ import System.IO
 import Debug.Trace
 import Control.DeepSeq
 
-import ParCont
+import Control.Monad.Par
 import PortablePixmap
 
 mandel :: Int -> Complex Double -> Int
@@ -41,8 +41,8 @@ parTreeLike min max fn
       l <- mapM fn [min..max]
       seqList r0 l `seq` return (AList l)
  | otherwise  = do
-      rght <- forkR_ $ parTreeLike (mid+1) max fn
-      left <- forkR_ $ parTreeLike min mid fn
+      rght <- spawn_ $ parTreeLike (mid+1) max fn
+      left <- spawn_ $ parTreeLike min mid fn
       r <- get rght
       l <- get left
       return (l `append` r)

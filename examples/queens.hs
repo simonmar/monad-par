@@ -14,7 +14,7 @@ nqueens nq = step 0 []
     step !n b
        | n >= threshold = return (iterate gen [b] !! (nq - n))
        | otherwise = do
-          rs <- parMap (step (n+1)) (gen [b])
+          rs <- parMapM (step (n+1)) (gen [b])
           return (concat rs)
 
     safe :: Int -> Int -> [Int] -> Bool
