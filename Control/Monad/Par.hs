@@ -64,7 +64,9 @@ module Control.Monad.Par (
     parMap,
   ) where
 
-import Control.Monad
+import Data.Traversable
+import Control.Monad hiding (mapM, sequence)
+import Prelude hiding (mapM, sequence)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent
@@ -239,6 +241,7 @@ put :: NFData a => PVar a -> a -> Par ()
 put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 -- -----------------------------------------------------------------------------
+-- Derived functions
 
 -- | Like 'spawn', but the result is only head-strict, not fully-strict.
 spawn_ :: Par a -> Par (PVar a)
@@ -259,8 +262,17 @@ spawn p = do
 pval :: NFData a => a -> Par (PVar a)
 pval a = spawn (return a)
 
-parMap :: NFData b => (a -> Par b) -> [a] -> Par [b]
-parMap f xs = mapM (spawn . f) xs >>= mapM get
+-- -----------------------------------------------------------------------------
+-- Parallel maps over Traversable data structures
+
+parMap :: (Traversable t, NFData b) => (a -> b) -> t a -> Par (t b)
+parMap f xs = mapM (pval . f) xs >>= mapM get
+
+parMapM :: (Traversable t, NFData b) => (a -> Par b) -> t a -> Par (t b)
+parMapM f xs = mapM (spawn . f) xs >>= mapM get
+
+{-# SPECIALISE parMap  :: (NFData b) => (a -> b)     -> [a] -> Par [b] #-}
+{-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> Par [b] #-}
 
 -- -----------------------------------------------------------------------------
 
