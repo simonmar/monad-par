@@ -61,7 +61,7 @@ module Control.Monad.Par (
     both,
     pval,
     spawn, spawn_,
-    parMap,
+    parMap, parMapM,
   ) where
 
 import Data.Traversable
