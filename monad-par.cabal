@@ -17,5 +17,6 @@ Library
   Exposed-modules: Control.Monad.Par
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2
+  ghc-options: -O2
   Other-modules:
 
