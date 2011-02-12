@@ -1,0 +1,21 @@
+Name:                monad-par
+Version:             0.1
+Synopsis:            A monad for deterministic parallelism, with a work-stealing implementation
+Description:
+Homepage:            https://github.com/simonmar/monad-par
+License:             BSD3
+License-file:        LICENSE
+Author:              Simon Marlow
+Maintainer:          Simon Marlow <marlowsd@gmail.com>
+Copyright:           (c) Simon Marlow 2011
+Stability:           Experimental
+Category:            Parallelism
+Build-type:          Simple
+Cabal-version:       >=1.2
+
+Library
+  Exposed-modules: Control.Monad.Par
+  Build-depends: base >= 4 && < 5,
+                 deepseq >= 1.1 && < 1.2
+  Other-modules:
+
