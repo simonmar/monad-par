@@ -264,20 +264,23 @@ parMap f xs = mapM (spawn . f) xs >>= mapM get
 
 -- -----------------------------------------------------------------------------
 
+test :: IO ()
 test = do
-  print (runPar $ return 3)
+  print ((runPar $ return 3) :: Int)
   print (runPar $ do r <- new; put r (3 :: Int); get r)
   print (runPar $ do r <- new; fork (put r (3::Int)); get r)
   print ((runPar $ do r <- new; get r)  :: Int)
 
+test2 :: Int
 test2 =  runPar $ do
       [a,b,c,d] <- sequence [new,new,new,new]
       fork $ do x <- get a; put b (x+1)
       fork $ do x <- get a; put c (x+2)
       fork $ do x <- get b; y <- get c; put d (x+y)
-      fork $ do put a (3 :: Int)
+      fork $ do put a 3
       get d
 
+test3 :: Int
 test3 = runPar $ do
    a <- new
    put a (3::Int)
