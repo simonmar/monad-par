@@ -193,11 +193,14 @@ runPar x = unsafePerformIO $ do
    idle <- newIORef []
    let (main:others) = [ Sched { no=x, workpool=wp, idle, scheds=(main:others) }
                        | (x,wp) <- zip [1..] workpools ]
-   r <- newIORef (error "runPar completed prematurely without a result")
+
+   rref <- newIORef Empty
    forM_ (zip [2..] others) $ \(cpu,sched) -> forkOnIO cpu $ reschedule sched
-   sched main $
-     runCont x $ \a -> unsafePerformIO (writeIORef r a >> return Done)
-   readIORef r
+   sched main $ runCont (x >>= put_ (PVar rref)) (const Done)
+   r <- readIORef rref
+   case r of
+     Full a -> return a
+     _ -> error "no result"
 
 -- | forks a computation to happen in parallel.  The forked
 -- computation may exchange values with other computations using
