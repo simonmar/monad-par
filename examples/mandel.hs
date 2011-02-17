@@ -35,6 +35,7 @@ toList a = go a []
        go (Append l r) rest = go l $! go r rest
        go (AList xs)   rest = xs ++ rest
 
+-- Divide-and-conquer traversal of a dense input domain (a range).
 parTreeLike :: Int -> Int -> (Int -> Par a) -> Par (AList a)
 parTreeLike min max fn
  | max - min <= threshold = do
