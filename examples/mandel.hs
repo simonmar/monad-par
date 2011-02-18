@@ -10,39 +10,7 @@ import Control.DeepSeq
 import Control.Monad.Par
 
 import PortablePixmap
-#if 1
 import Control.Monad.Par.AList
-parTreeLike = parBuildM threshold
-
-#else
-data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
-append ANil r = r
-append l ANil = l -- **
-append l r    = Append l r
-
-toList :: AList a -> [a]
-toList a = go a []
- where go ANil         rest = rest
-       go (ASing a)    rest = a : rest
-       go (Append l r) rest = go l $! go r rest
-       go (AList xs)   rest = xs ++ rest
-
-
--- Divide-and-conquer traversal of a dense input domain (a range).
-parTreeLike :: Int -> Int -> (Int -> Par a) -> Par (AList a)
-parTreeLike min max fn
- | max - min <= threshold = do
-      l <- mapM fn [min..max]
-      seqList r0 l `seq` return (AList l)
- | otherwise  = do
-      rght <- spawn_ $ parTreeLike (mid+1) max fn
-      left <- spawn_ $ parTreeLike min mid fn
-      r <- get rght
-      l <- get left
-      return (l `append` r)
-    where
-      mid  = min + ((max - min) `quot` 2)
-#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0
@@ -58,7 +26,7 @@ threshold = 1
 
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par PixMap
 runMandel minX minY maxX maxY winX winY max_depth = do
-  l <- parTreeLike 0 (winY-1) $ \y -> do
+  l <- parBuildM threshold 0 (winY-1) $ \y -> do
           let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)
   return (createPixmap (fromIntegral winX) (fromIntegral winY)
