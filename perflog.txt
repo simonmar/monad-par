@@ -1,0 +1,43 @@
+
+
+[2011.02.18] 
+A log for verbose notes pertaining to performance.
+--------------------------------------------------
+
+
+
+[2011.02.18] {Initial blackscholes runs}
+
+First a version of blackscholes that uses the parMap in par.hs.
+
+GHC 7.0.1, released version.
+Listing a couple runs at each setting.
+
+Running on a 4-core 3.33 ghz nehalem, SMT on (with -qa)
+  10M options with 10K blocksize:
+    1 thread -- 5.1 s
+    2        -- 6.25s  5.87s real/user
+    2 thr #2 -- 3.8s   6.4s 
+    3        -- 2.8s   5.38s
+    3        -- 2.0s   5.86s
+    4        -- 1.8s   5.4s 
+    4        -- 1.3s   5.15s 
+    5        -- 1.5s   5.4s 
+    5        -- 1.15s  5.6s 
+
+High variance... definitely thrashing sometimes.  It very rarely uses
+over 300% cpu at 4 threads.
+
+Removing the "-qa" option doesn't seem to change things much.
+Even when it does badly its only spending 1% of time in GC.
+
+  Next let's try AList's parBuild.
+  --------------------------------
+
+Not working right yet...
+
+
+What about mandel?
+  It's getting <2X speedup for me on four threads on this machine atm.
+  It's about the same with the factored AList/parBuild as opposed to
+  the original.

@@ -31,9 +31,11 @@
 
 import Control.Seq
 import Control.Monad
-import Control.Monad.Par
 import Control.DeepSeq
 import Control.Exception
+
+import Control.Monad.Par
+import Control.Monad.Par.AList
 
 import Data.Array
 import Data.List
@@ -136,8 +138,16 @@ main = do args <- getArgs
 	  putStrLn$ "Running blackscholes, numOptions "++ show numOptions ++ " and block size " ++ show granularity
 
           let numChunks = numOptions `quot` granularity
-	      results = runPar$ parMap (computeSegment granularity . (* granularity)) [0..numChunks]
---	      results = runPar$ parMap (computeSegment granularity) [0, granularity .. numOptions-1]
+--	      results = runPar$ parMap (computeSegment granularity . (* granularity)) [0..numChunks-1]
+
+#if 1
+	      results = runPar$ parMap (computeSegment granularity) [0, granularity .. numOptions-1]
+#else
+-- Not working right yet [2011.02.18]
+              results = toList$ runPar$ 
+			parBuild 1 0 (numChunks-1) 
+			  (computeSegment granularity . (* granularity))
+#endif
 	      sum = foldl1' (+) $ map (U.! 0) results
 
 	  putStrLn$ "Final checksum: "++ show sum

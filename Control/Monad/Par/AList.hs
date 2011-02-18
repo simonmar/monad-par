@@ -6,17 +6,27 @@ module Control.Monad.Par.AList
   AList(..), 
   empty, singleton, cons, head, tail, length, append,
   toList, fromList,
---  parMapM, parBuild, parBuildM,
+--  parMapM, 
+  parBuild, parBuildM,
   alist_tests
  )
 where 
 
+import Control.DeepSeq
 import Test.HUnit
 import Prelude hiding (length,head,tail)
 import qualified Prelude as P
+import Control.Monad.Par
 
 
 data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
+
+instance NFData a => NFData (AList a) where
+ rnf ANil         = ()
+ rnf (ASing a)    = rnf a 
+ rnf (Append l r) = rnf l `seq` rnf r
+ rnf (AList  l)   = rnf l
+
 
 instance Show a => Show (AList a) where 
   show al = "fromList "++ show (toList al)
@@ -101,8 +111,21 @@ toList a = go a []
 --   loop (ASing x) []      = [x]
 --   loop (AList l) []      = l 
 
+-- TODO: Provide a strategy for @par@-based maps:
 
--- TODO: Provide a strategy for @par@ execution:
+
+appendM x y = return (append x y)
+
+parBuild :: NFData a => Int -> Int -> Int -> (Int -> a) -> Par (AList a)
+parBuild threshold min max fn =
+  parMapReduceRange threshold min max (return . singleton . fn) appendM empty
+
+
+parBuildM :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> Par (AList a)
+parBuildM threshold min max fn =
+  parMapReduceRange threshold min max ((fmap singleton) . fn) appendM empty
+
+
 
 --------------------------------------------------------------------------------
 -- Testing

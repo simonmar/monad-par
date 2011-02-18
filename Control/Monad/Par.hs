@@ -305,7 +305,8 @@ parMapM f xs = mapM (spawn . f) xs >>= mapM get
 --   found in many parallel programming models.  A range 
 -- 
 --parFoldRange :: Int -> (Int -> acc -> Par acc) -> acc -> Int -> Int -> Par acc
-parMapReduceRange :: Int -> Int -> Int -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
+
+parMapReduceRange :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
 parMapReduceRange threshold min max fn binop init = loop min max 
  where 
   loop min max 
@@ -317,10 +318,14 @@ parMapReduceRange threshold min max fn binop init = loop min max
 
     | otherwise  = do
 	let mid = min + ((max - min) `quot` 2)
-	rght <- spawn_ $ loop (mid+1) max 
-	left <- spawn_ $ loop  min    mid 
+	rght <- spawn $ loop (mid+1) max 
+
+--	rght <- spawn_ $ loop (mid+1) max 
+--	left <- spawn_ $ loop  min    mid 
+--	l <- get left
+	-- RRN: Shouldn't need to spawn both ^^^
+	l <- loop  min    mid 
 	r <- get rght
-	l <- get left
 	lr <- l `binop` r
 	return lr
 

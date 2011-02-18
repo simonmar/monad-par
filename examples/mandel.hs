@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 import System.Environment
 import Control.Monad
 import Control.Seq
@@ -9,30 +9,23 @@ import Control.DeepSeq
 
 import Control.Monad.Par
 
-import Control.Monad.Par.AList
-
 import PortablePixmap
+#if 1
+import Control.Monad.Par.AList
+parTreeLike = parBuildM threshold
 
-mandel :: Int -> Complex Double -> Int
-mandel max_depth c = loop 0 0
-  where   
-   fn = magnitude
-   loop i !z
-    | i == max_depth = i
-    | fn(z) >= 2.0   = i
-    | otherwise      = loop (i+1) (z*z + c)
+#else
+data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
+append ANil r = r
+append l ANil = l -- **
+append l r    = Append l r
 
--- data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
--- append ANil r = r
--- append l ANil = l -- **
--- append l r    = Append l r
-
--- toList :: AList a -> [a]
--- toList a = go a []
---  where go ANil         rest = rest
---        go (ASing a)    rest = a : rest
---        go (Append l r) rest = go l $! go r rest
---        go (AList xs)   rest = xs ++ rest
+toList :: AList a -> [a]
+toList a = go a []
+ where go ANil         rest = rest
+       go (ASing a)    rest = a : rest
+       go (Append l r) rest = go l $! go r rest
+       go (AList xs)   rest = xs ++ rest
 
 
 -- Divide-and-conquer traversal of a dense input domain (a range).
@@ -49,9 +42,19 @@ parTreeLike min max fn
       return (l `append` r)
     where
       mid  = min + ((max - min) `quot` 2)
+#endif
+
+mandel :: Int -> Complex Double -> Int
+mandel max_depth c = loop 0 0
+  where   
+   fn = magnitude
+   loop i !z
+    | i == max_depth = i
+    | fn(z) >= 2.0   = i
+    | otherwise      = loop (i+1) (z*z + c)
+
 
 threshold = 1
-
 
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par PixMap
 runMandel minX minY maxX maxY winX winY max_depth = do
