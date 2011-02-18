@@ -52,7 +52,7 @@
 --
 
 module Control.Monad.Par (
-    Par, PVar, 
+    Par, PVar,
     runPar,
     fork,
     new, newFilled,
@@ -187,6 +187,7 @@ instance Monad Par where
     m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
 
 newtype PVar a = PVar (IORef (PVal a))
+-- data PVar a = PVar (IORef (PVal a))
 
 -- Forcing evaluation of a PVar is fruitless.
 instance NFData (PVar a) where

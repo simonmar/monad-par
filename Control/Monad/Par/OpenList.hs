@@ -2,14 +2,14 @@
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 module Control.Monad.Par.OpenList 
- -- (
- --  OpenList(),
- --  empty, singleton, cons, head, tail, length,
- --  close, join,
- --  toList, fromList,
- --  parMapM, parBuild, parBuildM,
- --  openlist_tests
- -- )
+ (
+  OpenList(),
+  empty, singleton, cons, head, tail, length,
+  close, join,
+  toList, fromList,
+  parMapM, parBuild, parBuildM,
+  openlist_tests
+ )
 where 
 
 

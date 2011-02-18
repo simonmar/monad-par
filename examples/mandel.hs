@@ -8,6 +8,9 @@ import Debug.Trace
 import Control.DeepSeq
 
 import Control.Monad.Par
+
+import Control.Monad.Par.AList
+
 import PortablePixmap
 
 mandel :: Int -> Complex Double -> Int
@@ -19,21 +22,18 @@ mandel max_depth c = loop 0 0
     | fn(z) >= 2.0   = i
     | otherwise      = loop (i+1) (z*z + c)
 
+-- data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
+-- append ANil r = r
+-- append l ANil = l -- **
+-- append l r    = Append l r
 
+-- toList :: AList a -> [a]
+-- toList a = go a []
+--  where go ANil         rest = rest
+--        go (ASing a)    rest = a : rest
+--        go (Append l r) rest = go l $! go r rest
+--        go (AList xs)   rest = xs ++ rest
 
-
-data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
-
-append ANil r = r
-append l ANil = l -- **
-append l r    = Append l r
-
-toList :: AList a -> [a]
-toList a = go a []
- where go ANil         rest = rest
-       go (ASing a)    rest = a : rest
-       go (Append l r) rest = go l $! go r rest
-       go (AList xs)   rest = xs ++ rest
 
 -- Divide-and-conquer traversal of a dense input domain (a range).
 parTreeLike :: Int -> Int -> (Int -> Par a) -> Par (AList a)
