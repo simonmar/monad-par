@@ -1,5 +1,4 @@
-GHC = ghc
-
+include common.mk
 
 BENCHMARKS= queens.hs mandel.hs blackscholes.hs
 EXES= $(BENCHMARKS:.hs=.exe)
