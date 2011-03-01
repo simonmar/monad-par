@@ -131,7 +131,8 @@ sumEulerJFP_Final c n = sum ([(sum . map euler) x | x <- splitAtN c [n,n-1..0]]
 
 sumEuler_monadpar :: Int -> Int -> Int
 sumEuler_monadpar c n = runPar $
-   sum `fmap` parMap (sum . map euler) (splitAtN c [n,n-1..0])
+--   sum `fmap` parMap (sum . map euler) (splitAtN c [n,n-1..0])
+   sum `fmap` parMap euler [n,n-1..0]
 
 
 -- -- using a fold-of-map strategy w/ folding inside a chunk
