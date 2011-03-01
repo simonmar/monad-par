@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns, 
-             ExistentialQuantification #-}
+             ExistentialQuantification, CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 -- | This module provides a deterministic parallelism monad, @Par@.
@@ -198,16 +198,42 @@ data PVal a = Full a | Empty | Blocked [a -> Trace]
 
 runPar :: Par a -> a
 runPar x = unsafePerformIO $ do
-   let n = numCapabilities
-   workpools <- replicateM n $ newIORef []
+   workpools <- replicateM numCapabilities $ newIORef []
    idle <- newIORef []
-   let (main:others) = [ Sched { no=x, workpool=wp, idle, scheds=(main:others) }
-                       | (x,wp) <- zip [1..] workpools ]
+   let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
+                | (x,wp) <- zip [0..] workpools ]
 
-   rref <- newIORef Empty
-   forM_ (zip [2..] others) $ \(cpu,sched) -> forkOnIO cpu $ reschedule sched
-   sched main $ runCont (x >>= put_ (PVar rref)) (const Done)
-   r <- readIORef rref
+#if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
+    --
+    -- We create a thread on each CPU with forkOnIO.  The CPU on which
+    -- the current thread is running will host the main thread; the
+    -- other CPUs will host worker threads.
+    --
+    -- Note: GHC 7.1.20110301 is required for this to work, because that
+    -- is when threadCapability was added.
+    --
+   (main_cpu, _) <- threadCapability =<< myThreadId
+#else
+    --
+    -- Lacking threadCapability, we always pick CPU #0 to run the main
+    -- thread.  If the current thread is not running on CPU #0, this
+    -- will require some data to be shipped over the memory bus, and
+    -- hence will be slightly slower than the version above.
+    --
+   let main_cpu = 0
+#endif
+
+   m <- newEmptyMVar
+   forM_ (zip [0..] states) $ \(cpu,state) ->
+        forkOnIO cpu $
+          if (cpu /= main_cpu)
+             then reschedule state
+             else do
+                  rref <- newIORef Empty
+                  sched state $ runCont (x >>= put_ (PVar rref)) (const Done)
+                  readIORef rref >>= putMVar m
+
+   r <- takeMVar m
    case r of
      Full a -> return a
      _ -> error "no result"
