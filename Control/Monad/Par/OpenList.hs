@@ -31,13 +31,18 @@ data IList a = Null | Cons { hd :: a, tl :: PVar (IList a) }
 
 data OpenList a = OpenList (IList a) (IList a)
 
--- | To fully evaluate an open list means to evaluate all of the
---   available car fields.  There is nothing to be done about the fact
+-- | To fully evaluate an open list means to evaluate all the
+--   car field.  There is nothing to be done about the fact
 --   that the trailing PVar cdr field may receive further extensions.
 instance NFData a => NFData (IList a) where 
 --  rnf Null = r0
   rnf Null = ()
   rnf (Cons a b) = rnf a `seq` rnf b
+
+-- This is likewise a pretty meaningless NFData instance:
+instance NFData a => NFData (OpenList a) where 
+  rnf (OpenList hp tp) = rnf hp `seq` rnf tp 
+
 
 -- | An empty open list.
 empty :: OpenList a

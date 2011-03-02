@@ -17,8 +17,10 @@ import Test.HUnit
 import Prelude hiding (length,head,tail)
 import qualified Prelude as P
 import Control.Monad.Par
+import Data.Traversable
 
-
+-- | A datatype for append-based lists that are cheap to construct
+--  (and to convert from plain lists).
 data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
 
 instance NFData a => NFData (AList a) where
@@ -27,6 +29,20 @@ instance NFData a => NFData (AList a) where
  rnf (Append l r) = rnf l `seq` rnf r
  rnf (AList  l)   = rnf l
 
+#if 0
+ data Tree a = Empty | Leaf a | Node (Tree a) a (Tree a)
+ instance Traversable Tree
+	traverse f Empty = pure Empty
+	traverse f (Leaf x) = Leaf <$> f x
+	traverse f (Node l k r) = Node <$> traverse f l <*> f k <*> traverse f r
+#endif
+
+-- Walk the data structure without introducing any additional data-parallelism.
+instance Traversable (AList a) where 
+  traverse f al = 
+    case al of 
+      ANil    -> pure ANil
+      ASing x -> ASing <$> f x
 
 instance Show a => Show (AList a) where 
   show al = "fromList "++ show (toList al)
@@ -125,6 +141,10 @@ parBuildM :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> Par (AList a)
 parBuildM threshold min max fn =
   parMapReduceRange threshold min max ((fmap singleton) . fn) appendM empty
 
+
+-- | A parMap over an AList can result in more balanced parallelism than
+--   the default parMap over Traversable data types.
+-- parMap :: NFData b => (a -> b) -> AList a -> Par (AList b)
 
 
 --------------------------------------------------------------------------------
