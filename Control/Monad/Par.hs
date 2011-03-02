@@ -99,7 +99,6 @@ traceNew f sched = do
       r <- newIORef Empty
       f (PVar r) sched
 
-{-# INLINE tracePut #-}
 tracePut :: PVar a -> a -> (() -> Trace) -> Trace
 tracePut (PVar v) a t queue = do
       cs <- atomicModifyIORef v $ \e -> case e of
@@ -111,6 +110,7 @@ tracePut (PVar v) a t queue = do
   where
       f = Full a
 
+{-# INLINE traceFork #-}
 traceFork :: Trace -> Trace -> Trace
 traceFork child parent queue = do
      pushWork queue child
@@ -186,11 +186,11 @@ newtype Par a = Par {
 }
 
 instance Functor Par where
-    fmap f m = Par $ \c -> runCont m (c . f)
+    fmap f m = Par $ \c q -> runCont m (\a -> c (f a)) q
 
 instance Monad Par where
-    return a = Par ($ a)
-    m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
+    return a = Par $ \c q -> c a q
+    m >>= k  = Par $ \c q -> runCont m (\a -> runCont (k a) c) q
 
 newtype PVar a = PVar (IORef (PVal a))
 -- data PVar a = PVar (IORef (PVal a))
@@ -248,7 +248,7 @@ runPar x = unsafePerformIO $ do
 -- computation may exchange values with other computations using
 -- @PVar@s.
 fork :: Par () -> Par ()
-fork p = Par $ \c -> traceFork (runCont p (\_ -> traceDone)) (c ())
+fork p = Par $ \c q -> traceFork (runCont p (\_ -> traceDone)) (c ()) q
 
 -- > both a b >> c  ==   both (a >> c) (b >> c)
 -- is this useful for anything?
@@ -259,7 +259,7 @@ both a b = Par $ \c -> traceFork (runCont a c) (runCont b c)
 
 -- | creates a new @PVar@
 new :: Par (PVar a)
-new  = Par $ traceNew
+new  = Par $ \s q -> traceNew s q
 
 -- Not sure yet if we want this for PVars:
 --newFilled :: NFData a => a -> Par (PVar a)
@@ -278,7 +278,7 @@ newFilled x =
 -- value has been written by a prior or parallel @put@ to the same
 -- @PVar@.
 get :: PVar a -> Par a
-get v = Par $ \c -> traceGet v c
+get v = Par $ \c q  -> traceGet v c q
 
 -- | like 'put', but only head-strict rather than fully-strict.
 put_ :: PVar a -> a -> Par ()
