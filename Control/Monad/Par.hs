@@ -216,7 +216,7 @@ data PVal a = Full a | Empty | Blocked [a -> Trace]
 
 {-# INLINE runPar_internal #-}
 runPar_internal :: Bool -> Par a -> a
-runPar_internal doSync x = unsafePerformIO $ do
+runPar_internal _doSync x = unsafePerformIO $ do
    workpools <- replicateM numCapabilities $ newIORef []
    idle <- newIORef []
    let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
@@ -258,12 +258,14 @@ runPar_internal doSync x = unsafePerformIO $ do
      _ -> error "no result"
 
 
+runPar :: Par a -> a
 runPar = runPar_internal True
 
 
--- TODO: Would like a version that can return while forked computations still run.
-runParAsync = runPar_internal False
-
+-- TODO: Would like a version that can return while forked
+-- computations still run.
+_runParAsync :: Par a -> a
+_runParAsync = runPar_internal False
 
 
 -- | forks a computation to happen in parallel.  The forked
@@ -384,15 +386,15 @@ parMapReduceRange threshold min max fn binop init = loop min max
 -- -----------------------------------------------------------------------------
 -- Testing
 
-test :: IO ()
-test = do
+_test :: IO ()
+_test = do
   print ((runPar $ return 3) :: Int)
   print (runPar $ do r <- new; put r (3 :: Int); get r)
   print (runPar $ do r <- new; fork (put r (3::Int)); get r)
   print ((runPar $ do r <- new; get r)  :: Int)
 
-test2 :: Int
-test2 =  runPar $ do
+_test2 :: Int
+_test2 =  runPar $ do
       [a,b,c,d] <- sequence [new,new,new,new]
       fork $ do x <- get a; put b (x+1)
       fork $ do x <- get a; put c (x+2)
@@ -400,16 +402,17 @@ test2 =  runPar $ do
       fork $ do put a 3
       get d
 
-test3 :: Int
-test3 = runPar $ do
+_test3 :: Int
+_test3 = runPar $ do
    a <- new
    put a (3::Int)
    both (return 1) (return 2)
 
 -- is there a standard lib thing for this?
-bincomp unary bin a b = unary (bin a b)
 
-test_pmrr1 :: Int
-test_pmrr1 = runPar$ parMapReduceRange 1 1 100 (return) (return `bincomp` (+)) 0
+_test_pmrr1 :: Int
+_test_pmrr1 = runPar$ parMapReduceRange 1 1 100 (return) (return `bincomp` (+)) 0
+ where bincomp unary bin a b = unary (bin a b)
 
-par_tests = TestList []
+_par_tests :: Test
+_par_tests = TestList []
