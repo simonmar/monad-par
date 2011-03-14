@@ -74,6 +74,7 @@ import GHC.IO (unsafeDupablePerformIO)
 import Control.Concurrent
 import GHC.Conc hiding ()
 import Control.DeepSeq
+import Control.Applicative
 -- import Text.Printf
 
 import Test.HUnit 
@@ -197,6 +198,10 @@ instance Functor Par where
 instance Monad Par where
     return a = Par ($ a)
     m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
+
+instance Applicative Par where
+   (<*>) = ap
+   pure  = return
 
 newtype PVar a = PVar (IORef (PVal a))
 -- data PVar a = PVar (IORef (PVal a))
