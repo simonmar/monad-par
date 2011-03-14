@@ -1,4 +1,4 @@
-{-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns, 
+{-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
