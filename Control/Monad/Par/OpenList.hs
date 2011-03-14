@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables  #-}
+{-# LANGUAGE ScopedTypeVariables, CPP  #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 module Control.Monad.Par.OpenList 
@@ -13,9 +13,13 @@ module Control.Monad.Par.OpenList
 where 
 
 
+import Control.Exception
 import Control.DeepSeq
+import Control.Concurrent.MVar
 import Control.Monad.Par hiding (parMapM)
-import Prelude hiding (length,head,tail,drop,take)
+import Prelude hiding (length,head,tail,drop,take,null)
+-- import System.IO.Unsafe
+import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import Test.HUnit 
 import Debug.Trace
 
@@ -24,11 +28,13 @@ import Debug.Trace
 --
 -- These have some of the advantages of imperative lists, such as
 -- constant time appending, while retaining determinism and having
--- O(1) access to the head of the list unlike tree-based lists (e.g. append
--- rather than cons-based).
+-- O(1) access to the head of the list unlike tree-shaped lists
+-- (e.g. append-based rather than cons-based).
 
 data IList a = Null | Cons { hd :: a, tl :: PVar (IList a) }
 
+-- Aan OpenList must be handled functionally.  Extending the list as
+-- an effect will not change its tail pointer.
 data OpenList a = OpenList (IList a) (IList a)
 
 -- | To fully evaluate an open list means to evaluate all the
@@ -47,6 +53,10 @@ instance NFData a => NFData (OpenList a) where
 -- | An empty open list.  Supports further extension.
 empty :: OpenList a
 empty = OpenList Null Null
+
+null :: OpenList a -> Bool
+null (OpenList Null Null) = True
+null _                    = False
 
 -- | A single element open list.
 singleton :: a -> Par (OpenList a)
@@ -135,7 +145,6 @@ fromList (h:t) =
        put (tl last) cell
        loop cell t
 
-       
 -- | Convert a CLOSED OpenList to a list. 
 toList :: NFData a => (OpenList a) -> Par [a] 
 -- Note: presently not tail-recursive:
@@ -193,6 +202,34 @@ debugshow (OpenList (Cons _ _) (Cons _ _)) = "Cons|Cons"
 debugshow (OpenList Null       Null)       = "Null|Null"
 debugshow (OpenList Null       (Cons _ _)) = error$ "invalid Null|Cons openlist"
 debugshow (OpenList (Cons _ _) Null)       = error$ "invalid Cons|Null openlist"
+
+
+-- -----------------------------------------------------------------------------
+-- Synchronization using native Haskell IVars (e.g. MVars).
+
+data MList a = MNull | MCons (a, MVar (MList a))
+
+-- UNFINISHED
+#if 0
+toMList :: OpenList a -> Par (MList a)
+toMList ol | null ol = return MNull
+toMList ol = 
+  do let mv = unsafeDupablePerformIO newEmptyMVar
+     let hd = head ol 
+     tl  <- tail ol
+     fork $ do r <- toMList tl 
+	       unsafePerformIO$ putMVar mv r
+	       return ()
+
+     return (MCons (hd, mv))
+
+mListToList :: MList a -> IO [a]
+mListToList MNull = []
+mListToList MCons (hd,tl) = 
+   do tl'  <- readMVar tl
+      rest <- mListToList tl'
+      return (hd : rest)
+#endif
 
 -- -----------------------------------------------------------------------------
 -- Testing
