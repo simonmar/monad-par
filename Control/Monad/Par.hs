@@ -66,7 +66,6 @@ module Control.Monad.Par (
   ) where
 
 import Data.Traversable
-import Data.Function (on)
 import Control.Monad hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
