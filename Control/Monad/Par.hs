@@ -203,15 +203,15 @@ instance Applicative Par where
    (<*>) = ap
    pure  = return
 
-newtype IVar a = IVar (IORef (PVal a))
--- data IVar a = IVar (IORef (PVal a))
+newtype IVar a = IVar (IORef (IVarContents a))
+-- data IVar a = IVar (IORef (IVarContents a))
 
 -- Forcing evaluation of a IVar is fruitless.
 instance NFData (IVar a) where
   rnf _ = ()
 
 
-data PVal a = Full a | Empty | Blocked [a -> Trace]
+data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 
 
 {-# INLINE runPar_internal #-}
