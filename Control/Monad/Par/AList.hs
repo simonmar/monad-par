@@ -1,6 +1,7 @@
+{-# LANGUAGE CPP #-}
+{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 -- Do these really not already have an implementation on hackage?
-
 module Control.Monad.Par.AList 
  (
   AList(..), 
@@ -12,12 +13,15 @@ module Control.Monad.Par.AList
  )
 where 
 
+
+import Control.Applicative hiding (empty)
 import Control.DeepSeq
 import Test.HUnit
 import Prelude hiding (length,head,tail)
 import qualified Prelude as P
 import Control.Monad.Par
 import Data.Traversable
+import qualified Data.Foldable  as F 
 
 -- | A datatype for append-based lists that are cheap to construct
 --  (and to convert from plain lists).
@@ -37,12 +41,22 @@ instance NFData a => NFData (AList a) where
 	traverse f (Node l k r) = Node <$> traverse f l <*> f k <*> traverse f r
 #endif
 
--- Walk the data structure without introducing any additional data-parallelism.
-instance Traversable (AList a) where 
-  traverse f al = 
-    case al of 
-      ANil    -> pure ANil
-      ASing x -> ASing <$> f x
+
+-- TODO: Finish me:
+-- instance F.Foldable AList where
+--  foldr fn init al = 
+--   case al of 
+--    ANil    -> 
+
+-- instance Functor AList where
+--  fmap = undefined
+
+-- -- Walk the data structure without introducing any additional data-parallelism.
+-- instance Traversable AList where 
+--   traverse f al = 
+--     case al of 
+--       ANil    -> pure ANil
+--       ASing x -> ASing <$> f x
 
 instance Show a => Show (AList a) where 
   show al = "fromList "++ show (toList al)

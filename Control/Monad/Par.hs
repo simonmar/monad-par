@@ -1,5 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns, 
-             ExistentialQuantification, CPP #-}
+             ExistentialQuantification, CPP
+	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 -- | This module provides a deterministic parallelism monad, @Par@.
@@ -86,6 +87,7 @@ data Trace = forall a . Get (PVar a) (a -> Trace)
            | Fork Trace Trace
            | Done
 
+-- | The main scheduler loop.
 sched :: Sched -> Trace -> IO ()
 sched queue t = case t of
     New f -> do
@@ -94,7 +96,7 @@ sched queue t = case t of
     Get (PVar v) c -> do
       e <- readIORef v
       case e of
-         Full a   -> sched queue (c a)
+         Full a -> sched queue (c a)
          _other -> do
            r <- atomicModifyIORef v $ \e -> case e of
                         Empty    -> (Blocked [c], reschedule queue)
@@ -114,6 +116,8 @@ sched queue t = case t of
     Done ->
          reschedule queue
 
+-- | Process the next item on the work queue or, failing that, go into
+--   work-stealing mode.
 reschedule :: Sched -> IO ()
 reschedule queue@Sched{ workpool } = do
   e <- atomicModifyIORef workpool $ \ts ->
@@ -124,6 +128,14 @@ reschedule queue@Sched{ workpool } = do
     Nothing -> steal queue
     Just t  -> sched queue t
 
+-- RRN: Note, to do random work stealing we would need to thread a RNG
+-- along with the forking control flow to retain determinism.  The
+-- recent Cilk technique of tracking the index in the fork-tree (the
+-- "pedigree") of the current computation -- and using that for random
+-- number generation -- may have some advantages... (splitting the RNG
+-- even where stealing does not occur could be expensive).
+
+-- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
 steal q@Sched{ idle, scheds, no=my_no } = do
   -- printf "cpu %d stealing\n" my_no
@@ -157,6 +169,7 @@ steal q@Sched{ idle, scheds, no=my_no } = do
               sched q t
            Nothing -> go xs
 
+-- | If any worker is idle, wake one up and give it work to do.
 pushWork :: Sched -> Trace -> IO ()
 pushWork Sched { workpool, idle } t = do
   atomicModifyIORef workpool $ \ts -> (t:ts, ())
@@ -171,7 +184,7 @@ data Sched = Sched
     { no       :: {-# UNPACK #-} !Int,
       workpool :: IORef [Trace],
       idle     :: IORef [MVar Bool],
-      scheds   :: [Sched]
+      scheds   :: [Sched] -- Global list of all per-thread workers.
     }
 --  deriving Show
 
@@ -196,8 +209,10 @@ instance NFData (PVar a) where
 
 data PVal a = Full a | Empty | Blocked [a -> Trace]
 
-runPar :: Par a -> a
-runPar x = unsafePerformIO $ do
+
+{-# INLINE runPar_internal #-}
+runPar_internal :: Bool -> Par a -> a
+runPar_internal doSync x = unsafePerformIO $ do
    workpools <- replicateM numCapabilities $ newIORef []
    idle <- newIORef []
    let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
@@ -237,6 +252,15 @@ runPar x = unsafePerformIO $ do
    case r of
      Full a -> return a
      _ -> error "no result"
+
+
+runPar = runPar_internal True
+
+
+-- TODO: Would like a version that can return while forked computations still run.
+runParAsync = runPar_internal False
+
+
 
 -- | forks a computation to happen in parallel.  The forked
 -- computation may exchange values with other computations using
@@ -358,7 +382,6 @@ parMapReduceRange threshold min max fn binop init = loop min max
 -- TODO: A version that works for any splittable input domain.  In this case
 -- the "threshold" is a predicate on inputs.
 -- parMapReduceRangeGeneric :: (inp -> Bool) -> (inp -> Maybe (inp,inp)) -> inp -> 
-
 
 
 -- -----------------------------------------------------------------------------

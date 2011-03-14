@@ -8,14 +8,14 @@ module Control.Monad.Par.OpenList
   close, join,
   toList, fromList,
   parMapM, parBuild, parBuildM,
-  openlist_tests
+  openlist_tests, chaintest
  )
 where 
 
 
 import Control.DeepSeq
 import Control.Monad.Par hiding (parMapM)
-import Prelude hiding (length,head,tail)
+import Prelude hiding (length,head,tail,drop,take)
 import Test.HUnit 
 import Debug.Trace
 
@@ -44,7 +44,7 @@ instance NFData a => NFData (OpenList a) where
   rnf (OpenList hp tp) = rnf hp `seq` rnf tp 
 
 
--- | An empty open list.
+-- | An empty open list.  Supports further extension.
 empty :: OpenList a
 empty = OpenList Null Null
 
@@ -55,7 +55,9 @@ singleton x =
      let cell = Cons x pv
      return (OpenList cell cell)
 
--- | Terminate an open list so that it cannot be extended further.
+-- TODO/FIXME: Need to decide whether there should be closed and open empty lists!!
+
+-- | Terminate a non-empty open list so that it cannot be extended further.
 close :: NFData a => OpenList a -> Par (OpenList a)
 close orig@(OpenList Null _) = return orig
 close orig@(OpenList _   tp) = do put (tl tp) Null; return orig
@@ -84,6 +86,20 @@ tail (OpenList hp tp)  =
      case nxt of
        Null -> return empty
        _    -> return (OpenList nxt tp)
+
+
+drop :: NFData a => Int -> OpenList a -> Par (OpenList a)
+drop 0 ls = return ls
+drop n ls = do tl <- tail ls
+	       drop (n-1) tl
+
+-- This copies a prefix and makes it open once again irrespective of
+-- whether the input list is open or closed.
+take :: NFData a => Int -> OpenList a -> Par (OpenList a)
+take 0 ls = return empty
+take n ls = do tl   <- tail ls
+	       rest <- take (n-1) tl
+	       cons (head ls) rest
 
 -- Take the length of a closed OpenList.
 -- length :: OpenList a -> Par Int
@@ -118,6 +134,7 @@ fromList (h:t) =
     do cell <- newCell h
        put (tl last) cell
        loop cell t
+
        
 -- | Convert a CLOSED OpenList to a list. 
 toList :: NFData a => (OpenList a) -> Par [a] 
@@ -213,6 +230,51 @@ test_ol6 = runPar$ do
   l2 <- parMapM (return . (+ 1)) l1
   close l2
   toList l2
+
+-- Build a long chain, args: current position, desired length:
+chaintest :: Int -> Int -> Par (OpenList Int)
+chaintest i 0 = error "must have chain length >= 1"
+chaintest i 1 = do last <- singleton i
+		   close last
+		   return last
+chaintest i n =
+ do let half = n `quot` 2
+    fst <- chaintest i half
+    print_$ show(i,n)++ "  Got handle on first half: "++show (head fst) ++" "++debugshow fst
+
+    fork $ do print_$show(i,n)++ "  Forked computation beginning"
+	      snd <- chaintest (i+half) half
+	      print_$show(i,n)++ "  Got handle on front of second half, hd: "++show (head snd) ++" "++debugshow snd
+
+              -- This is tricky, fst is just a handle on the front of
+              -- the openlist, we have to wait until all of the first
+              -- half is there before we can join.  BUT, for this test
+              -- we want it to be a data-dependency not a control
+              -- dependency.
+	      allfst <- drop (half-1) fst 
+	      join allfst snd
+	      print_$show(i,n)++ "  JOINED, hds: "++show (head allfst, head snd)
+	      return ()
+    -- We don't wait for the forked computation to return the head:
+    return fst
+
+
+-- chaintest 0 4
+-- 0,2)  Got handle on first half: 0
+-- (0,4)  Got handle on first half: 0
+-- (0,4)  Forked computation beginning
+-- (2,2)  Got handle on first half: 2
+-- (0,4)  Got handle on second half, hd: 2
+-- (0,4)  JOINED, hds: (0,2)
+-- (2,2)  Forked computation beginning
+-- (2,2)  Got handle on second half, hd: 3
+-- (2,2)  JOINED, hds: (2,3)
+-- (0,2)  Forked computation beginning
+-- (0,2)  Got handle on second half, hd: 1
+-- (0,2)  JOINED, hds: (0,1)
+
+
+print_ msg = trace msg $ return ()
 
 dbg0 = debugshow$ runPar$ singleton 'a' >>= close 
 

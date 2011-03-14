@@ -26,5 +26,6 @@ nqueens nq = step 0 []
 
 
 main = do
-  [n] <- fmap (fmap read) getArgs
+  args <- fmap (fmap read) getArgs
+  let n = case args of [] -> 8; [n] -> n
   print (length (runPar (nqueens n)))
