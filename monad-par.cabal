@@ -15,8 +15,7 @@ Cabal-version:       >=1.2
 
 Library
   Exposed-modules: Control.Monad.Par
--- SDM: disabled temporarily, it has a type error
---                 , Control.Monad.Par.OpenList
+                 , Control.Monad.Par.OpenList
                  , Control.Monad.Par.AList
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
