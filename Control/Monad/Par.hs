@@ -56,7 +56,7 @@ module Control.Monad.Par (
     Par, IVar,
     runPar,
     fork,
-    new, newFilled,
+    new, newFull, newFull_,
     get,
     put, put_,
     both,
@@ -70,7 +70,6 @@ import Control.Monad hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
-import GHC.IO (unsafeDupablePerformIO)
 import Control.Concurrent
 import GHC.Conc hiding ()
 import Control.DeepSeq
@@ -83,15 +82,15 @@ import Test.HUnit
 
 data Trace = forall a . Get (IVar a) (a -> Trace)
            | forall a . Put (IVar a) a Trace
-           | forall a . New (IVar a -> Trace)
+           | forall a . New (IVarContents a) (IVar a -> Trace)
            | Fork Trace Trace
            | Done
 
 -- | The main scheduler loop.
 sched :: Sched -> Trace -> IO ()
 sched queue t = case t of
-    New f -> do
-      r <- newIORef Empty
+    New a f -> do
+      r <- newIORef a
       sched queue (f (IVar r))
     Get (IVar v) c -> do
       e <- readIORef v
@@ -283,20 +282,15 @@ both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
 -- | creates a new @IVar@
 new :: Par (IVar a)
-new  = Par $ New
+new  = Par $ New Empty
 
--- Not sure yet if we want this for IVars:
---newFilled :: NFData a => a -> Par (IVar a)
-newFilled :: a -> Par (IVar a)
-newFilled x = 
-  do let ref = unsafeDupablePerformIO$ newIORef (Full x)
-     return (IVar ref)
--- Here's the reference implementation:
--- newFilled x = 
---   do v <- new 
---      put_ v x
---      return v
+-- | creates a new @IVar@ that contains a value
+newFull :: NFData a => a -> Par (IVar a)
+newFull x = deepseq x (Par $ New (Full x))
 
+-- | creates a new @IVar@ that contains a value (head-strict only)
+newFull_ :: a -> Par (IVar a)
+newFull_ !x = Par $ New (Full x)
 
 -- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
