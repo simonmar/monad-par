@@ -23,7 +23,7 @@
 -- that is, the programmer specifies how information flows from one
 -- part of the computation to another, but not the order in which
 -- computations will be evaluated at runtime.  Information flow is
--- described using "variables" called @PVar@s, which support 'put' and
+-- described using "variables" called @IVar@s, which support 'put' and
 -- 'get' operations.  For example, the following defines a small
 -- network with 4 data values in a diamond-shaped data flow:
 --
@@ -37,8 +37,8 @@
 --
 -- The result of this computation is always 9.  The 'get' operation
 -- waits until its input is available; multiple 'put's to the same
--- @PVar@ are not allowed, and result in a runtime error.  Values
--- stored in @PVar@s are usually fully evaluated (although there are
+-- @IVar@ are not allowed, and result in a runtime error.  Values
+-- stored in @IVar@s are usually fully evaluated (although there are
 -- ways provided to pass lazy values if necessary).
 --
 -- Unlike @Control.Parallel@, in @Control.Monad.Par@ parallelism is
@@ -53,7 +53,7 @@
 --
 
 module Control.Monad.Par (
-    Par, PVar,
+    Par, IVar,
     runPar,
     fork,
     new, newFilled,
@@ -81,9 +81,9 @@ import Test.HUnit
 
 -- ---------------------------------------------------------------------------
 
-data Trace = forall a . Get (PVar a) (a -> Trace)
-           | forall a . Put (PVar a) a Trace
-           | forall a . New (PVar a -> Trace)
+data Trace = forall a . Get (IVar a) (a -> Trace)
+           | forall a . Put (IVar a) a Trace
+           | forall a . New (IVar a -> Trace)
            | Fork Trace Trace
            | Done
 
@@ -92,8 +92,8 @@ sched :: Sched -> Trace -> IO ()
 sched queue t = case t of
     New f -> do
       r <- newIORef Empty
-      sched queue (f (PVar r))
-    Get (PVar v) c -> do
+      sched queue (f (IVar r))
+    Get (IVar v) c -> do
       e <- readIORef v
       case e of
          Full a -> sched queue (c a)
@@ -103,7 +103,7 @@ sched queue t = case t of
                         Full a   -> (Full a,       sched queue (c a))
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
            r
-    Put (PVar v) a t  -> do
+    Put (IVar v) a t  -> do
       cs <- atomicModifyIORef v $ \e -> case e of
                Empty    -> (Full a, [])
                Full _   -> error "multiple put"
@@ -203,11 +203,11 @@ instance Applicative Par where
    (<*>) = ap
    pure  = return
 
-newtype PVar a = PVar (IORef (PVal a))
--- data PVar a = PVar (IORef (PVal a))
+newtype IVar a = IVar (IORef (PVal a))
+-- data IVar a = IVar (IORef (PVal a))
 
--- Forcing evaluation of a PVar is fruitless.
-instance NFData (PVar a) where
+-- Forcing evaluation of a IVar is fruitless.
+instance NFData (IVar a) where
   rnf _ = ()
 
 
@@ -249,7 +249,7 @@ runPar_internal doSync x = unsafePerformIO $ do
              then reschedule state
              else do
                   rref <- newIORef Empty
-                  sched state $ runCont (x >>= put_ (PVar rref)) (const Done)
+                  sched state $ runCont (x >>= put_ (IVar rref)) (const Done)
                   readIORef rref >>= putMVar m
 
    r <- takeMVar m
@@ -268,7 +268,7 @@ runParAsync = runPar_internal False
 
 -- | forks a computation to happen in parallel.  The forked
 -- computation may exchange values with other computations using
--- @PVar@s.
+-- @IVar@s.
 fork :: Par () -> Par ()
 fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 
@@ -279,16 +279,16 @@ both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
 -- -----------------------------------------------------------------------------
 
--- | creates a new @PVar@
-new :: Par (PVar a)
+-- | creates a new @IVar@
+new :: Par (IVar a)
 new  = Par $ New
 
--- Not sure yet if we want this for PVars:
---newFilled :: NFData a => a -> Par (PVar a)
-newFilled :: a -> Par (PVar a)
+-- Not sure yet if we want this for IVars:
+--newFilled :: NFData a => a -> Par (IVar a)
+newFilled :: a -> Par (IVar a)
 newFilled x = 
   do let ref = unsafeDupablePerformIO$ newIORef (Full x)
-     return (PVar ref)
+     return (IVar ref)
 -- Here's the reference implementation:
 -- newFilled x = 
 --   do v <- new 
@@ -296,50 +296,50 @@ newFilled x =
 --      return v
 
 
--- | read the value in a @PVar@.  The 'get' can only return when the
+-- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
--- @PVar@.
-get :: PVar a -> Par a
+-- @IVar@.
+get :: IVar a -> Par a
 get v = Par $ \c -> Get v c
 
 -- | like 'put', but only head-strict rather than fully-strict.
-put_ :: PVar a -> a -> Par ()
+put_ :: IVar a -> a -> Par ()
 put_ v !a = Par $ \c -> Put v a (c ())
 
--- | put a value into a @PVar@.  Multiple 'put's to the same @PVar@
+-- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
 -- are not allowed, and result in a runtime error.
 --
 -- 'put' fully evaluates its argument, which therefore must be an
 -- instance of 'NFData'.  The idea is that this forces the work to
 -- happen when we expect it, rather than being passed to the consumer
--- of the @PVar@ and performed later, which often results in less
+-- of the @IVar@ and performed later, which often results in less
 -- parallelism than expected.
 --
 -- Sometimes partial strictness is more appropriate: see 'put_'.
 --
-put :: NFData a => PVar a -> a -> Par ()
+put :: NFData a => IVar a -> a -> Par ()
 put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 -- -----------------------------------------------------------------------------
 -- Derived functions
 
 -- | Like 'spawn', but the result is only head-strict, not fully-strict.
-spawn_ :: Par a -> Par (PVar a)
+spawn_ :: Par a -> Par (IVar a)
 spawn_ p = do
   r <- new
   fork (p >>= put_ r)
   return r
 
--- | Like 'fork', but returns a @PVar@ that can be used to query the
+-- | Like 'fork', but returns a @IVar@ that can be used to query the
 -- result of the forked computataion.
-spawn :: NFData a => Par a -> Par (PVar a)
+spawn :: NFData a => Par a -> Par (IVar a)
 spawn p = do
   r <- new
   fork (p >>= put r)
   return r
 
 -- | equivalent to @spawn . return@
-pval :: NFData a => a -> Par (PVar a)
+pval :: NFData a => a -> Par (IVar a)
 pval a = spawn (return a)
 
 -- -----------------------------------------------------------------------------

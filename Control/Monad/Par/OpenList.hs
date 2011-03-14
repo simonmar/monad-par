@@ -24,14 +24,14 @@ import Test.HUnit
 import Debug.Trace
 
 -- -----------------------------------------------------------------------------
--- Open Lists -- PVars at the tail.
+-- Open Lists -- IVars at the tail.
 --
 -- These have some of the advantages of imperative lists, such as
 -- constant time appending, while retaining determinism and having
 -- O(1) access to the head of the list unlike tree-shaped lists
 -- (e.g. append-based rather than cons-based).
 
-data IList a = Null | Cons { hd :: a, tl :: PVar (IList a) }
+data IList a = Null | Cons { hd :: a, tl :: IVar (IList a) }
 
 -- Aan OpenList must be handled functionally.  Extending the list as
 -- an effect will not change its tail pointer.
@@ -39,7 +39,7 @@ data OpenList a = OpenList (IList a) (IList a)
 
 -- | To fully evaluate an open list means to evaluate all the
 --   car field.  There is nothing to be done about the fact
---   that the trailing PVar cdr field may receive further extensions.
+--   that the trailing IVar cdr field may receive further extensions.
 instance NFData a => NFData (IList a) where 
 --  rnf Null = r0
   rnf Null = ()
