@@ -125,7 +125,7 @@ cons :: NFData a => a -> OpenList a -> Par (OpenList a)
 -- Careful, consing should not close the openlist:
 cons car (OpenList Null _) = singleton car
 cons car (OpenList hp tp) = 
-  do cdr <- newFilled hp
+  do cdr <- newFull_ hp
      return (OpenList (Cons car cdr) tp)
 
 newCell x = do pv <-new; return (Cons x pv)
