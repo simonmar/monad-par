@@ -1,18 +1,21 @@
-{-# LANGUAGE ScopedTypeVariables, CPP  #-}
+{-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 module Control.Monad.Par.OpenList 
+--module Main
  (
   OpenList(),
   empty, singleton, cons, head, tail, length,
   close, join,
-  toList, fromList,
-  parMapM, parBuild, parBuildM,
-  openlist_tests, chaintest
+  toList, fromList, toLazyList, 
+  parMapM, parBuild, parBuildM,  
+  openlist_tests, 
+  chaintest
  )
 where 
 
 
+import Control.Monad hiding (join)
 import Control.Exception
 import Control.DeepSeq
 import Control.Concurrent.MVar
@@ -21,6 +24,7 @@ import Prelude hiding (length,head,tail,drop,take,null)
 -- import System.IO.Unsafe
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import Test.HUnit 
+import Data.IORef
 import Debug.Trace
 
 -- -----------------------------------------------------------------------------
@@ -72,6 +76,14 @@ close :: NFData a => OpenList a -> Par (OpenList a)
 close orig@(OpenList Null _) = return orig
 close orig@(OpenList _   tp) = do put (tl tp) Null; return orig
 
+
+-- This version ignores the tail pointer and seeks out the end of the
+-- list (at the present time).
+-- unsafeClose :: NFData a => OpenList a -> Par (OpenList a)
+-- unsafeClose orig@(OpenList Null _) = return orig
+
+
+
 -- | Destructive append operation.
 join :: NFData a => OpenList a -> OpenList a -> Par (OpenList a)
 join (OpenList Null _) right = return right
@@ -84,6 +96,9 @@ join (OpenList hp1 tp1) (OpenList hp2 tp2) =
 head :: OpenList a -> a
 head (OpenList Null _) = error "cannot take head of null OpenList"
 head (OpenList hp _)   = hd hp
+
+headCell (OpenList hp _) = OpenList hp hp 
+lastCell (OpenList _ tp) = OpenList tp tp
 
 -- | Tail of an OpenList.  Beware, if the list contains only one
 --   element (e.g. the result of tail will be null), it must be CLOSED
@@ -196,40 +211,68 @@ instance Show a => Show (OpenList a) where
   show (OpenList Null _) = "OpenList []"
   show (OpenList (Cons fst _) (Cons lst _)) = 
       "OpenList ["++show fst++".."++ show lst ++"]"
+
        
 
-debugshow (OpenList (Cons _ _) (Cons _ _)) = "Cons|Cons"
+debugshow (OpenList (Cons h1 _) (Cons h2 _)) = "Cons|Cons|eq/"++show(h1==h2)
 debugshow (OpenList Null       Null)       = "Null|Null"
 debugshow (OpenList Null       (Cons _ _)) = error$ "invalid Null|Cons openlist"
 debugshow (OpenList (Cons _ _) Null)       = error$ "invalid Cons|Null openlist"
 
+-- Check the length of an openlist from head pointer to tail pointer
+-- (not including anything present beyond the tail pointer).
+-- WARNING: ASSUMES UNIQUE ELEMENTS:
+debuglength :: Eq a => OpenList a -> Par Int
+debuglength (OpenList Null Null) = return 0
+debuglength orig@(OpenList (Cons hp1 tp1) (Cons hp2 tp2))
+  | hp1 == hp2 = return 1
+  | otherwise  = do rest <- tail orig
+    	  	    sum  <- debuglength rest
+		    return (1 + sum)
 
 -- -----------------------------------------------------------------------------
 -- Synchronization using native Haskell IVars (e.g. MVars).
 
+-- The MList datatype is internal to the module.
+-- These MVars are only written once:
 data MList a = MNull | MCons (a, MVar (MList a))
 
--- UNFINISHED
-#if 0
-toMList :: OpenList a -> Par (MList a)
-toMList ol | null ol = return MNull
-toMList ol = 
-  do let mv = unsafeDupablePerformIO newEmptyMVar
-     let hd = head ol 
-     tl  <- tail ol
-     fork $ do r <- toMList tl 
-	       unsafePerformIO$ putMVar mv r
-	       return ()
+_unsafe_io :: IO a -> Par a
+_unsafe_io io =  let x = unsafePerformIO io in
+		 x `seq` return x
 
-     return (MCons (hd, mv))
+_unsafe_dupable :: IO a -> Par a
+_unsafe_dupable io = 
+  let x = unsafeDupablePerformIO io in 
+  x `seq` return x
 
-mListToList :: MList a -> IO [a]
+-- Return a lazy list:
+mListToList :: MList a -> [a]
 mListToList MNull = []
-mListToList MCons (hd,tl) = 
-   do tl'  <- readMVar tl
-      rest <- mListToList tl'
-      return (hd : rest)
-#endif
+mListToList (MCons(hd,tl)) = 
+    let rest = unsafeDupablePerformIO$ 
+	       do tl' <- readMVar tl  
+		  return (mListToList tl')
+    in  (hd : rest)
+
+iListToMList :: IList a -> Par (MList a)
+iListToMList Null = return MNull
+iListToMList il = 
+  do mv <- _unsafe_dupable newEmptyMVar
+     fork $ do t <- get (tl il)
+	       r <- iListToMList t
+	       _unsafe_io$ putMVar mv r
+     return (MCons (hd il, mv))
+
+-- | Asynchronously convert an OpenList to a lazy list.  Returns immediately.
+toLazyList :: OpenList a -> Par [a]
+toLazyList (OpenList head _) = iListToMList head >>= return . mListToList 
+-- toLazyList ol = toMList ol >>= return . mListToList 
+
+
+
+
+
 
 -- -----------------------------------------------------------------------------
 -- Testing
@@ -268,48 +311,89 @@ test_ol6 = runPar$ do
   close l2
   toList l2
 
--- Build a long chain, args: current position, desired length:
-chaintest :: Int -> Int -> Par (OpenList Int)
-chaintest i 0 = error "must have chain length >= 1"
-chaintest i 1 = do last <- singleton i
-		   close last
-		   return last
-chaintest i n =
- do let half = n `quot` 2
-    fst <- chaintest i half
-    print_$ show(i,n)++ "  Got handle on first half: "++show (head fst) ++" "++debugshow fst
 
-    fork $ do print_$show(i,n)++ "  Forked computation beginning"
-	      snd <- chaintest (i+half) half
-	      print_$show(i,n)++ "  Got handle on front of second half, hd: "++show (head snd) ++" "++debugshow snd
+test_ol7 :: [Int]
+test_ol7 = runPar$ do 
+  a <- singleton 1
+  b <- singleton 2
+  join a b
+  close b
+  toLazyList a
 
-              -- This is tricky, fst is just a handle on the front of
-              -- the openlist, we have to wait until all of the first
-              -- half is there before we can join.  BUT, for this test
-              -- we want it to be a data-dependency not a control
-              -- dependency.
-	      allfst <- drop (half-1) fst 
-	      join allfst snd
-	      print_$show(i,n)++ "  JOINED, hds: "++show (head allfst, head snd)
-	      return ()
-    -- We don't wait for the forked computation to return the head:
-    return fst
+test_ol8 :: [Int]
+test_ol8 = runPar$ do 
+  a <- singleton 1
+  b <- singleton 2
+  c <- singleton 3
+  d <- singleton 4
+  join c d
+  join a b
+  join b c
+  close d
+  toLazyList a
+
+test_ll :: [Int]
+test_ll = runPar$
+   do l <- fromList [1..1000]
+      close l 
+      toLazyList l
 
 
--- chaintest 0 4
--- 0,2)  Got handle on first half: 0
--- (0,4)  Got handle on first half: 0
--- (0,4)  Forked computation beginning
--- (2,2)  Got handle on first half: 2
--- (0,4)  Got handle on second half, hd: 2
--- (0,4)  JOINED, hds: (0,2)
--- (2,2)  Forked computation beginning
--- (2,2)  Got handle on second half, hd: 3
--- (2,2)  JOINED, hds: (2,3)
--- (0,2)  Forked computation beginning
--- (0,2)  Got handle on second half, hd: 1
--- (0,2)  JOINED, hds: (0,1)
 
+chaintest :: Int -> Par (IList Int)
+chaintest 0   = error "must have chain length >= 1"
+chaintest len = loop 0 len 
+ where 
+   loop i 1 = do tl <- if i == len-1 
+		       then newFull_ Null 
+		       else new
+                 when (i == len-1) (print_$ " == GOT END: "++show i)
+		 return (Cons i tl)
+
+   loop i n =
+    do let half = n `quot` 2
+       ifst <- spawn_$ loop i half 
+
+       fork $ do 
+                 print_$show(i,n)++ "  Forked computation beginning " ++ show (i+half,half)
+		 snd <- loop (i+half) half
+		 print_$show(i,n)++ "  Got handle on front of second half, hd: "++show (hd snd) 
+
+		 fst <- get ifst
+		 lastfst <- dropIList (half-1) fst 
+
+		 print_$show(i,n)++ "  dropped "++show (half-1)++" off of fst, exposing/joining-to "++show (hd lastfst, hd snd)
+
+#if 0
+                 case tl lastfst of 
+		   IVar ref -> 
+                     case unsafePerformIO$ readIORef ref of 
+		       Empty     -> print_ " [before joining] lastfst tail is empty"
+		       Full _    -> print_ " [before joining] lastfst tail is FULL - ERROR!"
+		       Blocked _ -> print_ " [before joining] lastfst tail has BLOCKED readers"
+#endif
+--		 when (hd lastfst /= 1)  -- DEBUG HACK
+--		    (do put (tl lastfst) snd; return ())
+
+		 put (tl lastfst) snd
+		 print_$show(i,n)++ "  JOINED, hds: "++show (hd lastfst, hd snd)
+		 return ()     
+
+       get ifst
+
+dropIList :: NFData a => Int -> IList a -> Par (IList a)
+dropIList 0 ls = return ls
+dropIList n ls = do rest <- get (tl ls)
+	            dropIList (n-1) rest
+
+-- lazy_chaintest i = chaintest i >>= toLazyList
+lazy_chaintest :: Int -> Par [Int]
+lazy_chaintest i = do il <- chaintest i 
+		      ml <- iListToMList il
+		      return (mListToList ml)
+
+
+--------------------------------------------------------------------------------
 
 print_ msg = trace msg $ return ()
 
@@ -361,5 +445,16 @@ openlist_tests =
      10                  ~=? test_ol5,
 
      TestLabel "test parMap" $ 
-     [2..11]             ~=? test_ol6
+     [2..11]             ~=? test_ol6,
+
+     TestLabel "test 7" $ 
+     [1,4]              ~=? test_ol7,
+
+     TestLabel "test 8" $ 
+     [1..4]             ~=? test_ol8,
+
+     TestLabel "test lazy list conversion" $ 
+     [1..1000]          ~=? test_ll
+
     ]
+

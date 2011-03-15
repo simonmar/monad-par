@@ -53,8 +53,10 @@
 --
 
 module Control.Monad.Par (
-    Par, IVar,
-    runPar,
+    Par, 
+    IVar,
+--    IVar(..), IVarContents(..), -- TEMP: Exposing this for debugging.
+    runPar, runParAsync,
     fork,
     new, newFull, newFull_,
     get,
@@ -62,7 +64,10 @@ module Control.Monad.Par (
     both,
     pval,
     spawn, spawn_,
-    parMap, parMapM, parMapReduceRange
+    parMap, parMapM, parMapReduceRange,
+
+-- TEMP:
+    _async_test1, _async_test2, _waste_time
   ) where
 
 import Data.Traversable
@@ -76,7 +81,9 @@ import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
 
+-- For testing only:
 import Test.HUnit 
+import Control.Exception
 
 -- ---------------------------------------------------------------------------
 
@@ -87,19 +94,21 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | Done
 
 -- | The main scheduler loop.
-sched :: Sched -> Trace -> IO ()
-sched queue t = case t of
+sched :: Bool -> Sched -> Trace -> IO ()
+sched _keepGoing queue t = loop t
+ where 
+  loop t = case t of
     New a f -> do
       r <- newIORef a
-      sched queue (f (IVar r))
+      loop (f (IVar r))
     Get (IVar v) c -> do
       e <- readIORef v
       case e of
-         Full a -> sched queue (c a)
+         Full a -> loop (c a)
          _other -> do
            r <- atomicModifyIORef v $ \e -> case e of
                         Empty    -> (Blocked [c], reschedule queue)
-                        Full a   -> (Full a,       sched queue (c a))
+                        Full a   -> (Full a,      loop (c a))
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
            r
     Put (IVar v) a t  -> do
@@ -108,12 +117,12 @@ sched queue t = case t of
                Full _   -> error "multiple put"
                Blocked cs -> (Full a, cs)
       mapM_ (pushWork queue. ($a)) cs
-      sched queue t
+      loop t
     Fork child parent -> do
          pushWork queue child
-         sched queue parent
+         loop parent
     Done ->
-         reschedule queue
+         when _keepGoing$ reschedule queue
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -125,7 +134,7 @@ reschedule queue@Sched{ workpool } = do
            (t:ts') -> (ts', Just t)
   case e of
     Nothing -> steal queue
-    Just t  -> sched queue t
+    Just t  -> sched True queue t
 
 -- RRN: Note, to do random work stealing we would need to thread a RNG
 -- along with the forking control flow to retain determinism.  The
@@ -165,7 +174,7 @@ steal q@Sched{ idle, scheds, no=my_no } = do
          case r of
            Just t  -> do
               -- printf "cpu %d got work from cpu %d\n" my_no (no x)
-              sched q t
+              sched True q t
            Nothing -> go xs
 
 -- | If any worker is idle, wake one up and give it work to do.
@@ -248,7 +257,7 @@ runPar_internal _doSync x = unsafePerformIO $ do
              then reschedule state
              else do
                   rref <- newIORef Empty
-                  sched state $ runCont (x >>= put_ (IVar rref)) (const Done)
+                  sched _doSync state $ runCont (x >>= put_ (IVar rref)) (const Done)
                   readIORef rref >>= putMVar m
 
    r <- takeMVar m
@@ -260,11 +269,10 @@ runPar_internal _doSync x = unsafePerformIO $ do
 runPar :: Par a -> a
 runPar = runPar_internal True
 
-
--- TODO: Would like a version that can return while forked
--- computations still run.
-_runParAsync :: Par a -> a
-_runParAsync = runPar_internal False
+-- A version in which the main thread can return while forked
+-- computations still run in the background.
+runParAsync :: Par a -> a
+runParAsync = runPar_internal False
 
 
 -- | forks a computation to happen in parallel.  The forked
@@ -407,6 +415,48 @@ _test3 = runPar $ do
 _test_pmrr1 :: Int
 _test_pmrr1 = runPar$ parMapReduceRange 1 1 100 (return) (return `bincomp` (+)) 0
  where bincomp unary bin a b = unary (bin a b)
+
+_unsafeio :: IO a -> Par a
+_unsafeio io = let x = unsafePerformIO io in
+	        x `seq` return x
+
+_print :: String -> Par ()
+_print = _unsafeio . putStrLn
+
+_waste_time :: Int -> Double
+_waste_time n = loop n 1.00111
+  where 
+    loop 0  !x             = x
+    loop !n !x | x > 100.0 = loop (n-1) (x / 2)
+    loop !n !x             = loop (n-1) (x + x * 0.5011)
+
+
+_async_test1 = do  -- A D B <pause> C E 
+  putStrLn "A"
+  evaluate$ runPar $
+    do 
+       fork $ do _print "B"
+--		 _unsafeio (sleep 1)
+
+-- Inexplicably, this gets a space leak, wherease the _waste_time definition above doesn't:
+ 		 -- let loop 0  !x             = x
+		 --     loop !n !x | x > 100.0 = loop (n-1) (x / 2)
+		 --     loop !n !x             = loop (n-1) (x + x * 0.5011)
+--		 _print$ "C "++ show (loop 1000000 1.00111)
+
+		 _print$ "C "++ show (_waste_time 300000000)
+       _print "D"
+  putStrLn$ "E"
+
+_async_test2 = do  -- A D E 
+  putStrLn "A"
+  evaluate$ runParAsync $
+    do 
+       fork $ do _print "B"
+		 _print$ "C "++ show (_waste_time 300000000)
+       _print "D"
+  putStrLn$ "E"
+
 
 _par_tests :: Test
 _par_tests = TestList []
