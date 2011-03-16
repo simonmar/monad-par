@@ -4,6 +4,7 @@ import Control.Monad
 import Control.Seq
 
 import Control.Monad.Par
+-- import Control.Monad.Par_Strawman
 
 nqueens :: Int -> Par [[Int]]
 nqueens nq = step 0 []

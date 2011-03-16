@@ -10,7 +10,9 @@ module Control.Monad.Par.OpenList
   toList, fromList, toLazyList, 
   parMapM, parBuild, parBuildM,  
   openlist_tests, 
-  chaintest
+  chaintest, 
+  async_test, lazy_chaintest
+-- , main
  )
 where 
 
@@ -21,6 +23,7 @@ import Control.DeepSeq
 import Control.Concurrent.MVar
 import Control.Monad.Par hiding (parMapM)
 import Prelude hiding (length,head,tail,drop,take,null)
+import qualified Prelude as P
 -- import System.IO.Unsafe
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import Test.HUnit 
@@ -338,8 +341,6 @@ test_ll = runPar$
       close l 
       toLazyList l
 
-
-
 chaintest :: Int -> Par (IList Int)
 chaintest 0   = error "must have chain length >= 1"
 chaintest len = loop 0 len 
@@ -349,36 +350,15 @@ chaintest len = loop 0 len
 		       else new
                  when (i == len-1) (print_$ " == GOT END: "++show i)
 		 return (Cons i tl)
-
    loop i n =
     do let half = n `quot` 2
        ifst <- spawn_$ loop i half 
-
        fork $ do 
-                 print_$show(i,n)++ "  Forked computation beginning " ++ show (i+half,half)
 		 snd <- loop (i+half) half
-		 print_$show(i,n)++ "  Got handle on front of second half, hd: "++show (hd snd) 
-
 		 fst <- get ifst
 		 lastfst <- dropIList (half-1) fst 
-
-		 print_$show(i,n)++ "  dropped "++show (half-1)++" off of fst, exposing/joining-to "++show (hd lastfst, hd snd)
-
-#if 0
-                 case tl lastfst of 
-		   IVar ref -> 
-                     case unsafePerformIO$ readIORef ref of 
-		       Empty     -> print_ " [before joining] lastfst tail is empty"
-		       Full _    -> print_ " [before joining] lastfst tail is FULL - ERROR!"
-		       Blocked _ -> print_ " [before joining] lastfst tail has BLOCKED readers"
-#endif
---		 when (hd lastfst /= 1)  -- DEBUG HACK
---		    (do put (tl lastfst) snd; return ())
-
 		 put (tl lastfst) snd
-		 print_$show(i,n)++ "  JOINED, hds: "++show (hd lastfst, hd snd)
 		 return ()     
-
        get ifst
 
 dropIList :: NFData a => Int -> IList a -> Par (IList a)
@@ -392,6 +372,16 @@ lazy_chaintest i = do il <- chaintest i
 		      ml <- iListToMList il
 		      return (mListToList ml)
 
+-- If we create a large, lazy chain, taking just the head should be quick.
+async_test = 
+  do putStrLn "BeginTest"
+--     let lazy = runParAsync$ lazy_chaintest 1048576
+--     let lazy = runParAsync$ lazy_chaintest 32768
+--     let lazy = runParAsync$ lazy_chaintest 1024
+     let lazy = runPar$ lazy_chaintest 1024
+     putStrLn$ "Resulting list "++ show lazy
+     putStrLn$ "Got head: "++ show (P.take 3 lazy)
+     putStrLn "EndTest"
 
 --------------------------------------------------------------------------------
 
@@ -420,8 +410,8 @@ openlist_tests =
      1                   ~=? runPar (singleton 'a' >>= close >>= length),
      1                   ~=? runPar (cons 'b' empty >>= close >>= length),
 
-     TestLabel "singleton, close"          $ "Cons|Cons" ~=? dbg0,
-     TestLabel "tail then close - SKETCHY" $ "Cons|Cons" ~=? dbg1,
+     TestLabel "singleton, close"          $ "Cons|Cons|eq/True" ~=? dbg0,
+     TestLabel "tail then close - SKETCHY" $ "Cons|Cons|eq/True" ~=? dbg1,
      TestLabel "close then tail"           $ "Null|Null" ~=? dbg2,
 --     TestLabel "tail no close"   $ "" ~=? dbg3,
 
@@ -448,13 +438,20 @@ openlist_tests =
      [2..11]             ~=? test_ol6,
 
      TestLabel "test 7" $ 
-     [1,4]              ~=? test_ol7,
+     [1,2]              ~=? test_ol7,
 
      TestLabel "test 8" $ 
      [1..4]             ~=? test_ol8,
 
      TestLabel "test lazy list conversion" $ 
-     [1..1000]          ~=? test_ll
+     [1..1000]          ~=? test_ll,
+
+     TestLabel "chaintest" $
+     [0..511]           ~=? runPar (lazy_chaintest 512),
+
+     TestLabel "asynchronous chaintest" $
+     [0..511]           ~=? runParAsync (lazy_chaintest 512)
 
     ]
 
+main = async_test

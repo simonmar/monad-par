@@ -53,9 +53,7 @@
 --
 
 module Control.Monad.Par (
-    Par, 
-    IVar,
---    IVar(..), IVarContents(..), -- TEMP: Exposing this for debugging.
+    Par, IVar,
     runPar, runParAsync,
     fork,
     new, newFull, newFull_,
@@ -66,8 +64,6 @@ module Control.Monad.Par (
     spawn, spawn_,
     parMap, parMapM, parMapReduceRange,
 
--- TEMP:
-    _async_test1, _async_test2, _waste_time
   ) where
 
 import Data.Traversable
@@ -136,12 +132,10 @@ reschedule queue@Sched{ workpool } = do
     Nothing -> steal queue
     Just t  -> sched True queue t
 
--- RRN: Note, to do random work stealing we would need to thread a RNG
--- along with the forking control flow to retain determinism.  The
--- recent Cilk technique of tracking the index in the fork-tree (the
--- "pedigree") of the current computation -- and using that for random
--- number generation -- may have some advantages... (splitting the RNG
--- even where stealing does not occur could be expensive).
+
+-- RRN: Note -- NOT doing random work stealing breaks the traditional
+-- Cilk time/space bounds if one is running strictly nested (series
+-- parallel) programs (e.g. spawn with no get).
 
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
@@ -436,14 +430,6 @@ _async_test1 = do  -- A D B <pause> C E
   evaluate$ runPar $
     do 
        fork $ do _print "B"
---		 _unsafeio (sleep 1)
-
--- Inexplicably, this gets a space leak, wherease the _waste_time definition above doesn't:
- 		 -- let loop 0  !x             = x
-		 --     loop !n !x | x > 100.0 = loop (n-1) (x / 2)
-		 --     loop !n !x             = loop (n-1) (x + x * 0.5011)
---		 _print$ "C "++ show (loop 1000000 1.00111)
-
 		 _print$ "C "++ show (_waste_time 300000000)
        _print "D"
   putStrLn$ "E"
@@ -458,5 +444,6 @@ _async_test2 = do  -- A D E
   putStrLn$ "E"
 
 
+-- TODO: add the async_tests above to the test list.
 _par_tests :: Test
 _par_tests = TestList []
