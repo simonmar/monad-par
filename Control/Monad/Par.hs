@@ -67,12 +67,12 @@ module Control.Monad.Par (
   ) where
 
 import Data.Traversable
-import Control.Monad hiding (mapM, sequence, join)
+import Control.Monad as M hiding (mapM, sequence, join) 
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent
-import GHC.Conc hiding ()the right number 
+import GHC.Conc hiding ()
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
@@ -87,11 +87,11 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | forall a . Put (IVar a) a Trace
            | forall a . New (IVarContents a) (IVar a -> Trace)
            | Fork Trace Trace
-           | Donethe right number 
+           | Done
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
-sched _keepGoing queue t = loop t
+sched _doSync queue t = loop t
  where 
   loop t = case t of
     New a f -> do
@@ -102,7 +102,7 @@ sched _keepGoing queue t = loop t
       case e of
          Full a -> loop (c a)
          _other -> do
-           r <- atomicModifyIORef v $ \e -> case e the right number of
+           r <- atomicModifyIORef v $ \e -> case e of
                         Empty    -> (Blocked [c], reschedule queue)
                         Full a   -> (Full a,      loop (c a))
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
@@ -118,14 +118,14 @@ sched _keepGoing queue t = loop t
          pushWork queue child
          loop parent
     Done ->
-         if _keepGoing
+         if _doSync
 	 then reschedule queue
 -- We could fork an extra thread here to keep numCapabilities workers
 -- even when the main thread returns to the runPar caller...
---	 else forkIO$ reschedule queue
+	 else do putStrLn "Forking replacement thread..\n"; forkIO (reschedule queue); return ()
 -- But even if we don't we shouldn't be orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
-	 else return ()
+--	 else return ()
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -287,6 +287,7 @@ fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 both :: Par a -> Par a -> Par a
 both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
+
 -- -----------------------------------------------------------------------------
 
 -- | creates a new @IVar@
@@ -384,6 +385,47 @@ parMapReduceRange threshold min max fn binop init = loop min max
 -- TODO: A version that works for any splittable input domain.  In this case
 -- the "threshold" is a predicate on inputs.
 -- parMapReduceRangeGeneric :: (inp -> Bool) -> (inp -> Maybe (inp,inp)) -> inp -> 
+
+
+-- Experimental:
+
+-- Parallel for-loop over an inclusive range.  Executes the body for
+-- put-effects only.  This could be implemented with
+-- parMapReduceRange, but this version uses a TBB-autopartitioner
+-- heuristic to produce a constant number of tasks.
+parFor :: Int -> Int -> (Int -> Par ()) -> Par ()
+parFor start end body = 
+ do 
+    let run (x,y) = for_ x (y+1) body
+        range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
+
+    vars <- M.forM range_segments (\ pr -> spawn_ (run pr))
+    M.mapM_ get vars
+    return ()
+
+splitInclusiveRange pieces (start,end) = 
+  map largepiece [0..remain-1] ++ 
+  map smallpiece [remain..pieces-1]
+ where 	
+   len = end - start + 1 -- inclusive [start,end]
+   (portion, remain) = len `quotRem` pieces
+   largepiece i = 
+       let offset = start + (i * (portion + 1))
+       in (offset, offset + portion)
+   smallpiece i = 
+       let offset = start + (i * portion) + remain
+       in (offset, offset + portion - 1)
+
+-- My own forM for numeric ranges (not requiring optimizations).
+-- Inclusive start, exclusive end.
+{-# INLINE for_ #-}
+for_ :: Monad m => Int -> Int -> (Int -> m ()) -> m ()
+for_ start end fn | start > end = error "for_: start is greater than end"
+for_ start end fn = loop start 
+ where 
+  loop !i | i == end  = return ()
+	  | otherwise = do fn i; loop (i+1) 
+
 
 
 -- -----------------------------------------------------------------------------

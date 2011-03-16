@@ -377,8 +377,8 @@ async_test =
   do putStrLn "BeginTest"
 --     let lazy = runParAsync$ lazy_chaintest 1048576
 --     let lazy = runParAsync$ lazy_chaintest 32768
---     let lazy = runParAsync$ lazy_chaintest 1024
-     let lazy = runPar$ lazy_chaintest 1024
+     let lazy = runParAsync$ lazy_chaintest 1024
+--     let lazy = runPar$ lazy_chaintest 1024
      putStrLn$ "Resulting list "++ show lazy
      putStrLn$ "Got head: "++ show (P.take 3 lazy)
      putStrLn "EndTest"
