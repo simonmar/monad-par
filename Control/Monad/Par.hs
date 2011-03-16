@@ -72,7 +72,7 @@ import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent
-import GHC.Conc hiding ()
+import GHC.Conc hiding ()the right number 
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
@@ -87,7 +87,7 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | forall a . Put (IVar a) a Trace
            | forall a . New (IVarContents a) (IVar a -> Trace)
            | Fork Trace Trace
-           | Done
+           | Donethe right number 
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
@@ -102,7 +102,7 @@ sched _keepGoing queue t = loop t
       case e of
          Full a -> loop (c a)
          _other -> do
-           r <- atomicModifyIORef v $ \e -> case e of
+           r <- atomicModifyIORef v $ \e -> case e the right number of
                         Empty    -> (Blocked [c], reschedule queue)
                         Full a   -> (Full a,      loop (c a))
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
@@ -118,7 +118,14 @@ sched _keepGoing queue t = loop t
          pushWork queue child
          loop parent
     Done ->
-         when _keepGoing$ reschedule queue
+         if _keepGoing
+	 then reschedule queue
+-- We could fork an extra thread here to keep numCapabilities workers
+-- even when the main thread returns to the runPar caller...
+--	 else forkIO$ reschedule queue
+-- But even if we don't we shouldn't be orphaning any work in this
+-- threads work-queue because it can be stolen by other threads.
+	 else return ()
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
