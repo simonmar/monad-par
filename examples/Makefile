@@ -1,6 +1,7 @@
 include common.mk
 
-BENCHMARKS= ./queens.hs ./mandel.hs ./blackscholes.hs ./nbody.hs
+BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs primes.hs
+# binomial_lattice.hs
 EXES= $(BENCHMARKS:.hs=.exe)
 
 PARSRC= ../Control/Monad/Par.hs ../Control/Monad/Par/AList.hs ../Control/Monad/Par/OpenList.hs

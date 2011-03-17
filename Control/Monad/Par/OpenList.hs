@@ -196,15 +196,15 @@ parMapM fn ls =
 -- parMapM_ :: (a -> Par ()) -> OpenList a -> Par () 
 
 -- | Build an OpenList with a divide-and-conquer parallel strategy.
-parBuild :: NFData a => Int -> Int -> Int -> (Int -> a) -> Par (OpenList a)
-parBuild threshold min max fn =
-  parMapReduceRange threshold min max (singleton . fn) join empty
+parBuild :: NFData a => InclusiveRange -> (Int -> a) -> Par (OpenList a)
+parBuild range fn =
+  parMapReduceRange range (singleton . fn) join empty
 
 -- | Build an OpenList with a divide-and-conquer parallel strategy,
 --   allowing nested parallelism in the per-element computation.
-parBuildM :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> Par (OpenList a)
-parBuildM threshold min max fn =
-  parMapReduceRange threshold min max ((>>= singleton) . fn) join empty
+parBuildM :: NFData a => InclusiveRange -> (Int -> Par a) -> Par (OpenList a)
+parBuildM range fn =
+  parMapReduceRange range ((>>= singleton) . fn) join empty
 
 
 -- | OpenLists can only be printed properly in the Par monad.  @show@

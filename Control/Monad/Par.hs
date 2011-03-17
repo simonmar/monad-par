@@ -62,7 +62,8 @@ module Control.Monad.Par (
     both,
     pval,
     spawn, spawn_,
-    parMap, parMapM, parMapReduceRange,
+    parMap, parMapM, parMapReduceRange, parMapReduceRangeThresh,
+    InclusiveRange(..),
     parFor
 
 -- TEMP:
@@ -365,11 +366,15 @@ parMapM f xs = mapM (spawn . f) xs >>= mapM get
 {-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> Par [b] #-}
 
 
+-- TODO: Perhaps should introduce a class for the "splittable range" concept.
+data InclusiveRange = InclusiveRange Int Int 
+
 -- | parMapReduceRange is similar to the "parallel for" construct
---   found in many parallel programming models.  
--- 
-parMapReduceRange :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
-parMapReduceRange threshold min max fn binop init = loop min max 
+--   found in many parallel programming models in that it takes a
+--   numeric start/end range as its input domain.
+parMapReduceRangeThresh :: NFData a => 
+                           Int -> InclusiveRange -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
+parMapReduceRangeThresh threshold (InclusiveRange min max) fn binop init = loop min max 
  where 
   loop min max 
     | max - min <= threshold = 
@@ -383,8 +388,32 @@ parMapReduceRange threshold min max fn binop init = loop min max
 	rght <- spawn $ loop (mid+1) max 
 	l  <- loop  min    mid 
 	r  <- get rght
-	lr <- l `binop` r
-	return lr
+	l `binop` r
+
+-- How many tasks per process should we aim for.  Higher numbers
+-- improve load balance but put more pressure on the scheduler.
+auto_partition_factor = 4
+
+-- | "Auto-partitioning" versiobn that chooses the threshold based on
+--    the size of the range and the number of processors..
+parMapReduceRange :: NFData a => InclusiveRange -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
+parMapReduceRange (InclusiveRange start end) fn binop init = 
+   loop (length segs) segs
+ where 
+  segs = splitInclusiveRange (auto_partition_factor * numCapabilities) (start,end)
+  loop 1 [(st,en)] = 
+     let mapred a b = do x <- fn b; 
+			 result <- a `binop` x
+			 return result 
+     in foldM mapred init [st..en]
+  loop n segs = 
+     let half = n `quot` 2
+	 (left,right) = splitAt half segs in
+     do l  <- spawn$ loop half left
+        r  <- loop (n-half) right
+	l' <- get l
+	l' `binop` r
+
 
 -- TODO: A version that works for any splittable input domain.  In this case
 -- the "threshold" is a predicate on inputs.
@@ -394,11 +423,10 @@ parMapReduceRange threshold min max fn binop init = loop min max
 -- Experimental:
 
 -- Parallel for-loop over an inclusive range.  Executes the body for
--- put-effects only.  This could be implemented with
--- parMapReduceRange, but this version uses a TBB-autopartitioner
--- heuristic to produce a constant number of tasks.
-parFor :: Int -> Int -> (Int -> Par ()) -> Par ()
-parFor start end body = 
+-- put-effects only.  This could be implemented with parMapReduceRange
+-- but this version has no reduce function...
+parFor :: InclusiveRange -> (Int -> Par ()) -> Par ()
+parFor (InclusiveRange start end) body = 
  do 
     let run (x,y) = for_ x (y+1) body
         range_segments = splitInclusiveRange (4*numCapabilities) (start,end)
@@ -407,6 +435,7 @@ parFor start end body =
     M.mapM_ get vars
     return ()
 
+splitInclusiveRange :: Int -> (Int, Int) -> [(Int, Int)]
 splitInclusiveRange pieces (start,end) = 
   map largepiece [0..remain-1] ++ 
   map smallpiece [remain..pieces-1]
@@ -420,7 +449,7 @@ splitInclusiveRange pieces (start,end) =
        let offset = start + (i * portion) + remain
        in (offset, offset + portion - 1)
 
--- My own forM for numeric ranges (not requiring optimizations).
+-- My own forM for numeric ranges (not requiring deforestation optimizations).
 -- Inclusive start, exclusive end.
 {-# INLINE for_ #-}
 for_ :: Monad m => Int -> Int -> (Int -> m ()) -> m ()
@@ -460,7 +489,8 @@ _test3 = runPar $ do
 -- is there a standard lib thing for this?
 
 _test_pmrr1 :: Int
-_test_pmrr1 = runPar$ parMapReduceRange 1 1 100 (return) (return `bincomp` (+)) 0
+_test_pmrr1 = runPar$ parMapReduceRangeThresh 1 (InclusiveRange 1 100) 
+	                                      (return) (return `bincomp` (+)) 0
  where bincomp unary bin a b = unary (bin a b)
 
 _unsafeio :: IO a -> Par a

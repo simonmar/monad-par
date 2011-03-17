@@ -8,6 +8,7 @@ module Control.Monad.Par.AList
   empty, singleton, cons, head, tail, length, append,
   toList, fromList,
 --  parMapM, 
+  parBuildThresh, parBuildThreshM,
   parBuild, parBuildM,
   alist_tests
  )
@@ -130,30 +131,37 @@ toList a = go a []
        go (Append l r) rest = go l $! go r rest
        go (AList xs)   rest = xs ++ rest
 
--- toList :: AList a -> [a]
--- toList al = loop al []
---  where 
---   loop  ANil     (h:t)   = loop h t
---   loop (ASing x) (h:t)   = x : loop h t
---   loop (AList l) (h:t)   = l ++ loop h t
---   loop (Append l r) rest = loop l (r:rest)
---   loop  ANil     []      = []
---   loop (ASing x) []      = [x]
---   loop (AList l) []      = l 
-
 -- TODO: Provide a strategy for @par@-based maps:
 
 
 appendM x y = return (append x y)
 
-parBuild :: NFData a => Int -> Int -> Int -> (Int -> a) -> Par (AList a)
-parBuild threshold min max fn =
-  parMapReduceRange threshold min max (return . singleton . fn) appendM empty
+-- | Build a balance AList in parallel constructing each element as a
+--   function of its index.  The threshold argument provides control
+--   over the degree of parallelism.  It indicates under what number
+--   of elements the build process should switch from parallel to
+--   serial.
+parBuildThresh :: NFData a => Int -> InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuildThresh threshold range fn =
+  parMapReduceRangeThresh threshold range
+			  (return . singleton . fn) appendM empty
 
+-- | Variant in which the element-construction function is itself a Par computation.
+parBuildThreshM :: NFData a => Int -> InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildThreshM threshold range fn =
+  parMapReduceRangeThresh threshold range 
+			  ((fmap singleton) . fn) appendM empty
 
-parBuildM :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> Par (AList a)
-parBuildM threshold min max fn =
-  parMapReduceRange threshold min max ((fmap singleton) . fn) appendM empty
+-- | "Auto-partitioning" version that chooses the threshold based on
+--    the size of the range and the number of processors..
+parBuild :: NFData a => InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuild range fn =
+  parMapReduceRange range (return . singleton . fn) appendM empty
+
+-- | Auto-partitioning plus monadic construction function.
+parBuildM :: NFData a => InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildM range fn =
+  parMapReduceRange range ((fmap singleton) . fn) appendM empty
 
 
 -- | A parMap over an AList can result in more balanced parallelism than

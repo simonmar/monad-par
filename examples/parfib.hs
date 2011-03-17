@@ -37,11 +37,11 @@ main = do args <- getArgs
 		      []  -> 10 
 		      [n] -> (read n)
 
-          -- putStrLn "Basic, Non-monadic version:"
-	  -- print$ parfib0 size
+          putStrLn "Basic, Non-monadic version:"
+	  print$ parfib0 size
 
-          putStrLn "Monad-par based version:"
-	  print$ runPar$ parfib1 size
+          -- putStrLn "Monad-par based version:"
+	  -- print$ runPar$ parfib1 size
 
 
 {- On 4-core nehalem, 3.33ghz:
@@ -58,5 +58,12 @@ main = do args <- getArgs
   fib(38) 4 threads:     8.2s 31.3s
 
   fib(40) 4 threads:    20.6s 78.6s 240GB allocated
-  
- -}
+
+
+For comparison, Cilkarts Cilk++:
+  fib(42) 4 threads:  3.029s 23.610s
+
+Intel Cilk Plus:
+  fib(42) 4 threads:  4.212s 16.770s
+
+-}

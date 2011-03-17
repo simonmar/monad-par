@@ -26,7 +26,7 @@ threshold = 1
 
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par PixMap
 runMandel minX minY maxX maxY winX winY max_depth = do
-  l <- parBuildM threshold 0 (winY-1) $ \y -> do
+  l <- parBuildThreshM threshold (InclusiveRange 0 (winY-1)) $ \y -> do
           let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)
   return (createPixmap (fromIntegral winX) (fromIntegral winY)
