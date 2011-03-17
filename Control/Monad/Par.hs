@@ -63,6 +63,10 @@ module Control.Monad.Par (
     pval,
     spawn, spawn_,
     parMap, parMapM, parMapReduceRange,
+    parFor
+
+-- TEMP:
+, _async_test1, _async_test2
 
   ) where
 
@@ -122,7 +126,7 @@ sched _doSync queue t = loop t
 	 then reschedule queue
 -- We could fork an extra thread here to keep numCapabilities workers
 -- even when the main thread returns to the runPar caller...
-	 else do putStrLn "Forking replacement thread..\n"; forkIO (reschedule queue); return ()
+	 else do putStrLn " [par] Forking replacement thread..\n"; forkIO (reschedule queue); return ()
 -- But even if we don't we shouldn't be orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
@@ -483,7 +487,7 @@ _async_test1 = do  -- A D B <pause> C E
        _print "D"
   putStrLn$ "E"
 
-_async_test2 = do  -- A D E 
+_async_test2 = do  -- A D E  or A D B E  but no C
   putStrLn "A"
   evaluate$ runParAsync $
     do 
