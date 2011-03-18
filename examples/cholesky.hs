@@ -90,11 +90,11 @@ type Matrix = Array.Array (Int, Int) Float
 -- of the computation.
 type Tile = IOUArray  (Int, Int) Float
 
--- Tile3D allows us to refer to a PVar associated with a tile. The first
+-- Tile3D allows us to refer to a IVar associated with a tile. The first
 -- two dimensions of the index are the coordinates of the tile in the matrix.
--- The last dimension is the "generation" dimension. I.e., a (PVar Tile) mapped
--- by (i, j, k+1) is the next generation of the (PVar Tile) mapped by (i, j, k).
-type Tiles3D = Map (Int, Int, Int) (PVar Tile)
+-- The last dimension is the "generation" dimension. I.e., a (IVar Tile) mapped
+-- by (i, j, k+1) is the next generation of the (IVar Tile) mapped by (i, j, k).
+type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 
 instance NFData Tile where
     rnf x = unsafePerformIO $
@@ -106,12 +106,12 @@ instance NFData Tile where
 parMap_ :: (a -> Par ()) -> [a] -> Par ()
 parMap_ f xs = mapM (spawn . f) xs >> return ()
 
-getTileV :: (Int, Int, Int) -> Tiles3D -> PVar Tile
+getTileV :: (Int, Int, Int) -> Tiles3D -> IVar Tile
 getTileV triplet tiles =
     findWithDefault (error "This can't be happening...") triplet tiles
 
 -- This kicks off cholesky factorization on the diagonal tiles.
-s0Compute :: PVar Tiles3D -> Int -> Int -> Par ()
+s0Compute :: IVar Tiles3D -> Int -> Int -> Par ()
 s0Compute lkjiv p b =
     do lkji <- get lkjiv
        parMap_ (s1Compute lkji p b) [0..p-1]
@@ -207,8 +207,8 @@ s3Compute lkji b (k,j,i) | otherwise =
                                                    base2 <- readArray l1Block (ib,kb)
                                                    writeArray aBlock (ib,jb) (base1 + temp * base2)
 
--- initLkji initialize the (PVar Tile) map using the input array.
-initLkji :: Matrix -> Int -> Int -> Int -> Par (PVar Tiles3D)    
+-- initLkji initialize the (IVar Tile) map using the input array.
+initLkji :: Matrix -> Int -> Int -> Int -> Par (IVar Tiles3D)    
 initLkji arrA n p b = 
     let tile i j = unsafePerformIO $ newListArray ((0,0),(b-1,b-1)) (tileList i j)
         tileList i j = [ arrA Array.! (i * b + ii, j * b + jj) | ii <- [0..b-1], jj <-[0..b-1]]

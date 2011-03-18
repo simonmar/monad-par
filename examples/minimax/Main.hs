@@ -9,7 +9,11 @@ import Board
 import System.Random
 
 main = do
-  [n, depth] <- fmap (map read) getArgs
+  args <- getArgs
+  let [n, depth] = case args of 
+		    [n, depth] -> [read n, read depth]
+		    _          -> [10,10]
+		  
   setStdGen (mkStdGen 99999)
   b <- randomBoard n
   putStrLn $ showBoard b
