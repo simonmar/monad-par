@@ -13,6 +13,8 @@ module Control.Monad.Par.OpenList
   chaintest, 
   async_test, lazy_chaintest
 -- , main
+
+ , IList(..), newCell
  )
 where 
 
