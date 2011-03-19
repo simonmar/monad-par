@@ -10,10 +10,11 @@ import Debug.Trace
 -- bufsize = 256
 bufsize = 8
 
---type Stream a = OpenList (UArray Int a)
-type Stream a = IList (UArray Int a)
+type Stream a = OpenList (UArray Int a)
+--type Stream a = IVar (IList (UArray Int a)
 
 stage :: Stream Float -> Stream Float -> Par ()
+stage Null outstrm = put (tl outstrm) Null
 stage instrm outstrm = 
   do 
      let input = hd instrm
@@ -36,6 +37,7 @@ source max outstrm = loop 0 outstrm
     do let arr = array (0,bufsize-1) [(i,fromIntegral (n+i)) | i <- [0..bufsize-1]]
        cell <- newCell arr
        put (tl strm) cell 
+-- yield?
        loop (n+bufsize) cell
 
 -- print_ msg = trace msg (return ())
@@ -73,7 +75,7 @@ instance NFData (UArray a b) where
 
 main = do
   putStrLn "Hello"
-
+  print test
 
 
 -- work pop 1 peek N push 1 
