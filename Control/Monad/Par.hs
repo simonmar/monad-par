@@ -225,6 +225,17 @@ instance NFData (IVar a) where
   rnf _ = ()
 
 
+
+-- From outside the Par computation we can peek.  But this is nondeterministic.
+unsafePollIVar :: IVar a -> IO (Maybe a)
+unsafePollIVar (IVar ref) = 
+  do contents <- readIORef ref
+     case contents of 
+       Full x -> return (Just x)
+       _      -> return (Nothing)
+
+
+
 data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 
 
