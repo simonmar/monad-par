@@ -130,7 +130,7 @@ sched _doSync queue t = loop t
 -- We could fork an extra thread here to keep numCapabilities workers
 -- even when the main thread returns to the runPar caller...
 	 else do putStrLn " [par] Forking replacement thread..\n"; forkIO (reschedule queue); return ()
--- But even if we don't we shouldn't be orphaning any work in this
+-- But even if we don't we are not orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
 
@@ -294,11 +294,17 @@ runPar_internal _doSync x = unsafePerformIO $ do
 runPar :: Par a -> a
 runPar = runPar_internal True
 
--- A version in which the main thread can return while forked
--- computations still run in the background.
+-- | An asynchronous version in which the main thread of control in a
+-- Par computation can return while forked computations still run in
+-- the background.  
 runParAsync :: Par a -> a
 runParAsync = runPar_internal False
 
+-- | An alternative version in which the consumer of the result has
+-- | the option to "help" run the Par computation if results it is
+-- | interested in are not ready yet.
+runParAsyncHelper :: Par a -> (a, IO ())
+runParAsyncHelper = undefined -- TODO: Finish Me.
 
 -- | forks a computation to happen in parallel.  The forked
 -- computation may exchange values with other computations using

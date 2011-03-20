@@ -1,5 +1,6 @@
 {-# LANGUAGE ScopedTypeVariables, CPP, BangPatterns #-}
-{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
+{-# OPTIONS_GHC -fwarn-unused-imports #-}
+-- -Wall -fno-warn-name-shadowing
 
 module Control.Monad.Par.OpenList 
 --module Main
@@ -18,18 +19,17 @@ module Control.Monad.Par.OpenList
  )
 where 
 
-
 import Control.Monad hiding (join)
-import Control.Exception
 import Control.DeepSeq
 import Control.Concurrent.MVar
 import Control.Monad.Par hiding (parMapM)
+import Control.Monad.Par.IList
+
 import Prelude hiding (length,head,tail,drop,take,null)
 import qualified Prelude as P
 -- import System.IO.Unsafe
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import Test.HUnit 
-import Data.IORef
 import Debug.Trace
 
 -- -----------------------------------------------------------------------------
@@ -40,19 +40,10 @@ import Debug.Trace
 -- O(1) access to the head of the list unlike tree-shaped lists
 -- (e.g. append-based rather than cons-based).
 
-data IList a = Null | Cons { hd :: a, tl :: IVar (IList a) }
 
--- Aan OpenList must be handled functionally.  Extending the list as
+-- An OpenList must be handled functionally.  Extending the list as
 -- an effect will not change its tail pointer.
 data OpenList a = OpenList (IList a) (IList a)
-
--- | To fully evaluate an open list means to evaluate all the
---   car field.  There is nothing to be done about the fact
---   that the trailing IVar cdr field may receive further extensions.
-instance NFData a => NFData (IList a) where 
---  rnf Null = r0
-  rnf Null = ()
-  rnf (Cons a b) = rnf a `seq` rnf b
 
 -- This is likewise a pretty meaningless NFData instance:
 instance NFData a => NFData (OpenList a) where 

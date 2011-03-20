@@ -5,3 +5,6 @@ ifeq (,$(GHC))
   GHC = ghc-testing2
   # GHC = ghc-stable-nightly2
 endif
+
+ALLPARSRC= ../Control/Monad/Par.hs ../Control/Monad/Par/AList.hs ../Control/Monad/Par/OpenList.hs \
+           ../Control/Monad/Par/IList.hs  ../Control/Monad/Par/Stream.hs
