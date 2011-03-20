@@ -8,10 +8,11 @@
 --  the stream fusion framework.)
 
 module Control.Monad.Par.Stream 
- ( streamMap
- , countupWin
+ ( 
+   streamMap, streamScan
+ , countupWin, generate
  , runParList, toListSpin
- , measureRate
+ , measureRate, browseStream
  , Stream, Window, WStream
 
  -- TEMP:
@@ -36,6 +37,7 @@ import Foreign.Storable
 import System.CPUTime
 import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
+import System.IO
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
 import Debug.Trace
 
@@ -61,7 +63,32 @@ type Window a = U.UArray Int a
 --------------------------------------------------------------------------------
 -- Stream Operators
 
--- | This version exposes pipeline parallelism but no data parallelism.
+-- | This version applies a function to every element in a stream,
+--   exposing data parallelism and pipeline parallelism.
+streamMapDP :: NFData b => (a -> b) -> Stream a -> Par (Stream b)
+streamMapDP fn instrm = 
+    do outstrm <- new
+       fork$ loop instrm outstrm
+       return outstrm
+ where
+  loop instrm outstrm = 
+   do 
+      ilst <- get instrm
+      case ilst of 
+	Null -> put outstrm Null -- End of stream.
+	Cons h t -> 
+	  do newtl <- new
+	     h' <- pval (fn h)	     
+
+-- WARNING: This only makes sense with continuation-stealing..  With child stealing this will go crazy.
+	     fork$ loop t newtl
+	     h'' <- get h'
+	     put outstrm (Cons h'' newtl)
+	     
+
+-- This version exposes pipeline parallelism but no data parallelism.
+-- It shouldn't be necessary if fork is sufficiently efficient and if
+-- work stealing is done right.
 streamMap :: NFData b => (a -> b) -> Stream a -> Par (Stream b)
 streamMap fn instrm = 
     do outstrm <- new
@@ -78,15 +105,47 @@ streamMap fn instrm =
 	     put outstrm (Cons (fn h) newtl)
 	     loop t newtl
 
--- | Create a [windowed] stream of consecutive integers.  Generates at
---   least the target number of elements windowed into segments of a
---   specified size.
+
+-- | Applies a stateful kernel to the stream.  Output stream elements match input one-to-one.
+streamScan :: (NFData b, NFData c) => 
+	      (a -> b -> (a,c)) -> a -> Stream b -> Par (Stream c)
+streamScan fn initstate instrm = 
+    do outstrm <- new
+       fork$ loop initstate instrm outstrm
+       return outstrm
+ where
+  loop state instrm outstrm = 
+   do 
+      ilst <- get instrm
+      case ilst of 
+	Null -> put outstrm Null -- End of stream.
+	Cons h t -> 
+	  do newtl <- new
+	     let (newstate, outp) = fn state h
+	     put outstrm (Cons outp newtl)
+	     loop newstate t newtl
+
+-- TODO: streamMapM -- monadic version.  Define the non-monadic one in
+-- terms of it and watch for performance regression.
+
+
+-- TODO: More flexible version that passes an "emit" function to the
+-- kernel so that it may produce zero output elements or more than one.
+-- This also enables nested parallelism within the kernel.
+-- 
+-- streamKernel :: ((c -> Par ()) -> a -> b -> Par ()) -> a -> Stream b -> Par (Stream c)
+--
+-- ALSO: Can have a "concat" operator for streams of lists where
+-- streamScan . concat rewrites to streamKernel perhaps...
+
+
+-- | Generate a stream of the given length by applying the function to each index (starting at zero).
 -- 
 -- WARNING, this source calls yield, letting other par computations
 -- run, but there is no backpressure.  Thus if the source runs at a
 -- higher rate than its consumer, buffered stream elements accumulate.
-countupWin :: (Storable a, NFData a, Num a) => 
-              Int -> Int64 -> Par (WStream a)
+
+generate :: NFData a => Int -> (Int -> a) -> Par (Stream a)
 -- NOTE: I don't currently know of a good way to do backpressure
 -- directly in this system... but here are some other options: 
 --
@@ -98,26 +157,41 @@ countupWin :: (Storable a, NFData a, Num a) =>
 
 --   (3) We can register computations that should only execute when a
 --       worker goes idle.  This is a simple form of priority scheduling.
-countupWin bufsize target = 
+generate size fn = 
    do outstrm <- new
-      fork$ loop (0::Int64) outstrm
+      fork$ loop (0::Int) outstrm
       return outstrm
  where 
-  bufsize' = (fromIntegral bufsize) :: Int64
-  loop n strm | n >= fromIntegral target = 
-	  do when debugflag
-	       (print_$ " [countupWin] Done.  Produced "++ show n ++
-		" elements in windows, met target: "++ show target ++"\n")
+  loop n strm | n == size = 
+	  do when debugflag (print_$ " [generate] Done.  Produced "++ show size++" elements.\n")
 	     put strm Null
              return ()
   loop n strm = 
-    do let arr = array (0,bufsize-1)
-                       [(i, fromIntegral (n + fromIntegral i)) | i <- [0..bufsize-1]]
+    do 
        newtl <- new
-       put strm (Cons arr newtl)
-       P.yield  -- This is necessary to execute properly when there
+       put strm (Cons (fn n) newtl)
+       P.yield  -- This is necessary to avoid starving others when there
 		-- aren't enough worker threads to go around.
-       loop (n+bufsize') newtl
+       loop (n+1) newtl
+
+
+-- | Create a [windowed] stream of consecutive integers.  Generates at
+--   least the target number of elements windowed into segments of a
+--   specified size.
+countupWin :: (Storable a, NFData a, Num a) => 
+              Int -> Int -> Par (WStream a)
+countupWin bufsize target = 
+   generate num fn
+ where 
+  num = case r of 0 -> q
+		  _ -> q+1
+  (q,r) = quotRem target bufsize
+  fn n = 
+   let start = n * bufsize in
+   array (start,start + bufsize-1)
+         [(i, fromIntegral (n + fromIntegral i)) 
+	  | i <- [start .. start + bufsize-1]]
+
 
 
 measureRate :: Stream a -> IO ()
@@ -138,11 +212,30 @@ measureRate strm =
 	  time2 <- getTime
 	  if time2 - time > one_second then do
 	    (print_$ " [measureRate] current rate: "++show (n+1-lastN) ++ 
-	             "  Total elem/time "++ commaint (n+1)++ " / " ++commaint (time2-start))
+	             "  Total elems&time "++ commaint (n+1)++ "  " ++commaint (time2-start))
 --               print_ (show (n+1))
 	    loop start time2 (n+1) (n+1) t
 	   else do
 	    loop start time  lastN (n+1) t
+
+
+-- | Use the keyboard to interactively browse through stream elements.
+browseStream :: Show a => Stream a -> IO ()
+browseStream strm = 
+  do putStrLn$ "[browseStream] Beginning interactive stream browser, press enter for more elements:"
+     ls <- toListSpin strm
+     loop 0 ls
+ where 
+  loop n ls = 
+   do putStr$ show n ++ "# "
+      hFlush stdout
+      c <- getChar      
+      if c == '\EOT' -- User presses ctrl D to exit.
+       then putStrLn$ "[browseStream] Ctrl-D pressed, exiting."
+       else case ls of 
+             []    -> putStrLn$ "[browseStream] Reached end of stream after "++show n++" elements."
+             (h:t) -> do print h
+		         loop (n+1) t
 
 
 --------------------------------------------------------------------------------
