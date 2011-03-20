@@ -53,9 +53,10 @@
 --
 
 module Control.Monad.Par (
-    Par, IVar,
+    Par, IVar, pollIVar,
     runPar, runParAsync,
     fork,
+    yield,
     new, newFull, newFull_,
     get,
     put, put_,
@@ -76,8 +77,8 @@ import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
-import Control.Concurrent
-import GHC.Conc hiding ()
+import Control.Concurrent hiding (yield)
+import GHC.Conc hiding (yield)
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
@@ -93,6 +94,7 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | forall a . New (IVarContents a) (IVar a -> Trace)
            | Fork Trace Trace
            | Done
+           | Yield Trace
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
@@ -131,6 +133,14 @@ sched _doSync queue t = loop t
 -- But even if we don't we shouldn't be orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
+
+    Yield parent -> do 
+        -- Go to the end of the worklist:
+        let Sched { workpool } = queue
+        -- TODO: Perhaps consider Data.Seq here.
+	-- This would also be a chance to steal and work from opposite ends of the queue.
+        atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
+	reschedule queue
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -225,15 +235,13 @@ instance NFData (IVar a) where
   rnf _ = ()
 
 
-
 -- From outside the Par computation we can peek.  But this is nondeterministic.
-unsafePollIVar :: IVar a -> IO (Maybe a)
-unsafePollIVar (IVar ref) = 
+pollIVar :: IVar a -> IO (Maybe a)
+pollIVar (IVar ref) = 
   do contents <- readIORef ref
      case contents of 
        Full x -> return (Just x)
        _      -> return (Nothing)
-
 
 
 data IVarContents a = Full a | Empty | Blocked [a -> Trace]
@@ -303,6 +311,10 @@ fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 both :: Par a -> Par a -> Par a
 both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
+
+-- | Allows other parallel computations to progress.
+yield :: Par ()
+yield = Par $ \c -> Yield (c ())
 
 -- -----------------------------------------------------------------------------
 
