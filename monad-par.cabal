@@ -19,6 +19,7 @@ Library
                  , Control.Monad.Par.AList
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
-                 HUnit >= 1.2
+                 HUnit >= 1.2,
+                 containers
   ghc-options: -O2
   Other-modules:

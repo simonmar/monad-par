@@ -87,6 +87,58 @@ import Control.Applicative
 import Test.HUnit 
 import Control.Exception
 
+import qualified Data.Sequence as Seq
+
+-- TOGGLE #1: Select Deque implementation:
+-- #define SEQDEQUES
+
+-- TOGGLE #2: Select scheduling policy.  Turn both on for cilk-style.
+-- #define PARENTSTEAL
+-- #define RANDOMSTEAL
+
+-- ---------------------------------------------------------------------------
+-- Deque operations:
+--   Could make a class of these if desired.  But during testing we
+-- #ifdef to insure no dictionaries.
+
+{-# INLINE addfront #-}
+{-# INLINE addback  #-}
+{-# INLINE takefront #-}
+{-# INLINE takeback #-}
+
+emptydeque :: Deque a 
+addfront  :: a -> Deque a -> Deque a
+addback   :: a -> Deque a -> Deque a
+
+-- takefront :: Deque a -> Maybe (Deque a, a)
+takefront :: Deque a -> (Deque a, Maybe a)
+takeback  :: Deque a -> (Deque a, Maybe a)
+
+#ifdef SEQDEQUES
+#else
+newtype Deque a = DQ [a]
+
+emptydeque = DQ []
+
+addfront x (DQ l) = DQ (x:l)
+
+addback x (DQ [])    = DQ [x]
+addback x (DQ (h:t)) = DQ (h : rest)
+ where DQ rest = addback x (DQ t)
+
+takefront (DQ [])     = (emptydeque, Nothing)
+takefront (DQ (x:xs)) = (DQ xs, Just x)
+
+takeback (DQ []) = (emptydeque, Nothing)
+takeback (DQ ls) = (DQ rest, Just final)
+ where 
+  (final,rest) = loop ls
+  loop [x] = (x,[])
+  loop (h:tl) = let (last,rest) = loop tl in
+	        (last, h:rest)
+#endif
+
+
 -- ---------------------------------------------------------------------------
 
 data Trace = forall a . Get (IVar a) (a -> Trace)
@@ -139,17 +191,14 @@ sched _doSync queue t = loop t
         let Sched { workpool } = queue
         -- TODO: Perhaps consider Data.Seq here.
 	-- This would also be a chance to steal and work from opposite ends of the queue.
-        atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
+        atomicModifyIORef workpool $ \ts -> (addback parent ts, ())
 	reschedule queue
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
 reschedule :: Sched -> IO ()
 reschedule queue@Sched{ workpool } = do
-  e <- atomicModifyIORef workpool $ \ts ->
-         case ts of
-           []      -> ([], Nothing)
-           (t:ts') -> (ts', Just t)
+  e <- atomicModifyIORef workpool takefront 
   case e of
     Nothing -> steal queue
     Just t  -> sched True queue t
@@ -183,10 +232,7 @@ steal q@Sched{ idle, scheds, no=my_no } = do
     go (x:xs)
       | no x == my_no = go xs
       | otherwise     = do
-         r <- atomicModifyIORef (workpool x) $ \ ts ->
-                 case ts of
-                    []     -> ([], Nothing)
-                    (x:xs) -> (xs, Just x)
+         r <- atomicModifyIORef (workpool x) takefront
          case r of
            Just t  -> do
               -- printf "cpu %d got work from cpu %d\n" my_no (no x)
@@ -196,7 +242,7 @@ steal q@Sched{ idle, scheds, no=my_no } = do
 -- | If any worker is idle, wake one up and give it work to do.
 pushWork :: Sched -> Trace -> IO ()
 pushWork Sched { workpool, idle } t = do
-  atomicModifyIORef workpool $ \ts -> (t:ts, ())
+  atomicModifyIORef workpool $ \ts -> (addfront t ts, ())
   idles <- readIORef idle
   when (not (null idles)) $ do
     r <- atomicModifyIORef idle (\is -> case is of
@@ -206,7 +252,7 @@ pushWork Sched { workpool, idle } t = do
 
 data Sched = Sched
     { no       :: {-# UNPACK #-} !Int,
-      workpool :: IORef [Trace],
+      workpool :: IORef (Deque Trace),
       idle     :: IORef [MVar Bool],
       scheds   :: [Sched] -- Global list of all per-thread workers.
     }
@@ -250,7 +296,7 @@ data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 {-# INLINE runPar_internal #-}
 runPar_internal :: Bool -> Par a -> a
 runPar_internal _doSync x = unsafePerformIO $ do
-   workpools <- replicateM numCapabilities $ newIORef []
+   workpools <- replicateM numCapabilities $ newIORef emptydeque
    idle <- newIORef []
    let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
                 | (x,wp) <- zip [0..] workpools ]
