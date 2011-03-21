@@ -93,8 +93,6 @@ monadpar_version (_,numfilters, bufsize, statecoef, numwins) = do
 --  browseStream results
 
 
-  
-
 --------------------------------------------------------------------------------
 
 sparks_version (_,numfilters, bufsize, statecoef, numwins) = do 
@@ -153,7 +151,6 @@ applyNKernels kern n init ls =
      x : loop st' t
    
 -- Compose two stateful kernels in parallel.
-#if 1
 composeStatefulKernels :: (NFData b, NFData s1) => 
 			  StatefulKernel s1 a b -> StatefulKernel s2 b c 
 		       -> StatefulKernel (s1,s2) a c
@@ -164,21 +161,12 @@ composeStatefulKernels f1 f2 (s1,s2) x =
   pr1 = f1 s1 x
   pr2 = f2 s2 (snd pr1)
   newstate = (fst pr1, fst pr2)
-#endif
-
--- This version forces both to have the same state type...  could do
--- something more sophisticated here.
--- composeStatefulKernels :: (NFData b, NFData s1) => 
--- 			  StatefulKernel [s] a b -> StatefulKernel [s] b c 
--- 		       -> StatefulKernel [s] a c
-
 
 
 parRepeatFun n f = 
 --  P.foldr (.) id (P.replicate n f)
   P.foldr (.|| rdeepseq) id (P.replicate n f)
 
--- foo a b c = a .|| b  c
 
 --------------------------------------------------------------------------------
 -- Main script

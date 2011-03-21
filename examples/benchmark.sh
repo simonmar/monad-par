@@ -104,12 +104,12 @@ function runit()
   fi
 
   # We compile the test case using runcnc:
-  $GHC -i../  $FLAGS "$test".hs
+  $GHC -i../  $FLAGS "$test".hs -o "$test".exe
 
   check_error $? "ERROR: compilation failed."
 
   echo "Executing $NTIMES $TRIALS $test.exe $ARGS +RTS $RTS -RTS "
-  if [ "$LONGRUN" == "" ]; then export HIDEOUTPUT=1; fi
+  if [ "$SHORTRUN" != "" ]; then export HIDEOUTPUT=1; fi
 
   # One option woud be dynamic feedback where if the first one
   # takes a long time we don't bother doing more trials.
@@ -121,12 +121,14 @@ function runit()
 
   check_error $CODE "ERROR: run_all_tests this test failed completely: $test.exe"
 
+  set -- $ARGS
+
   if [ "$CODE" == "143" ];
-  then echo "$test.exe" _ "$NUMTHREADS" "TIMEOUT TIMEOUT TIMEOUT" >> $RESULTS
+  then echo "$test.exe" $1 "$NUMTHREADS"  "TIMEOUT TIMEOUT TIMEOUT" >> $RESULTS
   elif [ "$CODE" != "0" ] ;
-  then echo "$test.exe" _ "$NUMTHREADS" "ERR ERR ERR" >> $RESULTS
+  then echo "$test.exe" $1 "$NUMTHREADS"  "ERR ERR ERR" >> $RESULTS
   else 
-       echo "$test.exe" _ "$NUMTHREADS" "$times" >> $RESULTS
+       echo "$test.exe" $1 "$NUMTHREADS"  "$times" >> $RESULTS
   fi
 }
 
@@ -144,11 +146,11 @@ function run_benchmark()
   set -- $line
   test=$1; shift
 
-  if [ "$LONGRUN" == "" ];
-  # If we're not in LONGRUN mode we run each executable with no
-  # arguments causing it to go to its default problem size.
-  then ARGS=
-  else ARGS=$*
+  if [ "$SHORTRUN" == "" ];
+  # If we're in SHORTRUN mode we run each executable with no
+  # arguments causing it to go to its default (small) problem size.
+  then ARGS=$*
+  else ARGS=
   fi
 
   echo "================================================================================"

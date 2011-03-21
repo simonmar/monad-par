@@ -1,6 +1,7 @@
 include common.mk
 
-BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs primes.hs cholesky.hs
+BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs primes.hs \
+            cholesky.hs parfib.hs coins.hs
 
 # binomial_lattice.hs
 EXES= $(BENCHMARKS:.hs=.exe)
@@ -15,6 +16,7 @@ all: $(EXES)
 	(cd matmult;  $(MAKE))
 	(cd minimax;  $(MAKE))
 	(cd stream;   $(MAKE))
+	(cd partree;  $(MAKE))
 
 %.exe : %.hs $(ALLPARSRC)
 	$(GHC) -O2 --make -i.. $< -o $@ -threaded -rtsopts
@@ -28,3 +30,4 @@ clean:
 	(cd matmult;  $(MAKE) clean)
 	(cd minimax;  $(MAKE) clean)
 	(cd stream;   $(MAKE) clean)
+	(cd partree;  $(MAKE) clean)

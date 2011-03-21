@@ -5,7 +5,7 @@
 module Control.Monad.Par.AList 
  (
   AList(..), 
-  empty, singleton, cons, head, tail, length, append,
+  empty, singleton, cons, head, tail, length, null, append,
   toList, fromList,
 --  parMapM, 
   parBuildThresh, parBuildThreshM,
@@ -18,7 +18,7 @@ where
 import Control.Applicative hiding (empty)
 import Control.DeepSeq
 import Test.HUnit
-import Prelude hiding (length,head,tail)
+import Prelude hiding (length,head,tail,null)
 import qualified Prelude as P
 import Control.Monad.Par
 import Data.Traversable
@@ -123,6 +123,11 @@ length ANil         = 0
 length (ASing _)    = 1
 length (Append l r) = length l + length r
 length (AList  l)   = P.length l 
+
+
+null :: AList a -> Bool
+null = (==0) . length 
+
 
 toList :: AList a -> [a]
 toList a = go a []
