@@ -178,12 +178,13 @@ plot_benchmark [io, pure] =
 -}
 
 -- Name, Scheduler, Threads, BestTime, Speedup
-data Best = Best (String, String, Int, Double, Double)
+data Best = Best (String, String, String, Int, Double, Double)
 
 -- Plot a single benchmark as a gnuplot script:
 plot_benchmark2 root [io, pure] = 
     do action $ filter goodSched (io ++ pure)
-       return$ Best (benchname, bestsched, bestthreads, best, basetime / best)
+       return$ Best (benchname, bestvariant, 
+		     bestsched, bestthreads, best, basetime / best)
  where 
   benchname = name $ head $ head io 
   -- What was the best single-threaded execution time across variants/schedulers:
@@ -211,6 +212,7 @@ plot_benchmark2 root [io, pure] =
   best = foldl1 min $ map_normalized_time cat
   Just best_index = elemIndex best $ map_normalized_time cat
   bestsched   = sched$ cat !! best_index
+  bestvariant = variant$ cat !! best_index
   bestthreads = threads$ cat !! best_index
 
   (filebase,_) = break (== '.') $ basename benchname 
@@ -230,9 +232,9 @@ plot_benchmark2 root [io, pure] =
   action lines = 
    do 
       let scriptfile = root ++ filebase ++ ".gp"
-      putStrLn$ "Dumping gnuplot script to: "++ scriptfile
+      putStrLn$ "  Dumping gnuplot script to: "++ scriptfile
 
-      putStrLn$ "NORM FACTORS "++ show norms
+      putStrLn$ "    NORM FACTORS "++ show norms
 
 
       runIO$ echo "set terminal postscript enhanced color\n"         -|- appendTo scriptfile
@@ -338,9 +340,10 @@ main = do
        let pads n s = take (n - length s) $ repeat ' '
        let pad  n x = " " ++ (pads n (show x))
 
-       forM_ bests $ \ (Best(name, sched, threads, best, speed)) ->
-	 hPutStrLn hnd$ "    "++ name++ (pads 25 name) ++ 
-			  show sched++   (pad 5 sched) ++ 
+       forM_ bests $ \ (Best(name, variant, sched, threads, best, speed)) ->
+	 hPutStrLn hnd$ "    "++ name++  (pad 25 name) ++
+			  show variant++ (pad 10 variant)++
+			  show sched++   (pad 5 sched) ++
 			  show threads++ (pad 5 threads)++ 
 			  show best ++   (pad 15 best) ++
 			  show speed 
