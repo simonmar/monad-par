@@ -12,7 +12,8 @@ module Control.Monad.Par.Stream
    streamMap, streamScan
  , countupWin, generate
  , runParList, toListSpin
- , measureRate, browseStream
+ , measureRate, measureRateList
+ , browseStream
  , Stream, Window, WStream
 
  -- TEMP:
@@ -196,10 +197,14 @@ countupWin bufsize target =
 
 measureRate :: Stream a -> IO ()
 measureRate strm = 
+  do lazyls <- toListSpin strm
+     measureRateList lazyls
+
+measureRateList :: [a] -> IO ()
+measureRateList lazyls = 
   do 
      t0 <- getTime
      print_$ " [measureRate] Counting stream rate starting at time: "++ show t0
-     lazyls <- toListSpin strm
      loop t0 t0 (0::Int64) (0::Int64) lazyls
      
  where 
