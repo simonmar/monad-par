@@ -103,10 +103,28 @@ function runit()
        export FLAGS=" $GHC_FLAGS "
   fi
 
-  # We compile the test case using runcnc:
-  $GHC -i../  $FLAGS "$test".hs -o "$test".exe
+  CONTAININGDIR=`dirname $test`
 
-  check_error $? "ERROR: compilation failed."
+  # We compile the test case using runcnc:
+  if [ -e "$test".hs ]; then 
+     FINALARGS="-i../  -i`dirname $test` $FLAGS $test.hs -o $test.exe"
+     echo "Compiling with a single GHC command: "
+     echo "   $GHC $FINALARGS"
+     $GHC $FINALARGS
+     check_error $? "ERROR: compilation failed."
+
+  elif [ -d "$CONTAININGDIR" ] && 
+       [ "$CONTAININGDIR" != "." ] && 
+       [ -e "$CONTAININGDIR/Makefile" ]; then
+     echo " ** Benchmark appears in a subdirectory with Makefile.  Using it."
+     echo " ** WARNING: Can't currently control compiler options for this benchmark!"
+     (cd "$CONTAININGDIR/"; make)
+
+  else
+     echo "ERROR: File does not exist: $test.hs"
+     exit 1
+  fi
+
 
   echo "Executing $NTIMES $TRIALS $test.exe $ARGS +RTS $RTS -RTS "
   if [ "$SHORTRUN" != "" ]; then export HIDEOUTPUT=1; fi
@@ -138,6 +156,7 @@ echo
 
 # Hygiene:
 make clean
+echo; echo;
 
 #====================================================================================================
 

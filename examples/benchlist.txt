@@ -17,11 +17,11 @@ coins 8 1250
 stream/disjoint_working_sets_pipeline monad  4 256 10 10000
 stream/disjoint_working_sets_pipeline sparks 4 256 10 10000
 
-# partree/partree 600 20
+partree/partree 600 20
 
 # What should the arguments be here:
 # minimax/minimax ? ? 
 
 # These don't match the naming convention at the moment.
-# matmult/matmult 768 0 64
-# sumeuler/sumeuler 38 8000 100
+matmult/matmult 768 0 64
+sumeuler/sumeuler 38 8000 100
