@@ -1,0 +1,3 @@
+# This is a default set of benchmarks reasonable for a powerful four core machine.
+
+stream/disjoint_working_sets_pipeline 4 256 10 10000

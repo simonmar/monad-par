@@ -33,15 +33,19 @@ parfib1 n =
      return (x+y)
 
 main = do args <- getArgs	  
-          let size = case args of 
-		      []  -> 10 
-		      [n] -> (read n)
+          let (version,size) = 
+                   case args of 
+		      []    -> ("monad",10)
+		      [v,n] -> (v,read n)
 
-          putStrLn "Basic, Non-monadic version:"
-	  print$ parfib0 size
-
-          -- putStrLn "Monad-par based version:"
-	  -- print$ runPar$ parfib1 size
+	  case version of 
+	    "monad"  -> do 
+			   putStrLn "Monad-par based version:"
+			   print$ runPar$ parfib1 size
+	    "sparks" -> do 
+           	           putStrLn "Sparks-based, Non-monadic version:"
+		           print$ parfib0 size
+	    _        -> error$ "unknown version: "++version
 
 
 {- On 4-core nehalem, 3.33ghz:
