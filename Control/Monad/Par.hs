@@ -98,10 +98,15 @@ import Data.Sequence hiding (length, null, replicateM, zip3, zip, splitAt, rever
 -- #define SEQDEQUES
 
 -- TOGGLE #2: Select scheduling policy.  
--- Turn both all three on for cilk-style.
+-- Turn all three of the following on for cilk-style.
 #define FORKPARENT  -- Fork parent cont rather than child.
 #define STEALBACK   -- Steal from back rather than front.
 #define RANDOMSTEAL -- Steal randomly rather than in order.
+
+-- Turning this off is a bad idea.  It shows no benefit on parfib
+-- presently, and it introduces a serious liability presently
+-- (prematurely losing workers).
+#define WAKEIDLE    -- Wake worker threads that gave up.
 
 -- ---------------------------------------------------------------------------
 -- Deque operations:
@@ -263,13 +268,19 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
   i <- getnext (-1)
   go maxtries i
  where
+#ifdef WAKEIDLE
+    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
+#else
+    maxtries = 20 * numCapabilities -- More if they don't wake up after.
+#endif
+
 #ifdef RANDOMSTEAL
     getnext _ = rand rng
 #else
     getnext i = return (i+1)
+    go tries i | i >= numCapabilities = go tries 0
 #endif
 
-    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
     go 0 _ = 
             do m <- newEmptyMVar
                r <- atomicModifyIORef idle $ \is -> (m:is, is)
@@ -311,12 +322,14 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
 pushWork :: Sched -> Trace -> IO ()
 pushWork Sched { workpool, idle } t = do
   atomicModifyIORef workpool $ \ts -> (addfront t ts, ())
+#ifdef WAKEIDLE
   idles <- readIORef idle
   when (not (null idles)) $ do
     r <- atomicModifyIORef idle (\is -> case is of
                                           [] -> ([], return ())
                                           (i:is) -> (is, putMVar i False))
     r -- wake one up
+#endif
 
 data Sched = Sched
     { no       :: {-# UNPACK #-} !Int,
