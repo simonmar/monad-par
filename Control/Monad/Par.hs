@@ -157,7 +157,7 @@ reschedule queue@Sched{ workpool } = do
 
 -- RRN: Note -- NOT doing random work stealing breaks the traditional
 -- Cilk time/space bounds if one is running strictly nested (series
--- parallel) programs (e.g. spawn with no get).
+-- parallel) programs.
 
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
