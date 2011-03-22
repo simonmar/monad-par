@@ -260,9 +260,15 @@ dbg = False
 steal :: Sched -> IO ()
 steal q@Sched{ idle, scheds, rng, no=my_no } = do
   when dbg$ printf "cpu %d stealing\n" my_no
-  i <- rand rng
-  go maxtries (scheds!!i)
+  i <- getnext (-1)
+  go maxtries i
  where
+#ifdef RANDOMSTEAL
+    getnext _ = rand rng
+#else
+    getnext i = return (i+1)
+#endif
+
     maxtries = numCapabilities -- How many times should we attempt theft before going idle?
     go 0 _ = 
             do m <- newEmptyMVar
@@ -279,14 +285,15 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
                          return ()
                        else do
                          when dbg$ printf "cpu %d woken up\n" my_no
-			 i <- rand rng
-                         go maxtries (scheds!!i)
-    go tries schd
+			 i <- getnext (-1)
+                         go maxtries i
+    go tries i
 #ifndef SELFSTEAL
-      | no schd == my_no = do i <- rand rng
-			      go (tries-1) (scheds!!i)
+      | i == my_no = do i' <- getnext i
+			go (tries-1) i'
 #endif
       | otherwise     = do
+         let schd = scheds!!i
          when dbg$ printf "cpu %d trying steal from %d\n" my_no (no schd)
 #ifdef STEALBACK
          r <- atomicModifyIORef (workpool schd) takeback
@@ -297,8 +304,8 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
            Just t  -> do
               when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
               sched True q t
-           Nothing -> do i <- rand rng 
-			 go (tries-1) (scheds!!i)
+           Nothing -> do i' <- getnext i
+			 go (tries-1) i'
 
 -- | If any worker is idle, wake one up and give it work to do.
 pushWork :: Sched -> Trace -> IO ()
