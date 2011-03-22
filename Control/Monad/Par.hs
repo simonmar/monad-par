@@ -72,29 +72,36 @@ module Control.Monad.Par (
 
   ) where
 
+import qualified Data.Array as A
 import Data.Traversable
 import Control.Monad as M hiding (mapM, sequence, join) 
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
+import System.Random
 import Control.Concurrent hiding (yield)
 import GHC.Conc hiding (yield)
 import Control.DeepSeq
 import Control.Applicative
--- import Text.Printf
+import Text.Printf
+import Debug.Trace
+import System.Exit
 
 -- For testing only:
 import Test.HUnit 
 import Control.Exception
 
-import qualified Data.Sequence as Seq
+import qualified Data.Sequence as Seq 
+import Data.Sequence hiding (length, null, replicateM, zip3, zip, splitAt, reverse)
 
 -- TOGGLE #1: Select Deque implementation:
 -- #define SEQDEQUES
 
--- TOGGLE #2: Select scheduling policy.  Turn both on for cilk-style.
--- #define PARENTSTEAL
--- #define RANDOMSTEAL
+-- TOGGLE #2: Select scheduling policy.  
+-- Turn both all three on for cilk-style.
+#define FORKPARENT  -- Fork parent cont rather than child.
+#define STEALBACK   -- Steal from back rather than front.
+#define RANDOMSTEAL -- Steal randomly rather than in order.
 
 -- ---------------------------------------------------------------------------
 -- Deque operations:
@@ -114,28 +121,47 @@ addback   :: a -> Deque a -> Deque a
 takefront :: Deque a -> (Deque a, Maybe a)
 takeback  :: Deque a -> (Deque a, Maybe a)
 
+-- [2011.03.21] Presently lists are out-performing Seqs:
 #ifdef SEQDEQUES
+newtype Deque a = DQ (Seq.Seq a)
+emptydeque = DQ Seq.empty
+
+addfront x (DQ s) = DQ (x <| s)
+addback  x (DQ s) = DQ (s |> x)
+takefront (DQ s) = 
+  case Seq.viewl s of
+    EmptyL  -> (emptydeque, Nothing)
+    x :< s' -> (DQ s', Just x)
+
+takeback (DQ s) = 
+  case Seq.viewr s of
+    EmptyR  -> (emptydeque, Nothing)
+    s' :> x -> (DQ s', Just x)
+
 #else
 newtype Deque a = DQ [a]
-
 emptydeque = DQ []
 
-addfront x (DQ l) = DQ (x:l)
-
+addfront x (DQ l)    = DQ (x:l)
 addback x (DQ [])    = DQ [x]
 addback x (DQ (h:t)) = DQ (h : rest)
  where DQ rest = addback x (DQ t)
 
 takefront (DQ [])     = (emptydeque, Nothing)
 takefront (DQ (x:xs)) = (DQ xs, Just x)
-
-takeback (DQ []) = (emptydeque, Nothing)
-takeback (DQ ls) = (DQ rest, Just final)
+takeback  (DQ [])     = (emptydeque, Nothing)
+takeback  (DQ ls)     = (DQ rest, Just final)
  where 
-  (final,rest) = loop ls
-  loop [x] = (x,[])
-  loop (h:tl) = let (last,rest) = loop tl in
-	        (last, h:rest)
+  -- This one space leaks:
+  -- (final,rest) = loop ls
+  -- loop [x] = (x,[])
+  -- loop (h:tl) = let (last,rest) = loop tl in
+  -- 	        (last, h:rest)
+
+  -- Tail recursive version, this gets rid of the space leak:
+  (final,rest) = loop ls []
+  loop [x]    acc = (x, reverse acc)
+  loop (h:tl) acc = loop tl (h:acc)
 #endif
 
 
@@ -174,17 +200,28 @@ sched _doSync queue t = loop t
       mapM_ (pushWork queue. ($a)) cs
       loop t
     Fork child parent -> do
+#ifdef FORKPARENT
+         pushWork queue parent
+         loop child
+#else
          pushWork queue child
          loop parent
+#endif
     Done ->
          if _doSync
 	 then reschedule queue
 -- We could fork an extra thread here to keep numCapabilities workers
 -- even when the main thread returns to the runPar caller...
+#ifdef FORKPARENT
+	 else error "FIXME: NO SOLUTION YET FOR ASYNC MODE WITH FORKPARENT"
+#else
 	 else do putStrLn " [par] Forking replacement thread..\n"; forkIO (reschedule queue); return ()
--- But even if we don't we are not orphaning any work in this
+-- But even if we don't fork a replacement we are not orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
+#endif
+
+
 
     Yield parent -> do 
         -- Go to the end of the worklist:
@@ -206,38 +243,62 @@ reschedule queue@Sched{ workpool } = do
 
 -- RRN: Note -- NOT doing random work stealing breaks the traditional
 -- Cilk time/space bounds if one is running strictly nested (series
--- parallel) programs (e.g. spawn with no get).
+-- parallel) programs.
+
+-- Returns a random index between 0 and numCapabilities-1
+rand :: IORef StdGen -> IO Int
+rand ioref = 
+ do g <- readIORef ioref
+    let (n,g') = next g
+	i = n `mod` numCapabilities
+    writeIORef ioref g'
+    return i
+
+dbg = False
 
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
-steal q@Sched{ idle, scheds, no=my_no } = do
-  -- printf "cpu %d stealing\n" my_no
-  go scheds
-  where
-    go [] = do m <- newEmptyMVar
+steal q@Sched{ idle, scheds, rng, no=my_no } = do
+  when dbg$ printf "cpu %d stealing\n" my_no
+  i <- rand rng
+  go maxtries (scheds!!i)
+ where
+    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
+    go 0 _ = 
+            do m <- newEmptyMVar
                r <- atomicModifyIORef idle $ \is -> (m:is, is)
                if length r == numCapabilities - 1
                   then do
-                     -- printf "cpu %d initiating shutdown\n" my_no
+                     when dbg$ printf "cpu %d initiating shutdown\n" my_no
                      mapM_ (\m -> putMVar m True) r
                   else do
                     done <- takeMVar m
                     if done
                        then do
-                         -- printf "cpu %d shutting down\n" my_no
+                         when dbg$ printf "cpu %d shutting down\n" my_no
                          return ()
                        else do
-                         -- printf "cpu %d woken up\n" my_no
-                         go scheds
-    go (x:xs)
-      | no x == my_no = go xs
+                         when dbg$ printf "cpu %d woken up\n" my_no
+			 i <- rand rng
+                         go maxtries (scheds!!i)
+    go tries schd
+#ifndef SELFSTEAL
+      | no schd == my_no = do i <- rand rng
+			      go (tries-1) (scheds!!i)
+#endif
       | otherwise     = do
-         r <- atomicModifyIORef (workpool x) takefront
+         when dbg$ printf "cpu %d trying steal from %d\n" my_no (no schd)
+#ifdef STEALBACK
+         r <- atomicModifyIORef (workpool schd) takeback
+#else
+         r <- atomicModifyIORef (workpool schd) takefront
+#endif
          case r of
            Just t  -> do
-              -- printf "cpu %d got work from cpu %d\n" my_no (no x)
+              when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
               sched True q t
-           Nothing -> go xs
+           Nothing -> do i <- rand rng 
+			 go (tries-1) (scheds!!i)
 
 -- | If any worker is idle, wake one up and give it work to do.
 pushWork :: Sched -> Trace -> IO ()
@@ -254,7 +315,9 @@ data Sched = Sched
     { no       :: {-# UNPACK #-} !Int,
       workpool :: IORef (Deque Trace),
       idle     :: IORef [MVar Bool],
-      scheds   :: [Sched] -- Global list of all per-thread workers.
+      rng      :: IORef StdGen, -- Random number gen for this worker thread
+      -- Global list of all per-thread workers:
+      scheds :: [Sched]
     }
 --  deriving Show
 
@@ -297,9 +360,11 @@ data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 runPar_internal :: Bool -> Par a -> a
 runPar_internal _doSync x = unsafePerformIO $ do
    workpools <- replicateM numCapabilities $ newIORef emptydeque
-   idle <- newIORef []
-   let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
-                | (x,wp) <- zip [0..] workpools ]
+   idle    <- newIORef []
+   newrngs <- replicateM numCapabilities (newStdGen >>= newIORef)
+   let 
+       states = [ Sched { no=x, workpool=wp, idle, rng=r, scheds=states }
+                | (x,wp,r) <- zip3 [0..] workpools newrngs ]
 
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --

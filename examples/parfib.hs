@@ -41,10 +41,10 @@ main = do args <- getArgs
 	  case version of 
 	    "monad"  -> do 
 			   putStrLn "Monad-par based version:"
-			   print$ runPar$ parfib1 size
+			   putStr$ "fib("++show size++") = "++show (runPar$ parfib1 size)
 	    "sparks" -> do 
            	           putStrLn "Sparks-based, Non-monadic version:"
-		           print$ parfib0 size
+			   putStr$ "fib("++show size++") = "++ show(parfib0 size)
 	    _        -> error$ "unknown version: "++version
 
 
