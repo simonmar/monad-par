@@ -9,7 +9,7 @@
 
 module Control.Monad.Par.Stream 
  ( 
-   streamMap, streamScan
+   streamMap, streamScan, streamFold
  , countupWin, generate
  , runParList, toListSpin
  , measureRate, measureRateList
@@ -140,12 +140,21 @@ streamScan fn initstate instrm =
 -- streamScan . concat rewrites to streamKernel perhaps...
 
 
+
+-- | Reduce a stream to a single value.  This function will not return
+--   until it reaches the end-of-stream.
+streamFold :: (a -> b -> a) -> a -> Stream b -> Par a
+streamFold fn acc instrm = 
+   do ilst <- get instrm
+      case ilst of 
+	Null     -> return acc 
+	Cons h t -> streamFold fn (fn acc h) t 
+
 -- | Generate a stream of the given length by applying the function to each index (starting at zero).
 -- 
 -- WARNING, this source calls yield, letting other par computations
 -- run, but there is no backpressure.  Thus if the source runs at a
 -- higher rate than its consumer, buffered stream elements accumulate.
-
 generate :: NFData a => Int -> (Int -> a) -> Par (Stream a)
 -- NOTE: I don't currently know of a good way to do backpressure
 -- directly in this system... but here are some other options: 
