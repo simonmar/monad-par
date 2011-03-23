@@ -69,7 +69,7 @@ monadpar_version (_,numfilters, bufsize, statecoef, numwins) = do
   putStrLn$ "Running monad-par version."
 
   let statesize = bufsize * statecoef
-  results <- evaluate $ runParAsync$ do 
+  results <- evaluate $ runPar$ do 
        strm1 :: Stream (UV.Vector Double) <- S.generate numwins (\n -> UV.replicate bufsize 0)
        -- Make a pipeline of numfilters stages:
        let initstate = UV.generate statesize fromIntegral
