@@ -36,7 +36,9 @@ import System.CPUTime
 import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
+
 import Debug.Trace
+import Control.Monad.Par.Logging
 
 import qualified Data.Vector.Unboxed as UV
 import           Data.Vector.Unboxed hiding ((++))
@@ -69,28 +71,29 @@ monadpar_version (_,numfilters, bufsize, statecoef, numwins) = do
   putStrLn$ "Running monad-par version."
 
   let statesize = bufsize * statecoef
-  results <- evaluate $ runParAsync$ do 
+  results <- evaluate $ runPar$ do 
        strm1 :: Stream (UV.Vector Double) <- S.generate numwins (\n -> UV.replicate bufsize 0)
        -- Make a pipeline of numfilters stages:
        let initstate = UV.generate statesize fromIntegral
        pipe_end <- C.foldM (\s _ -> streamScan statefulKern initstate s) strm1 [1..numfilters]
 
        sums  <- streamMap UV.sum pipe_end
-
+#if 0
        return sums
---       summed <- streamMap UV.sum strm_last
---       return summed
 
   -- This is tricky, but two different consumers shouldn't prevent
   -- garbage collection.
   ls <- toListSpin results
-
 --  Just (Cons h _) <- pollIVar results
   putStrLn$ "Sum of first window: " ++ show (P.head ls)
   forkIO$ measureRateList ls
   putStrLn$ "Final sum = "++ show (P.sum ls)
+#else
 
---  browseStream results
+       streamFold (+) 0 sums
+
+  putStrLn$ "Final sum = "++ show results
+#endif
 
 
 --------------------------------------------------------------------------------
@@ -198,6 +201,9 @@ main = do
     "sparks" -> sparks_version  arg_tup
     _        -> error$ "unknown version: "++version
 
+  putStrLn$ "Finally, dumping all logs:"
+  printAllLogs
+
 
 
 -- It is not necessary to evaluate every element in the case of an unboxed vector.
@@ -221,3 +227,50 @@ print_ msg = trace msg $ return ()
 -- }
 
 
+{- 
+
+Here's what cachegrind says (on 4 core nehalem):
+
+  $ valgrind --tool=cachegrind ./stream/disjoint_working_sets_pipeline monad 4 768 10 1000 +RTS -N4
+   .....
+      [measureRate] current rate: 58  Total elems&time 916  181,988,055,721
+      [measureRate] Hit end of stream after 1000 elements.
+     Final sum = 1.560518243231086e22
+     ==21202== 
+     ==21202== I   refs:      7,111,462,273
+     ==21202== I1  misses:          374,190
+     ==21202== L2i misses:          298,364
+     ==21202== I1  miss rate:          0.00%
+     ==21202== L2i miss rate:          0.00%
+     ==21202== 
+     ==21202== D   refs:      3,882,935,974  (3,542,949,529 rd   + 339,986,445 wr)
+     ==21202== D1  misses:       14,606,684  (    9,824,455 rd   +   4,782,229 wr)
+     ==21202== L2d misses:        6,774,479  (    2,088,565 rd   +   4,685,914 wr)
+     ==21202== D1  miss rate:           0.3% (          0.2%     +         1.4%  )
+     ==21202== L2d miss rate:           0.1% (          0.0%     +         1.3%  )
+     ==21202== 
+     ==21202== L2 refs:          14,980,874  (   10,198,645 rd   +   4,782,229 wr)
+     ==21202== L2 misses:         7,072,843  (    2,386,929 rd   +   4,685,914 wr)
+     ==21202== L2 miss rate:            0.0% (          0.0%     +         1.3%  )
+
+
+Sparks version:
+     Final Sum = 1.560518243231086e22
+     ==21226== 
+     ==21226== I   refs:      5,898,314,238
+     ==21226== I1  misses:          291,271
+     ==21226== L2i misses:          246,518
+     ==21226== I1  miss rate:          0.00%
+     ==21226== L2i miss rate:          0.00%
+     ==21226== 
+     ==21226== D   refs:      3,264,359,909  (3,206,394,437 rd   + 57,965,472 wr)
+     ==21226== D1  misses:       16,003,068  (   10,905,138 rd   +  5,097,930 wr)
+     ==21226== L2d misses:        9,177,043  (    4,207,106 rd   +  4,969,937 wr)
+     ==21226== D1  miss rate:           0.4% (          0.3%     +        8.7%  )
+     ==21226== L2d miss rate:           0.2% (          0.1%     +        8.5%  )
+     ==21226== 
+     ==21226== L2 refs:          16,294,339  (   11,196,409 rd   +  5,097,930 wr)
+     ==21226== L2 misses:         9,423,561  (    4,453,624 rd   +  4,969,937 wr)
+     ==21226== L2 miss rate:            0.1% (          0.0%     +        8.5%  )
+
+ -}

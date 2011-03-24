@@ -7,9 +7,11 @@
 -- (In the future may want to look into the stream interface used by
 --  the stream fusion framework.)
 
+#define DEBUGSTREAMS
+
 module Control.Monad.Par.Stream 
  ( 
-   streamMap, streamScan
+   streamMap, streamScan, streamFold
  , countupWin, generate
  , runParList, toListSpin
  , measureRate, measureRateList
@@ -40,8 +42,10 @@ import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
 import System.IO
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
-import Debug.Trace
 
+
+import Debug.Trace
+import Control.Monad.Par.Logging
 
 debugflag = True
 
@@ -108,13 +112,19 @@ streamMap fn instrm =
 
 
 -- | Applies a stateful kernel to the stream.  Output stream elements match input one-to-one.
-streamScan :: (NFData b, NFData c) => 
+-- streamScan :: (NFData b, NFData c) => 
+streamScan :: (NFData a, NFData b, NFData c) =>  -- <- TEMP, don't need NFData a in general.
 	      (a -> b -> (a,c)) -> a -> Stream b -> Par (Stream c)
 streamScan fn initstate instrm = 
     do outstrm <- new
        fork$ loop initstate instrm outstrm
        return outstrm
  where
+#ifdef DEBUGSTREAMS
+  -- Create a task log for each unique input stream fed to this function:
+  tasklog = unsafeNewTaskSeries (nameFromValue instrm)
+#endif
+
   loop state instrm outstrm = 
    do 
       ilst <- get instrm
@@ -122,7 +132,12 @@ streamScan fn initstate instrm =
 	Null -> put outstrm Null -- End of stream.
 	Cons h t -> 
 	  do newtl <- new
-	     let (newstate, outp) = fn state h
+	     let (newstate, outp) = 
+#ifdef DEBUGSTREAMS
+		                    timePure tasklog$ fn state h
+#else
+		                    fn state h
+#endif
 	     put outstrm (Cons outp newtl)
 	     loop newstate t newtl
 
@@ -140,12 +155,21 @@ streamScan fn initstate instrm =
 -- streamScan . concat rewrites to streamKernel perhaps...
 
 
+
+-- | Reduce a stream to a single value.  This function will not return
+--   until it reaches the end-of-stream.
+streamFold :: (a -> b -> a) -> a -> Stream b -> Par a
+streamFold fn acc instrm = 
+   do ilst <- get instrm
+      case ilst of 
+	Null     -> return acc 
+	Cons h t -> streamFold fn (fn acc h) t 
+
 -- | Generate a stream of the given length by applying the function to each index (starting at zero).
 -- 
 -- WARNING, this source calls yield, letting other par computations
 -- run, but there is no backpressure.  Thus if the source runs at a
 -- higher rate than its consumer, buffered stream elements accumulate.
-
 generate :: NFData a => Int -> (Int -> a) -> Par (Stream a)
 -- NOTE: I don't currently know of a good way to do backpressure
 -- directly in this system... but here are some other options: 
