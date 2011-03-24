@@ -70,8 +70,10 @@ import System.IO
 import System.IO.Unsafe
 import Data.Map
 import Data.IORef
+import qualified Data.ByteString.Char8 as B
 
 import Control.DeepSeq
+import Control.Exception
 import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
@@ -84,7 +86,9 @@ timeit io =
        return (diffUTCTime end strt)
 
 -- The type of the input/output array.
-type Matrix = Array.Array (Int, Int) Float
+type Matrix = Array.UArray (Int, Int) Float
+
+instance NFData Matrix
 
 -- A matrix is divided into "Tile"s, and carries intermediate results
 -- of the computation.
@@ -97,11 +101,13 @@ type Tile = IOUArray  (Int, Int) Float
 type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 
 instance NFData Tile where
-    rnf x = unsafePerformIO $
-                do bounds <- getBounds x
-                   elems  <- getElems x
-                   _ <- return $ rnf (bounds, elems)
-                   return ()
+-- SDM: use the default.  All we require is that the IOUArray is evaluated,
+-- since all its contents are unboxed.
+--    rnf x = unsafePerformIO $
+--                do bounds <- getBounds x
+--                   elems  <- getElems x
+--                   _ <- return $ rnf (bounds, elems)
+--                   return ()
 
 parMap_ :: (a -> Par ()) -> [a] -> Par ()
 parMap_ f xs = mapM (spawn . f) xs >> return ()
@@ -262,16 +268,16 @@ run n b arrA =
 
 main = 
     do ls <- getArgs 
-       let [n, b, fname] = 
+       let (n, b, fname) =
             case ls of 
-              []           -> ["6",     "2", "cholesky_matrix6.dat"]
+              []           -> (6,     2, "cholesky_matrix6.dat")
 
               -- To get more data try this:
 	      -- wget http://people.csail.mit.edu/newton/haskell-cnc/datasets/cholesky_matrix_data.tbz
 
-              ["medium"]   -> ["500",  "50", "cholesky_matrix500.dat"]
-              ["big"]      -> ["1000", "50", "cholesky_matrix1000.dat"]
-	      [_,_,_] -> ls
+              ["medium"]   -> (500,  50, "cholesky_matrix500.dat")
+              ["big"]      -> (1000, 50, "cholesky_matrix1000.dat")
+              [a,b,c]      -> (read a, read b, c)
 
        bool <- fileExist fname
        let fname' = if bool then fname else "examples/"++fname
@@ -281,38 +287,21 @@ main =
 
        t1 <- getCurrentTime
        putStrLn "Begin reading from disk..."
-       arrA <- initMatrix (read n) fname'             
-#if 0
-       let ((sx,sy),(ex,ey)) = Array.bounds arrA
-       for_ sx (ex+1) $ \i ->
-         for_ sy (ey+1) $ \j ->
-	     meaningless_write$ arrA Array.! (i,j)
+       arrA <- initMatrix n fname'
+       evaluate arrA
        t2 <- getCurrentTime
-#endif
-       t2 <- case deepseq arrA () of _ -> getCurrentTime 
---       t2 <- arrA `deepseq` getCurrentTime
-       -- deepseq arrA $ 
        putStrLn $" ... ArrA read from disk: time " ++ show (diffUTCTime t2 t1)
        hFlush stdout
 
-       --putStrLn $ show $ arrA
-       --putStrLn "Making sure evaluation of arrA is forced..."
-       --case deepseq arrA arrA of _ -> putStrLn "Finished."
-
-       arrB <- return $ run (read n) (read b) arrA
-       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
+       arrB <- return $ run n b arrA
+       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..n-1], j<-[0..i]]
 
        putStrLn "Making sure evaluation of arrB is forced..."
-       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..(read n)-1], j<-[0..i]]
-#if 1
-       for_ 0 (read n) $ \i ->
-         for_ 0 (i+1) $ \j ->
-	    -- This first approach didn't work:
-	    --case arrB Array.! (i,j) of _ -> return ()
-	     do meaningless_write$ arrB Array.! (i,j)
+       evaluate arrB
+       --putStrLn $ show $ [((i,j),arrB Array.! (i,j)) | i <-[0..n-1], j<-[0..i]]
        t3 <- getCurrentTime
-#endif
--- FIXME: Using deepseq here seems to delay the evaluation to the reference of 
+
+-- FIXME: Using deepseq here seems to delay the evaluation to the reference of
 --       t3 <- case deepseq arrB () of _ -> getCurrentTime
 --       t3 <- arrB `deepseq` getCurrentTime
        putStrLn$ "Finished: eval time "++ show (diffUTCTime t3 t2)
@@ -320,13 +309,13 @@ main =
        putStrLn$ "SELFTIMED " ++ show ((fromRational $ toRational $ diffUTCTime t3 t2) :: Double)
        t4 <- getCurrentTime
        val <- readIORef ref
-       putStrLn$ "Last value: " ++ show (arrB Array.! (read n-1, read n-1))
+       putStrLn$ "Last value: " ++ show (arrB Array.! (n-1, n-1))
        t5 <- getCurrentTime
        putStrLn$ "SELFTIMED' " ++ show ((fromRational $ toRational $ diffUTCTime t5 t4) :: Double) 
 
 initMatrix :: Int -> [Char] -> IO Matrix
 initMatrix n fname = 
-    do fs <- readFile fname
-       return $ Array.listArray ((0,0), (n-1, n-1)) 
-		                (List.cycle $ List.map read (words fs))
+    do fs <- B.readFile fname
+       return $! Array.listArray ((0,0), (n-1, n-1))
+                                (List.cycle $ List.map (read . B.unpack) (B.words fs))
 	   
