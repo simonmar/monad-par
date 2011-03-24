@@ -7,4 +7,4 @@ ifeq (,$(GHC))
 endif
 
 ALLPARSRC= ../Control/Monad/Par.hs ../Control/Monad/Par/AList.hs ../Control/Monad/Par/OpenList.hs \
-           ../Control/Monad/Par/IList.hs  ../Control/Monad/Par/Stream.hs
+           ../Control/Monad/Par/IList.hs  ../Control/Monad/Par/Stream.hs ../Control/Monad/Par/Logging.hs
