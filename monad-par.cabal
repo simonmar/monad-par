@@ -26,7 +26,7 @@ Author:              Simon Marlow
 Maintainer:          Simon Marlow <marlowsd@gmail.com>
 Copyright:           (c) Simon Marlow 2011
 Stability:           Experimental
-Category:            Parallelism
+Category:            Control,Parallelism,Monads
 Build-type:          Simple
 Cabal-version:       >=1.2
 
