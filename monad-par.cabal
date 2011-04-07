@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.1
+Version:             0.1.0.1
 Synopsis:            A library for parallel programming based on a monad
 
 Description:         This library offers an alternative parallel programming
