@@ -1,7 +1,20 @@
 Name:                monad-par
 Version:             0.1
 Synopsis:            A monad for deterministic parallelism, with a work-stealing implementation
-Description:
+Description:         The 'Par' monad allows the simple description of parallel
+                     computations, and can be used to add parallelism to
+                     pure Haskell code.  The basic API is straightforward: the
+                     monad supports forking and simple communication in terms
+                     of 'IVar's.
+
+                     The library comes with an efficient work-stealing
+                     implementation, but the internals are also
+                     exposed so that you can build your own scheduler
+                     if necessary.
+
+                     Examples of use can be found in the examples/ directory
+                     of the source package.
+
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
@@ -17,6 +30,7 @@ Library
   Exposed-modules: Control.Monad.Par
                  , Control.Monad.Par.OpenList
                  , Control.Monad.Par.AList
+                 , Control.Monad.Par.Internal
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
                  HUnit >= 1.2

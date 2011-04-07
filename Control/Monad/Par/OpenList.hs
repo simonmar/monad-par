@@ -2,7 +2,10 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 -- -Wall -fno-warn-name-shadowing
 
-module Control.Monad.Par.OpenList 
+-- | Some experimental support for 'OpenList's, which are streams in
+-- the 'Par' monad that support constant-time append.
+
+module Control.Monad.Par.OpenList
 --module Main
  (
   OpenList(),
@@ -24,6 +27,7 @@ import Control.DeepSeq
 import Control.Concurrent.MVar
 import Control.Monad.Par hiding (parMapM)
 import Control.Monad.Par.IList
+import Control.Monad.Par.Internal
 
 import Prelude hiding (length,head,tail,drop,take,null)
 import qualified Prelude as P
