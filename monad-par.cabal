@@ -1,11 +1,15 @@
 Name:                monad-par
 Version:             0.1
-Synopsis:            A monad for deterministic parallelism, with a work-stealing implementation
-Description:         The 'Par' monad allows the simple description of parallel
-                     computations, and can be used to add parallelism to
-                     pure Haskell code.  The basic API is straightforward: the
-                     monad supports forking and simple communication in terms
-                     of 'IVar's.
+Synopsis:            A library for parallel programming based on a monad
+
+Description:         This library offers an alternative parallel programming
+                     API to that provided by the @parallel@ package.
+
+                     The 'Par' monad allows the simple description of
+                     parallel computations, and can be used to add
+                     parallelism to pure Haskell code.  The basic API
+                     is straightforward: the monad supports forking
+                     and simple communication in terms of 'IVar's.
 
                      The library comes with an efficient work-stealing
                      implementation, but the internals are also
@@ -26,10 +30,61 @@ Category:            Parallelism
 Build-type:          Simple
 Cabal-version:       >=1.2
 
+extra-source-files:
+     examples/benchlist.txt
+     examples/benchmark.sh
+     examples/blackscholes_data.hs
+     examples/blackscholes.hs
+     examples/cholesky.hs
+     examples/cholesky_matrix6.dat
+     examples/coins.hs
+     examples/common.mk
+     examples/get_cholesky_data.sh
+     examples/Makefile
+     examples/mandel.hs
+     examples/matmult/ListAux.hs
+     examples/matmult/Makefile
+     examples/matmult/MatMult.hs
+     examples/matmult/matmult.stdout
+     examples/minimax/Board.hs
+     examples/minimax/Game.hs
+     examples/minimax/Main.hs
+     examples/minimax/Makefile
+     examples/minimax/minimax.stdout
+     examples/minimax/Prog.hs
+     examples/minimax/Tree.hs
+     examples/minimax/Wins.hs
+     examples/nbody.hs
+     examples/ntimes
+     examples/ntimes_minmedmax
+     examples/parfib.hs
+     examples/partree/Makefile
+     examples/partree/partree.hs
+     examples/partree/Tree.hs
+     examples/plot_scaling.hs
+     examples/PortablePixmap.lhs
+     examples/primes.hs
+     examples/queens.hs
+     examples/run_tests.sh
+     examples/stream/DEVLOG.txt
+     examples/stream/disjoint_working_sets_pipeline.hs
+     examples/stream/fft_pipeline.hs
+     examples/stream/Makefile
+     examples/stream/simple1_measureSrc.hs
+     examples/sumeuler/ListAux.hs
+     examples/sumeuler/Makefile
+     examples/sumeuler/SumEuler.hs
+     examples/sumeuler/SumEulerPrimes.hs
+     examples/timeout.sh
+     tests/AListTest.hs
+     tests/Test.hs
+     Control/Monad/Par/Stream.hs
+
 Library
   Exposed-modules: Control.Monad.Par
                  , Control.Monad.Par.OpenList
                  , Control.Monad.Par.AList
+                 , Control.Monad.Par.IList
                  , Control.Monad.Par.Internal
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
