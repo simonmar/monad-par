@@ -69,7 +69,7 @@
 -- combinators.
 --
 -- The implementation is based on a work-stealing scheduler that
--- divides the work as evenly as possible betwen the available
+-- divides the work as evenly as possible between the available
 -- processors at runtime.
 --
 
