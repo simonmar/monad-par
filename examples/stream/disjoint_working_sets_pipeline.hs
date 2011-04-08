@@ -194,7 +194,7 @@ main = do
 		       exitFailure 
 
   putStrLn$ "numCapabilities: "++ show numCapabilities
-  putStrLn$ "  Frequency in measurable ticks:  "++ commaint one_second ++ "\n"
+  putStrLn$ "  Frequency in measurable ticks:  "++ commaint oneSecond ++ "\n"
 
   case version of 
     "monad"  -> monadpar_version arg_tup

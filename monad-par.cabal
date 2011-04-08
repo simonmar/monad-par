@@ -82,12 +82,21 @@ extra-source-files:
 
 Library
   Exposed-modules: Control.Monad.Par
-                 , Control.Monad.Par.OpenList
                  , Control.Monad.Par.AList
-                 , Control.Monad.Par.IList
                  , Control.Monad.Par.Internal
+
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
-                 HUnit >= 1.2
+                 HUnit >= 1.2 
+               , rdtsc >= 1.1.3.1
+               , split >= 0.1.2.3
+               , carray >= 0.1.5
+               , array >= 0.3.0.2
   ghc-options: -O2
   Other-modules:
+                 Control.Monad.Par.Stream
+-- RRN: Not exposing OpenList yet.
+               , Control.Monad.Par.OpenList
+-- IList is internal:
+--                 , Control.Monad.Par.IList
+

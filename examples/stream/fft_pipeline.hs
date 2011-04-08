@@ -5,6 +5,7 @@ module Main(main) where
 import Control.Monad.Par 
 import Control.Monad.Par.Internal (runParAsync)
 import Control.Monad.Par.Stream as S
+import Control.Monad.Par.Logging
 import Control.Exception
 import Data.Complex
 import GHC.Conc as Conc
@@ -30,7 +31,7 @@ bufsize = 1024
 
 main = do
   putStrLn$ "numCapabilities: "++ show numCapabilities
-  putStrLn$ "  Frequency in measurable ticks:  "++ commaint one_second ++ "\n"
+  putStrLn$ "  Frequency in measurable ticks:  "++ commaint oneSecond ++ "\n"
 
 
   putStrLn$ "Performing FFT of "++ commaint target ++" numbers windowed into buffers of size "++ show bufsize ++"\n"

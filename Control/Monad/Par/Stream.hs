@@ -4,7 +4,7 @@
 
 -- A module for stream processing built on top of Control.Monad.Par
 
--- (In the future may want to look into the stream interface used by
+-- (In the future we may want to look into the stream interface used by
 --  the stream fusion framework.)
 
 #define DEBUGSTREAMS
@@ -17,9 +17,6 @@ module Control.Monad.Par.Stream
  , measureRate, measureRateList
  , browseStream
  , Stream, Window, WStream
-
- -- TEMP:
- , one_second, commaint
  )
 where
 import Control.Monad
@@ -28,25 +25,19 @@ import Control.Monad.Par.Internal as PI
 import Control.Monad.Par.IList
 import Control.DeepSeq
 
---import qualified Data.Array.Unboxed as U
 import Data.Array.Unboxed as U
 import Data.Array.CArray as C
 import Data.Int
-import Data.Word
-import Data.List (intersperse)
-import Data.List.Split (chunk)
 
 import Foreign.Storable
 
-import System.CPUTime
-import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
 import System.IO
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
 
-
 import Debug.Trace
 import Control.Monad.Par.Logging
+
 
 debugflag = True
 
@@ -219,12 +210,13 @@ countupWin bufsize target =
 	  | i <- [start .. start + bufsize-1]]
 
 
-
+-- | Measure the real-time rate of a Stream.
 measureRate :: Stream a -> IO ()
 measureRate strm = 
   do lazyls <- toListSpin strm
      measureRateList lazyls
 
+-- | Measure the real-time rate of a Stream that has been converted to a list.
 measureRateList :: [a] -> IO ()
 measureRateList lazyls = 
   do 
@@ -240,10 +232,9 @@ measureRateList lazyls =
   loop start time lastN n (h:t) = 
        do 
 	  time2 <- getTime
-	  if time2 - time > one_second then do
+	  if time2 - time > oneSecond then do
 	    (print_$ " [measureRate] current rate: "++show (n+1-lastN) ++ 
 	             "  Total elems&time "++ commaint (n+1)++ "  " ++commaint (time2-start))
---               print_ (show (n+1))
 	    loop start time2 (n+1) (n+1) t
 	   else do
 	    loop start time  lastN (n+1) t
@@ -321,45 +312,6 @@ _unsafe_dupable :: IO a -> Par a
 _unsafe_dupable io = 
   let x = unsafeDupablePerformIO io in 
   x `seq` return x
-
--- This version simply busy-waits to stay on the same core:
-measure_freq2 :: IO Word64
-measure_freq2 = do 
---  let second = 1000 * 1000 * 1000 * 1000 -- picoseconds are annoying
-  let tenth = 100 * 1000 * 1000 * 1000 -- picoseconds are annoying      
-      coef = 10
-  t1 <- rdtsc 
-  start <- getCPUTime
-  let loop !n !last = 
-       do t2 <- rdtsc 
-	  when (t2 < last) $
-	       putStrLn$ "WARNING, measure_freq2: COUNTERS WRAPPED "++ show (last,t2) 
-	  cput <- getCPUTime		
---	  if (cput - start < second) 
-	  if (cput - start < tenth)
-	   then loop (n+1) t2
-	   else return (n,t2)
-  (n,t2) <- loop 0 t1
-  putStrLn$ "  Approx getCPUTime calls per second: "++ commaint (coef * n)
-  when (t2 < t1) $ 
-    putStrLn$ "WARNING: rdtsc not monotonically increasing, first "++show t1++" then "++show t2++" on the same OS thread"
-
-  return$ coef * fromIntegral (t2 - t1)
-
-commaint :: Integral a => a -> String
-commaint n = 
-   reverse $
-   concat $
-   intersperse "," $ 
-   chunk 3 $ 
-   reverse (show n)
-
--- Having trouble with this:
--- getTime = getCPUTime
--- one_second = 1000000000000 -- picoseconds
-getTime = rdtsc
-one_second = unsafePerformIO$ measure_freq2
-
 
 instance NFData (U.UArray a b) where 
   rnf !arr = ()

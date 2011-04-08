@@ -28,5 +28,3 @@ nothread: $(NOTHREAD)
 runtests: 
 	../run_tests.sh $(EXES) 
 
-clean:
-	rm -f $(EXES) *.o *.hi
