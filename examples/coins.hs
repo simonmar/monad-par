@@ -222,7 +222,11 @@ main = do
          let coins  = concat (zipWith replicate quants vals)
              coins1 = zip vals quants
 
-         [n, arg] <- fmap (fmap read) getArgs
+         ls <- fmap (fmap read) getArgs
+         let [n,arg] = 
+              case ls of
+                [n, arg] -> [n, arg]
+	        []       -> [3, 500] -- Ideally it should test all...
 
          case n of
            -- sequential, list of results

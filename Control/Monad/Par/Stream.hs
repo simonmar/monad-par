@@ -24,6 +24,7 @@ module Control.Monad.Par.Stream
 where
 import Control.Monad
 import Control.Monad.Par as P
+import Control.Monad.Par.Internal as PI
 import Control.Monad.Par.IList
 import Control.DeepSeq
 
@@ -195,7 +196,7 @@ generate size fn =
     do 
        newtl <- new
        put strm (Cons (fn n) newtl)
-       P.yield  -- This is necessary to avoid starving others when there
+       PI.yield  -- This is necessary to avoid starving others when there
 		-- aren't enough worker threads to go around.
        loop (n+1) newtl
 
@@ -273,7 +274,7 @@ browseStream strm =
 -- Convert a stream to a lazy list.  Spin wait (with yield) until stream elements are available.
 toListSpin :: Stream a -> IO [a]
 toListSpin strm = 
-   do x <- pollIVar strm
+   do x <- PI.pollIVar strm
       case x of
         Nothing  -> do Conc.yield       -- run other GHC threads
                        toListSpin strm  -- spin wait

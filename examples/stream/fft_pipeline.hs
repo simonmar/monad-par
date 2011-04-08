@@ -3,6 +3,7 @@
 module Main(main) where
 
 import Control.Monad.Par 
+import Control.Monad.Par.Internal (runParAsync)
 import Control.Monad.Par.Stream as S
 import Control.Exception
 import Data.Complex

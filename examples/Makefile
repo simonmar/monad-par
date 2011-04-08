@@ -21,6 +21,7 @@ all: $(EXES)
 %.exe : %.hs $(ALLPARSRC)
 	$(GHC) -O2 --make -i.. $< -o $@ -threaded -rtsopts
 
+test: runtests
 runtests: 
 	./run_tests.sh $(ALLEXES) 
 
