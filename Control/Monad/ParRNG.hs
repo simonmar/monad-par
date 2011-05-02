@@ -3,25 +3,21 @@
              PackageImports, ScopedTypeVariables, MultiParamTypeClasses
 	     #-}
 
--- TODO: If we lift the Par family of monads into a class then ParRNG
--- would be an instance.
-
--- Instead, this is an alternative (and separate) monad.
+-- This provides an alternative to Control.Monad.Par which
+-- deterministic parallel random number generation as an additional capability.
 
 module Control.Monad.ParRNG
   ( 
      rand, 
      Par, runParRNG, fork,
      IVar, new, newFull, newFull_, get, put, put_,
-
-     pval, spawn, spawn_, 
--- -- parMap, parMapM, parMapReduceRangeThresh,
--- --    parMapReduceRange, InclusiveRange(..), parFor
+     pval, spawn, spawn_
   )
 where
 
-import qualified "mtl" Control.Monad.State.Strict as S
--- import qualified Control.Monad.Trans.State.Strict as ST
+-- import qualified "mtl" Control.Monad.State.Strict as S
+import qualified "transformers" Control.Monad.Trans.State.Strict as S
+import qualified "transformers" Control.Monad.Trans.Class as S
 
 import qualified Control.Monad.Par as P
 import qualified Control.Monad.ParClass as PC
@@ -30,7 +26,7 @@ import qualified Control.Monad.ParClass as PC
 import Control.Monad.Par (IVar)
 import Control.DeepSeq 
 
-import Data.Time.Clock
+-- import Data.Time.Clock
 import System.Random
 import System.IO.Unsafe (unsafePerformIO)
 
@@ -40,9 +36,6 @@ import System.IO.Unsafe (unsafePerformIO)
 -- The idea here is to simple route the state of the RNG through the
 -- control flow in the Par monad, splitting the RNG where fork is
 -- called.
--- data Par a = PRNG (S.StateT StdGen P.Par a)
-
--- Generic version:
 data Par a = PRNG (forall g . RandomGen g => S.StateT g P.Par a)
 
 unPRNG (PRNG x) = x

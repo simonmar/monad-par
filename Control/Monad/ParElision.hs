@@ -13,7 +13,7 @@
 
 
 module Control.Monad.ParElision (
-    Par, IVar, runParElision, fork,
+    Par, IVar, runPar, fork,
     new, newFull, newFull_,
     get, put, put_,
     pval, spawn, spawn_,
@@ -61,7 +61,7 @@ put_ :: IVar a -> a -> Par ()
 
 newFull :: NFData a => a -> Par (IVar a)
 newFull_ :: a -> Par (IVar a)
-runParElision :: Par a -> a
+runPar :: Par a -> a
 
 --------------------------------------------------------------------------------
 
@@ -81,7 +81,7 @@ get (I r) = P$
 put  (I r) x = rnf x `seq` P (writeIORef r (Just x))
 put_ (I r) x = P$ writeIORef r (Just x)
 
-runParElision (P m) = 
+runPar (P m) = 
   trace ("ParElision: Running with unsafeIO...")
   unsafePerformIO m 
 

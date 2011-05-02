@@ -82,6 +82,8 @@ extra-source-files:
 
 Library
   Exposed-modules: Control.Monad.Par
+                 , Control.Monad.ParClass
+                 , Control.Monad.ParRNG
                  , Control.Monad.Par.AList
                  , Control.Monad.Par.Internal
 
@@ -92,6 +94,9 @@ Library
                , split >= 0.1.2.3
                , carray >= 0.1.5
                , array >= 0.3.0.2
+               , random >= 1.0.0
+               , transformers >= 0.2.2.0
+--               , mtl >= 2.0.1.0
   ghc-options: -O2
   Other-modules:
                  Control.Monad.Par.Stream
