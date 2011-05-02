@@ -1,6 +1,6 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification,
-             PackageImports, ScopedTypeVariables
+             PackageImports, ScopedTypeVariables, MultiParamTypeClasses
 	     #-}
 
 -- TODO: If we lift the Par family of monads into a class then ParRNG
@@ -54,7 +54,7 @@ instance Monad Par where
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
 
-instance PC.ParClass Par where 
+instance PC.ParClass Par P.IVar where 
   fork = fork 
   new  = new
   get  = get

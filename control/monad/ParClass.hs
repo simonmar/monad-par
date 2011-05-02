@@ -1,4 +1,4 @@
-
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 
 -- A class encompassing valid Par monads.
 
@@ -11,36 +11,44 @@ where
 import Control.DeepSeq
 import qualified Control.Monad.Par as P
 
-class Monad m => ParClass m where
---  runPar :: m a -> a
+class Monad m => ParClass m ivar | m -> ivar where
   fork :: m () -> m ()
+  new  :: m (ivar a)
+  get  :: ivar a -> m a
+  put_ :: ivar a -> a -> m ()
 
-  new :: m (P.IVar a)
-
-  newFull  :: NFData a => a -> m (P.IVar a)
-  newFull_ ::             a -> m (P.IVar a)
-
-  get  :: P.IVar a -> m a
-  put  :: NFData a => P.IVar a -> a -> m ()
-  put_ ::             P.IVar a -> a -> m ()
-
+  -- TODO: I think we should add yield officially:
 --  yield  :: m ()
 
-  pval :: NFData a => a -> m (P.IVar a)
+  -- Extra API routines that have default implementations:
+
+  newFull_ ::  a -> m (ivar a)
+  -- The following is usually inefficient! 
+  newFull_ a = do v <- new
+		  put_ v a
+		  return v
+
+  newFull :: NFData a => a -> m (ivar a)
+  newFull a = deepseq a (newFull a)
+
+  put :: NFData a => ivar a -> a -> m ()
+  put v a = deepseq a (put_ v a)
+
+  pval :: NFData a => a -> m (ivar a)
   pval a = spawn (return a)
 
-  spawn :: NFData a => m a -> m (P.IVar a)
+  spawn :: NFData a => m a -> m (ivar a)
   spawn p = do r <- new
 	       fork (p >>= put r)
 	       return r
 
-  spawn_ :: m a -> m (P.IVar a)
+  spawn_ :: m a -> m (ivar a)
   spawn_ p = do r <- new
 		fork (p >>= put_ r)
 		return r
 
 
-instance ParClass P.Par where 
+instance ParClass P.Par P.IVar where 
 --  runPar = P.runPar
   fork = P.fork 
   new  = P.new
