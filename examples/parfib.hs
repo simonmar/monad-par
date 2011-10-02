@@ -1,8 +1,6 @@
-
 import Data.Int
 import System.Environment
--- import Control.Monad.Par
-import Control.Monad.ParElision
+import Control.Monad.Par
 import GHC.Conc
 
 type FibType = Int64
@@ -11,42 +9,60 @@ type FibType = Int64
 fib :: FibType -> FibType
 fib 0 = 1
 fib 1 = 1
-fib x = fib (x-2) + fib (x-1) + 1
+fib x = fib (x-2) + fib (x-1)
 
 
 -- Basic, non-monadic parallel-fib:
-parfib0 :: FibType -> FibType
-parfib0 n | n < 2 = 1 
-parfib0 n = x `par` y `pseq` (x+y)
+parfib0 :: FibType -> FibType -> FibType
+parfib0 n c | n < c = fib n
+parfib0 n c = x `par` y `pseq` (x+y)
   where 
-     x = parfib0 (n-1)
-     y = parfib0 (n-2)  
+    x = parfib0 (n-1) c
+    y = parfib0 (n-2) c
 
 
 
-parfib1 :: FibType -> Par FibType
-parfib1 n | n < 2 = return 1 
-parfib1 n = 
-  do 
-     xf <- spawn_$ parfib1 (n-1)
-     y  <-         parfib1 (n-2)  
-     x  <- get xf
-     return (x+y)
+parfib1 :: FibType -> FibType -> Par FibType
+parfib1 n c | n < c = return $ fib n
+parfib1 n c = do 
+    xf <- spawn_$ parfib1 (n-1) c
+    y  <-         parfib1 (n-2) c
+    x  <- get xf
+    return (x+y)
 
-main = do args <- getArgs	  
-          let (version,size) = 
-                   case args of 
-		      []    -> ("monad",10)
-		      [v,n] -> (v,read n)
+parfib2 :: FibType -> FibType -> Par FibType
+parfib2 n c | n < c = return $ fib n
+parfib2 n c = do 
+    xf <- pval $ runPar $ parfib3 (n-1) c
+    yf <- pval $ runPar $ parfib3 (n-2) c
+    x  <- get xf
+    y  <- get yf
+    return (x+y)
+parfib3 :: FibType -> FibType -> Par FibType
+parfib3 n c | n < c = return $ fib n
+parfib3 n c = do 
+    xf <- spawn_$ parfib2 (n-1) c
+    y  <-         parfib2 (n-2) c
+    x  <- get xf
+    return (x+y)
 
-	  case version of 
-	    "monad"  -> do 
-			   putStrLn "Monad-par based version:"
-			   print$ runPar$ parfib1 size
-	    "sparks" -> do 
-           	           putStrLn "Sparks-based, Non-monadic version:"
-		           print$ parfib0 size
-	    _        -> error$ "unknown version: "++version
+
+
+main = do 
+    args <- getArgs
+    let (version, size, cutoff) = case args of 
+            []      -> ("monad", 34, 2)
+            [v,n,c] -> (v, read n, read c)
+
+    case version of 
+        "nested" -> do 
+                print$ runPar$ parfib2 size cutoff
+        "monad"  -> do 
+                print$ runPar$ parfib1 size cutoff
+        "sparks" -> do 
+                putStrLn "Sparks-based, Non-monadic version:"
+                print$ parfib0 size cutoff
+        _        -> error$ "unknown version: "++version
 
 
 {- [2011.03] On 4-core nehalem, 3.33ghz:
