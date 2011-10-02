@@ -76,9 +76,10 @@ fork (PRNG sm) = PRNG$
      S.put g1
      return ()
 
--- Produce a randomized value and advance the RNG on the current
--- thread of the parallel computation.  This function is the only
--- difference between this file's API and Par.hs.
+-- | `rand` is the only new method added by ParRNG over Par.
+-- 
+--    It produce a randomized value and advances the RNG on the current
+--    thread of the parallel computation.  
 rand :: Random a => Par a
 rand = PRNG$ do
   g <- S.get

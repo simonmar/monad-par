@@ -1,9 +1,9 @@
-{-# LANGUAGE BangPatterns, CPP #-}
+{-# Language BangPatterns, CPP #-} 
 {-# OPTIONS_GHC -fno-warn-name-shadowing -fwarn-unused-imports #-}
 -- -Wall 
 
 -- A module for stream processing built on top of Control.Monad.Par
-
+-- 
 -- (In the future we may want to look into the stream interface used by
 --  the stream fusion framework.)
 

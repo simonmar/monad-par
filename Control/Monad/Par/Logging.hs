@@ -1,5 +1,7 @@
 {-# LANGUAGE NamedFieldPuns, CPP, BangPatterns #-}
--- A simple interface for logging start/end times and which processor a task runs on.
+
+-- | A simple interface for logging start/end times and which processor a task runs on.
+--   TODO: This should be replaced by GHC events.
 
 module Control.Monad.Par.Logging
   ( LogEntry(..), TaskSeries(..),

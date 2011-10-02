@@ -1,9 +1,10 @@
 
--- ILists: lists whose cdr fields are IVars, filled in asynchronously
--- via Par computation.
-
--- This module mostly exists as a datatype to use in building other,
--- higher-level abstractions.  (See OpenList and Stream.)
+-- | INTERNAL module.
+-- 
+-- ILists are lists whose cdr fields are IVars, filled in
+-- asynchronously via Par computation.  This module mostly exists as a
+-- datatype to use in building other, higher-level abstractions.  (See
+-- OpenList and Stream.)
 
 module Control.Monad.Par.IList 
  (

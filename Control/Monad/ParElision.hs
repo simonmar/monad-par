@@ -2,15 +2,17 @@
    #-}
 --    TypeSynonymInstances
 
--- This is a sequential implementation of the Par monad.
-
--- It only works for the subset of programs in which a
--- top-to-bottom/left-to-right execution of the program writes all
--- IVars before reading them.
-
--- This module can be used for debugging as well as for establishing a
--- serial baseline performance.
-
+-- | This is a sequential implementation of the Par monad.
+-- 
+--   It only works for the subset of programs in which a
+--   top-to-bottom/left-to-right execution of the program writes all
+--   IVars before reading them.  It is analogous to the Cilk notion of
+--   a "serial elision" -- eliding the parallel annotations and
+--   running in serial.
+--
+--   This module can be used for debugging as well as for establishing a
+--   serial baseline performance.
+--
 
 module Control.Monad.ParElision (
     Par, IVar, runPar, fork,
