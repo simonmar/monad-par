@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS -Wall #-}
 --
 -- Euler totient function (strategic version).

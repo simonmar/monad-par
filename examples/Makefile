@@ -1,13 +1,16 @@
 include common.mk
 
-BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs primes.hs \
-            cholesky.hs parfib.hs coins.hs
+# 9 benchmarks
+BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs \
+            primes.hs cholesky.hs parfib.hs coins.hs
 
 # binomial_lattice.hs
 EXES= $(BENCHMARKS:.hs=.exe)
 
+# Another four in their own subdirectories:
 OTHEREXES= matmult/matmult.exe minimax/minimax.exe sumeuler/sumeuler.exe \
            stream/simple1_measureSrc.exe
+# Note: not using all of the stream benchmarks at the moment.
 
 ALLEXES= $(EXES) $(OTHEREXES)
 
@@ -15,7 +18,7 @@ all: $(EXES)
 	(cd sumeuler; $(MAKE))
 	(cd matmult;  $(MAKE))
 	(cd minimax;  $(MAKE))
-	(cd stream;   $(MAKE))
+	(cd stream;   $(MAKE) simple1_measureSrc.exe)
 	(cd partree;  $(MAKE))
 
 %.exe : %.hs $(ALLPARSRC)

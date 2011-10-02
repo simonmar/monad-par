@@ -5,6 +5,8 @@
 # ---------------------------------------------------------------------------
 # Usage: [set env vars] ./benchmark.sh
 
+# Uses "benchlist.txt" to determine which benchmarks to run.
+
 # Call it with environment variable SHORTRUN=1 to get a shorter run for
 # testing rather than benchmarking.
 

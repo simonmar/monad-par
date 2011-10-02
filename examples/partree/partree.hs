@@ -9,12 +9,17 @@ import System.Environment(getArgs)
 import Control.Parallel
 import Tree
 
-main = do [arg1,arg2] <- getArgs
+main = do args <- getArgs
           let 
-            n = read arg1 :: Int  -- size of tree in nodes
-            c = read arg2 :: Int  -- work per node
+            -- n: size of tree in nodes
+            -- c: work per node
+            (n,c) = case args of 
+                      [arg1,arg2] -> (read arg1 :: Int, 
+				      read arg2 :: Int)
+                      []          -> (256, 10)
+		      _           -> error "partree program takes zero or two arguments: <size in nodes> <work per node>"
             res = partree c n
-          putStrLn ("partree " ++ unwords [arg1,arg2] ++ " = " ++ show res)
+          putStrLn ("partree " ++ unwords [show n,show c] ++ " = " ++ show res)
 
 -- worker function to be mapped over the tree; heavily allocating!
 bar :: Int -> Int -> Int
