@@ -1,5 +1,9 @@
 
-import Control.Monad.Par.AList
+module Main where
+
+import Test.HUnit
+import Control.Monad.Par.AList as A
+import Prelude hiding (tail, length)
 
 --------------------------------------------------------------------------------
 -- Testing
@@ -31,7 +35,7 @@ alist_tests =
 
     ]
 
-t = runTestTT alist_tests
-
-
 -- TODO: Quickcheck.
+
+
+main = runTestTT alist_tests

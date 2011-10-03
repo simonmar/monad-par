@@ -1,3 +1,6 @@
+-- NOTE: This is a contributed program that uses unsafePerformIO and
+-- thus is not a representative Par program.
+
 {-
  - Intel Concurrent Collections for Haskell
  - Copyright (c) 2010, Intel Corporation.
