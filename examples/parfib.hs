@@ -1,8 +1,9 @@
 
 import Data.Int
 import System.Environment
--- import Control.Monad.Par
-import Control.Monad.ParElision
+import Control.Monad.Par
+-- Testing:
+-- import Control.Monad.ParElision
 import GHC.Conc
 
 type FibType = Int64
@@ -49,11 +50,12 @@ main = do args <- getArgs
 	    _        -> error$ "unknown version: "++version
 
 
-{- On 4-core nehalem, 3.33ghz:
+{- [2011.03] On 4-core nehalem, 3.33ghz:
 
   Non-monadic version, real/user time:
   fib(40) 4 threads: 1.1s 4.4s
-  fib(42) 4 threads: 2.9s 11.6s  17GB allocated
+  fib(42) 1 threads: 9.7s  
+  fib(42) 4 threads: 2.86s 11.6s  17GB allocated -- 3.39X
   
      SPARKS: 433784785 (290 converted, 280395620 pruned)
 
@@ -70,5 +72,21 @@ For comparison, Cilkarts Cilk++:
 
 Intel Cilk Plus:
   fib(42) 4 threads:  4.212s 16.770s
+
+   1 thread: 17.53 -- 4.16X
+
+
+------------------------------------------------------------
+[2011.03.29] {A bit more measurement}
+
+
+If I run a CnC/C++ parfib where results are (multiply) written into an
+item collection (so there are many insertions, but only a small
+number of resident items), then I get these numbers:
+
+  fib(34) 1 thread: 22.78
+  fib(34) 4 thread: 13.96 -- 1.63X 
+
+ESTIMATED 3573.76 seconds for fib(42).
 
 -}

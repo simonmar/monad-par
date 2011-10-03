@@ -2,11 +2,10 @@
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 -- -Wall -fno-warn-name-shadowing
 
--- | Some experimental support for 'OpenList's, which are streams in
+-- | Experimental support for 'OpenList's, which are streams in
 -- the 'Par' monad that support constant-time append.
 
 module Control.Monad.Par.OpenList
---module Main
  (
   OpenList(),
   empty, singleton, cons, head, tail, length,
@@ -16,9 +15,8 @@ module Control.Monad.Par.OpenList
   openlist_tests, 
   chaintest, 
   async_test, lazy_chaintest
--- , main
 
- , IList(..), newCell
+-- , IList(..), newCell
  )
 where 
 
@@ -276,6 +274,7 @@ toLazyList (OpenList head _) = iListToMList head >>= return . mListToList
 
 -- -----------------------------------------------------------------------------
 -- Testing
+-- -----------------------------------------------------------------------------
 
 test_ol0 = runPar (cons 'a' empty >>= cons 'b' >>= close >>= tail >>= tail >>= length)
 
@@ -451,4 +450,3 @@ openlist_tests =
 
     ]
 
-main = async_test

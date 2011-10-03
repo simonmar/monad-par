@@ -140,14 +140,21 @@ scan f q (h:t) = h' : scan f q t
 type StatefulKernel s a b = s -> a -> (s,b)
 
 -- applyNKernels _ _ _ [] = []
-applyNKernels :: NFData a => StatefulKernel s a a -> Int -> s -> [a] -> [a]
+-- applyNKernels :: NFData a => StatefulKernel s a a -> Int -> s -> [a] -> [a]
+applyNKernels :: (NFData a, NFData s) => StatefulKernel s a a -> Int -> s -> [a] -> [a]
 applyNKernels _    0 _    ls = ls
 applyNKernels kern n init ls =   
   applyNKernels kern (n-1) init (loop init ls)
  where 
+  tasklog = unsafeNewTaskSeries (nameFromValue (n,kern))
+
   loop st [] = []
   loop st (h:t) = 
-    let (st', x) = kern st h in
+    let (st', x) = 
+#if 0
+	           timePure tasklog$ 
+#endif
+		   kern st h in
 #ifndef SERIAL
     rnf x `par` 
 #endif
@@ -194,7 +201,7 @@ main = do
 		       exitFailure 
 
   putStrLn$ "numCapabilities: "++ show numCapabilities
-  putStrLn$ "  Frequency in measurable ticks:  "++ commaint one_second ++ "\n"
+  putStrLn$ "  Frequency in measurable ticks:  "++ commaint oneSecond ++ "\n"
 
   case version of 
     "monad"  -> monadpar_version arg_tup

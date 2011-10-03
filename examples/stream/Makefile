@@ -1,5 +1,6 @@
 include ../common.mk
 
+# This directory provides several different benchmarks:
 SRC= simple1_measureSrc.hs \
      disjoint_working_sets_pipeline.hs \
      fft_pipeline.hs
@@ -28,5 +29,3 @@ nothread: $(NOTHREAD)
 runtests: 
 	../run_tests.sh $(EXES) 
 
-clean:
-	rm -f $(EXES) *.o *.hi

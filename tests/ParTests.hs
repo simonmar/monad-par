@@ -1,6 +1,19 @@
+{-# LANGUAGE BangPatterns #-}
+
 module Main where
 
+import Control.Monad.Par
+import Control.Monad.Par.Internal
+import Control.Exception
+import System.IO.Unsafe
 import Test.HUnit
+
+
+-- -----------------------------------------------------------------------------
+-- both a b >> c  ==   both (a >> c) (b >> c)
+-- is this useful for anything?
+both :: Par a -> Par a -> Par a
+both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
 -- -----------------------------------------------------------------------------
 
@@ -71,4 +84,9 @@ _async_test2 = do  -- A D E  or A D B E  but no C
 
 -- TODO: add the async_tests above to the test list.
 _par_tests :: Test
-_par_tests = TestList []
+_par_tests = 
+ TestList
+  [
+  ]
+
+main = runTestTT _par_tests

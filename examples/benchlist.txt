@@ -1,4 +1,10 @@
-# This is a default set of benchmarks reasonable for a powerful four core machine.
+# A simple command/argument data file with hashed-comments.
+#
+# This is a default set of benchmarks reasonable for a powerful four core desktop.
+# For example on my machine this takes 15.5 minutes to do 3 trials 1-8 threads.
+#
+# Version: v1
+# (I'm attempting to keep track of changes to this config with the above.)
 
 parfib monad  36
 parfib sparks 36
@@ -13,6 +19,7 @@ nbody  13000
 mandel 2000 2000 3000000
 
 coins 8 1250
+queens 14
 
 stream/disjoint_working_sets_pipeline monad  4 256 10 10000
 stream/disjoint_working_sets_pipeline sparks 4 256 10 10000
