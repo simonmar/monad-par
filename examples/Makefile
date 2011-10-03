@@ -37,6 +37,10 @@ buildsubs: $(EXES)
 	$(GHC) -O2 --make -i.. $< -o $@ -threaded -rtsopts
 
 test: all $(OUTS)
+	@echo 
+	@echo ========================================
+	@echo "Finally, checking for .err files:"
+	find -name "*.err"
 
 .exe.out:
 # We touch a .err file and then remove it if there is no error.
@@ -48,13 +52,23 @@ test: all $(OUTS)
 	@echo ----------------------------------------	
 # This makes it difficult to get the error code:
 #	./$<  &> /dev/stdout | tee "$@" | head -n 20
-	./$<  &> $@
+	"./$<"  &> $@ 
 	@head -n 20 $@
 #	@tail -F $@ | head -n 20
 	@echo Done Running test.  Exited successfully.
 	@echo ----------------------------------------
 	@rm -f "$(<:.exe=.err)"
 
+
+# ================================================================================
+# Install dependencies used by test programs.
+#
+# These are not included in the .cabal file because we don't want to
+# increase the dependencies for the monad-par package as a whole.
+install-deps: deps
+deps:
+	cabal install parallel
+	cabal install fft
 
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out
