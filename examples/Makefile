@@ -71,7 +71,7 @@ deps:
 	cabal install fft
 
 clean:
-	rm -f $(ALLEXES) *.o *.hi *.out
+	rm -f $(ALLEXES) *.o *.hi *.out *.exe
 	(cd sumeuler; $(MAKE) clean)
 	(cd matmult;  $(MAKE) clean)
 	(cd minimax;  $(MAKE) clean)

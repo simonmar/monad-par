@@ -1,34 +1,41 @@
 #!/bin/bash
 
-# Runs benchmarks.  Simon Marlow has his own setup.  This is just temporary.
+# Runs benchmarks.  (Note Simon Marlow has his another setup, but this
+# one is self contained.)
 
 # ---------------------------------------------------------------------------
 # Usage: [set env vars] ./benchmark.sh
 
-# Uses "benchlist.txt" to determine which benchmarks to run.
+# Call it with environment variable...
 
-# Call it with environment variable SHORTRUN=1 to get a shorter run for
-# testing rather than benchmarking.
+#   SHORTRUN=1 to get a shorter run for testing rather than benchmarking.
 
-# Call it with THREADSETTINGS="1 2 4" to run with # threads = 1, 2, or 4.
+#   THREADSETTINGS="1 2 4" to run with # threads = 1, 2, or 4.
 
-# Call it with KEEPGOING=1 to keep going after the first error.
+#   KEEPGOING=1 to keep going after the first error.
 
-# Call it with TRIALS=N to control the number of times each benchmark is run.
+#   TRIALS=N to control the number of times each benchmark is run.
+
+#   BENCHLIST=foo.txt to select the benchmarks and their arguments
+#                     (uses benchlist.txt by default)
+
+# Additionally, this script will propagate any flags placed in the
+# environment variables $GHC_FLAGS and $GHC_RTS.  It will also use
+# $GHC, if available, to select the $GHC executable.
+
 # ---------------------------------------------------------------------------
 
 
-# Settings:
-# ----------------------------------------
+ENVSETTINGS="BENCHLIST=$BENCHLIST  THREADSETTINGS=$THREADSETTINGS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN  KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
 
-if [ "$THREADSETTINGS" == "" ] 
-then THREADSETTINGS="4"
-#then THREADSETTINGS="0 1 2 3 4"
-fi
+# ----------------------------------------
+# Default Settings:
+# ----------------------------------------
 
 if [ "$GHC" == "" ];  then GHC=ghc; fi
 
-# HACK: with all the intermachine syncing and different version control systems I run into permissions problems sometimes.
+# HACK: with all the inter-machine syncing and different version
+# control systems I run into permissions problems sometimes:
 chmod +x ./ntime* ./*.sh
 
 
@@ -49,24 +56,33 @@ fi
   if [ -d /sys/devices/system/cpu/ ]; # linux
   then 
        MAXTHREADS=`ls  /sys/devices/system/cpu/ | grep "cpu[0123456789]*$" | wc -l`
-       echo "Detected the number of CPUs on the machine to be $MAXTHREADS"
   elif [ `uname` == "Darwin" ];
   then MAXTHREADS=`sysctl -n hw.ncpu`
   else MAXTHREADS=2
+  # TODO: Windows?
   fi 
+
+if [ "$THREADSETTINGS" == "" ] 
+then THREADSETTINGS="$MAXTHREADS"
+#then THREADSETTINGS="0 1 2 3 4"
+fi
 
 GHC_FLAGS="$GHC_FLAGS -O2 -rtsopts"
 GHC_RTS="$GHC_RTS -qa"
 
 # ================================================================================
 echo "# TestName Variant NumThreads   MinTime MedianTime MaxTime" > $RESULTS
+echo "#    "        >> $RESULTS
 echo "# "`date`     >> $RESULTS
 echo "# "`uname -a` >> $RESULTS
-echo "# "`$GHC -V`  >> $RESULTS
-echo "# "
+echo "# Determined machine to have $MAXTHREADS hardware threads."  >> $RESULTS
+echo "# "`$GHC -V`                                                 >> $RESULTS
+echo "# "                                               >> $RESULTS
 echo "# Running each test for $TRIALS trials."          >> $RESULTS
 echo "#  ... with default compiler options: $GHC_FLAGS" >> $RESULTS
 echo "#  ... with default runtime options: $GHC_RTS"    >> $RESULTS
+echo "# Using the following settings from the benchmarking environment:" >> $RESULTS
+echo "# $ENVSETTINGS"                                   >> $RESULTS
 
 cnt=0
 
