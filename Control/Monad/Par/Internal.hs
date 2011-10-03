@@ -27,7 +27,7 @@ import GHC.Conc hiding (yield)
 import Control.DeepSeq
 import Control.Applicative
 import Data.Array
-import Data.List (partition)
+import Data.List (partition, find)
 --import Text.Printf
 
 
@@ -366,7 +366,8 @@ data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 instance NFData (IVar a) where
   rnf _ = ()
 
--- From outside the Par computation we can peek.  But this is nondeterministic.
+-- From outside the Par computation we can peek.  But this is
+-- nondeterministic; it should perhaps have "unsafe" in the name.
 pollIVar :: IVar a -> IO (Maybe a)
 pollIVar (IVar ref) = 
   do contents <- readIORef ref

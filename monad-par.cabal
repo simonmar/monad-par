@@ -11,7 +11,7 @@ Description:         This library offers an alternative parallel programming
                      is straightforward: the monad supports forking
                      and simple communication in terms of 'IVar's.
 
-                     The library comes with an efficient work-stealing
+                     The library comes with a work-stealing
                      implementation, but the internals are also
                      exposed so that you can build your own scheduler
                      if necessary.

@@ -12,6 +12,8 @@ main = do
     args <- getArgs
     let (version, n, depth) = case args of 
             [v, n, d] -> (v,read n, read d)
+            -- Provide a default behavior if run with no arguments (for testing):
+            []        -> ("monad", 15, 15)
             _         -> error $ "Usage: main {nested, depth} n depth"
     setStdGen (mkStdGen 99999)
     b <- randomBoard n

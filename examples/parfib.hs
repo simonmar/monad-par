@@ -12,7 +12,7 @@ fib 1 = 1
 fib x = fib (x-2) + fib (x-1)
 
 
--- Basic, non-monadic parallel-fib:
+-- Basic, non-monadic parallel-fib with threshold:
 parfib0 :: FibType -> FibType -> FibType
 parfib0 n c | n < c = fib n
 parfib0 n c = x `par` y `pseq` (x+y)
@@ -21,7 +21,7 @@ parfib0 n c = x `par` y `pseq` (x+y)
     y = parfib0 (n-2) c
 
 
-
+-- Par monad version:
 parfib1 :: FibType -> FibType -> Par FibType
 parfib1 n c | n < c = return $ fib n
 parfib1 n c = do 
@@ -30,6 +30,7 @@ parfib1 n c = do
     x  <- get xf
     return (x+y)
 
+-- Gratuitously nested Par monad version:
 parfib2 :: FibType -> FibType -> Par FibType
 parfib2 n c | n < c = return $ fib n
 parfib2 n c = do 
@@ -38,9 +39,11 @@ parfib2 n c = do
     x  <- get xf
     y  <- get yf
     return (x+y)
-parfib3 :: FibType -> FibType -> Par FibType
-parfib3 n c | n < c = return $ fib n
-parfib3 n c = do 
+ where 
+  -- Alternate between nesting and regular spawning:
+  parfib3 :: FibType -> FibType -> Par FibType
+  parfib3 n c | n < c = return $ fib n
+  parfib3 n c = do 
     xf <- spawn_$ parfib2 (n-1) c
     y  <-         parfib2 (n-2) c
     x  <- get xf
@@ -51,7 +54,7 @@ parfib3 n c = do
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 
-            []      -> ("monad", 34, 2)
+            []      -> ("monad", 20, 4)
             [v,n,c] -> (v, read n, read c)
 
     case version of 
@@ -65,7 +68,9 @@ main = do
         _        -> error$ "unknown version: "++version
 
 
-{- [2011.03] On 4-core nehalem, 3.33ghz:
+{- 
+
+[2011.03] On 4-core nehalem, 3.33ghz:
 
   Non-monadic version, real/user time:
   fib(40) 4 threads: 1.1s 4.4s
@@ -90,8 +95,6 @@ Intel Cilk Plus:
 
    1 thread: 17.53 -- 4.16X
 
-
-------------------------------------------------------------
 [2011.03.29] {A bit more measurement}
 
 
