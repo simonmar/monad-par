@@ -111,11 +111,6 @@ import GHC.Conc (numCapabilities)
 fork :: Par () -> Par ()
 fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 
--- > both a b >> c  ==   both (a >> c) (b >> c)
--- is this useful for anything?
--- both :: Par a -> Par a -> Par a
--- both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
-
 -- -----------------------------------------------------------------------------
 -- Derived functions
 

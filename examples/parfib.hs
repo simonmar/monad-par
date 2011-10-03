@@ -1,6 +1,8 @@
 import Data.Int
 import System.Environment
 import Control.Monad.Par
+-- Testing:
+-- import Control.Monad.ParElision
 import GHC.Conc
 
 type FibType = Int64

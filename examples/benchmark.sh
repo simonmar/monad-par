@@ -33,7 +33,7 @@ chmod +x ./ntime* ./*.sh
 
 
 # Where to put the timing results:
-RESULTS=results.dat
+RESULTS=results_"$HOSTNAME".dat
 if [ -e $RESULTS ];
 then BAK="$RESULTS".bak.`date +%s`
      echo "Backing up old results to $BAK"
@@ -221,6 +221,7 @@ cat $BENCHLIST | grep -v "\#" |
 while read line
 do
   if [ "$line" == "" ]; then continue; fi
+  echo 
   echo RUNNING BENCH:  $line
   run_normal_benchmark
 done
