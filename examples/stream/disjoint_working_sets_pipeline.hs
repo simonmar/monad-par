@@ -36,7 +36,9 @@ import System.CPUTime
 import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
+
 import Debug.Trace
+import Control.Monad.Par.Logging
 
 import qualified Data.Vector.Unboxed as UV
 import           Data.Vector.Unboxed hiding ((++))
@@ -76,11 +78,9 @@ monadpar_version (_,numfilters, bufsize, statecoef, numwins) = do
        pipe_end <- C.foldM (\s _ -> streamScan statefulKern initstate s) strm1 [1..numfilters]
 
        sums  <- streamMap UV.sum pipe_end
---       return sums
-
-       streamFold (+) 0 sums
-
 #if 0
+       return sums
+
   -- This is tricky, but two different consumers shouldn't prevent
   -- garbage collection.
   ls <- toListSpin results
@@ -90,12 +90,10 @@ monadpar_version (_,numfilters, bufsize, statecoef, numwins) = do
   putStrLn$ "Final sum = "++ show (P.sum ls)
 #else
 
+       streamFold (+) 0 sums
+
   putStrLn$ "Final sum = "++ show results
 #endif
-
-
-
---  browseStream results
 
 
 --------------------------------------------------------------------------------
@@ -202,6 +200,9 @@ main = do
     "monad"  -> monadpar_version arg_tup
     "sparks" -> sparks_version  arg_tup
     _        -> error$ "unknown version: "++version
+
+  putStrLn$ "Finally, dumping all logs:"
+  printAllLogs
 
 
 

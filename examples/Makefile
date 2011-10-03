@@ -25,7 +25,7 @@ runtests:
 	./run_tests.sh $(ALLEXES) 
 
 clean:
-	rm -f $(ALLEXES) *.o *.hi
+	rm -f $(ALLEXES) *.o *.hi 
 	(cd sumeuler; $(MAKE) clean)
 	(cd matmult;  $(MAKE) clean)
 	(cd minimax;  $(MAKE) clean)
