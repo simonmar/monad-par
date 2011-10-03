@@ -8,7 +8,6 @@
 -- module for purposes other than extending the @Par@ monad with new
 -- functionality.
 
-
 module Control.Monad.Par.Internal (
    Trace(..), Sched(..), Par(..),
    IVar(..), IVarContents(..),
@@ -27,6 +26,7 @@ import Control.Concurrent hiding (yield)
 import GHC.Conc hiding (yield)
 import Control.DeepSeq
 import Control.Applicative
+
 import Text.Printf
 import System.Random
 
@@ -152,6 +152,7 @@ sched _doSync queue t = loop t
          pushWork queue child
          loop parent
 #endif
+
     Done ->
          if _doSync
 	 then reschedule queue
@@ -160,13 +161,12 @@ sched _doSync queue t = loop t
 #ifdef FORKPARENT
 	 else error "FIXME: NO SOLUTION YET FOR ASYNC MODE WITH FORKPARENT"
 #else
-	 else do putStrLn " [par] Forking replacement thread..\n"; forkIO (reschedule queue); return ()
+	 else do putStrLn " [par] Forking replacement thread..\n"
+                 forkIO (reschedule queue); return ()
 -- But even if we don't fork a replacement we are not orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
 #endif
-
-
 
     Yield parent -> do 
         -- Go to the end of the worklist:
@@ -326,6 +326,7 @@ runPar_internal _doSync x = unsafePerformIO $ do
        states = [ Sched { no=x, workpool=wp, idle, rng=r, scheds=states }
                 | (x,wp,r) <- zip3 [0..] workpools newrngs ]
 
+
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
     -- We create a thread on each CPU with forkOnIO.  The CPU on which
@@ -415,6 +416,7 @@ put_ v !a = Par $ \c -> Put v a (c ())
 put :: NFData a => IVar a -> a -> Par ()
 put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
--- | Allows other parallel computations to progress.
+-- | Allows other parallel computations to progress.  (should not be
+-- necessary in most cases).
 yield :: Par ()
 yield = Par $ \c -> Yield (c ())
