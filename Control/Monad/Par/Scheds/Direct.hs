@@ -12,9 +12,9 @@ module Control.Monad.Par.Scheds.Direct (
    IVar(..), IVarContents(..),
 --    sched,
     runPar, 
-    new, get, put_, fork
-    -- newFull, newFull_, put,
-
+    new, get, put_, fork,
+    newFull, newFull_, put,
+    spawn, spawn_
 --   runParAsync, runParAsyncHelper,
 --   pollIVar, yield,
  ) where
@@ -28,7 +28,7 @@ import Control.Concurrent hiding (yield)
 -- import GHC.Conc hiding (yield)
 -- import Control.DeepSeq
 -- import Control.Applicative
--- import Text.Printf
+import Text.Printf
 
 import GHC.Conc
 import Control.Monad.Cont as C
@@ -40,6 +40,9 @@ import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Control.Monad.ParClass as PC
+import Control.DeepSeq
+
+dbg = True
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -67,14 +70,9 @@ data Sched = Sched
     { 
       no       :: {-# UNPACK #-} !Int,
       workpool :: HotVar (Deque (Par ())),
-
---      workpool :: A.Vector (IORef (Deque (Par ()))),
---      randoms  :: A.Vector (IORef Random.StdGen),
-      myid     :: Int,
       killflag :: HotVar Bool,
-
       idle     :: HotVar [MVar Bool],
-
+      rng      :: HotVar StdGen, -- Random number gen for work stealing.
       scheds   :: [Sched] -- A global list of schedulers.
      }
 
@@ -207,36 +205,29 @@ writeHotVarRaw = writeTVar
 {-# INLINE pushWork #-}
 {-# INLINE popWork  #-}
 
--- | If any worker is idle, wake one up and give it work to do.
--- pushWork :: Sched -> ContIO () -> IO ()
--- popWork  :: Sched -> IO (Maybe (ContIO ()))
-
--- pushWork :: Sched -> (Sched -> ContIO ()) -> IO ()
--- pushWork Sched { workpool } fn = undefined
+popWork :: Sched -> IO (Maybe (Par ()))
+popWork Sched{ workpool } = modifyHotVar  workpool  takefront
 
 pushWork :: Sched -> Par () -> IO ()
-popWork  :: Sched -> IO (Maybe (Par ()))
+pushWork Sched { workpool } t = do
+  modifyHotVar_ workpool (addfront t)
+#ifdef WAKEIDLE
+  -- If any worker is idle, wake one up and give it work to do.
+  idles <- readHotVar idle
+  when (not (null idles)) $ do
+    r <- modifyHotVar idle (\is -> case is of
+                             [] -> ([], return ())
+                             (i:is) -> (is, putMVar i False))
+    r -- wake one up
+#endif
 
-popWork  Sched{ workpool }    = modifyHotVar  workpool  takefront
-
--- Simple pushWork
-pushWork Sched { workpool } t = modifyHotVar_ workpool (addfront t)
-
--- Better pushWork:
--- | Add to the local work-queue.  If any worker is idle, wake one up
---   and give it work to do.
--- pushWork Sched { workpool, idle } t = do
---   modifyHotVar_ workpool (addfront t)
---   idles <- readHotVar idle
---   when (not (null idles)) $ do
---     r <- modifyHotVar idle (\is -> case is of
---                              [] -> ([], return ())
---                              (i:is) -> (is, putMVar i False))
---     r -- wake one up
-
-
--- Is there some way to get wakeup off of the spawn path and onto the steal path?
-     
+rand :: HotVar StdGen -> IO Int
+rand ioref = 
+ do g <- readHotVar ioref
+    let (n,g') = next g
+	i = n `mod` numCapabilities
+    writeHotVar ioref g'
+    return i
 
 
 --------------------------------------------------------------------------------
@@ -247,14 +238,59 @@ pushWork Sched { workpool } t = modifyHotVar_ workpool (addfront t)
 --   rnf _ = ()
 
 runPar :: Par a -> a 
-runPar x = unsafePerformIO $ do
-  state <- defaultState
-  r <- newIORef (error "this should not happen")
-  let y = R.runReaderT x state
-  C.runContT y (C.liftIO . writeIORef r)
-  readIORef r
+runPar userComp = unsafePerformIO $ do
+   states <- makeScheds
+  
+#if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
+    --
+    -- We create a thread on each CPU with forkOnIO.  The CPU on which
+    -- the current thread is running will host the main thread; the
+    -- other CPUs will host worker threads.
+    --
+    -- Note: GHC 7.1.20110301 is required for this to work, because that
+    -- is when threadCapability was added.
+    --
+   (main_cpu, _) <- threadCapability =<< myThreadId
+#else
+    --
+    -- Lacking threadCapability, we always pick CPU #0 to run the main
+    -- thread.  If the current thread is not running on CPU #0, this
+    -- will require some data to be shipped over the memory bus, and
+    -- hence will be slightly slower than the version above.
+    --
+   let main_cpu = 0
+#endif
 
-defaultState = undefined
+   m <- newEmptyMVar
+   forM_ (zip [0..] states) $ \(cpu,state) ->
+        forkOnIO cpu $
+          if (cpu /= main_cpu)
+             then rescheduleIO state unused
+             else do
+                  rref <- newIORef Empty
+		  let userComp'  =  userComp >>= put_ (IVar rref)
+		      userComp'' =  R.runReaderT userComp' state
+		  C.runContT userComp'' (\_ -> return ()) -- Trivial continuation.
+                  readIORef rref >>= putMVar m
+   r <- takeMVar m
+   case r of
+     Full a -> return a
+     _ -> error "No result from Par computation.  Something went wrong."
+
+
+-- Create the default scheduler(s) state:
+makeScheds = do
+   workpools <- replicateM numCapabilities $ newHotVar emptydeque
+   rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
+   idle <- newHotVar []   
+   killflag <- newHotVar False
+   let states = [ Sched { no=x, idle, killflag, 
+			  workpool=wp, scheds=states, rng=rng
+			}
+                | (x,wp,rng) <- zip3 [0..] workpools rngs]
+   return states
+
+
 
 --------------------------------------------------------------------------------
 -- IVar operations
@@ -293,8 +329,7 @@ get (IVar v) =  do
        case e of
 	  Full a -> return a
 	  _ -> do
---	    let resched = liftIO$ reschedule sc
-	    let resched = reschedule sc
+	    let resched = reschedule sc 
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
 	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
 		      Empty      -> (Blocked [cont], resched)
@@ -312,7 +347,6 @@ put_ (IVar v) !a = do
                Empty    -> (Full a, [])
                Full _   -> error "multiple put"
                Blocked cs -> (Full a, cs)
-      -- TODO spawn woken work on FRONT of queue..
       mapM_ (pushWork sched . lift . ($a)) cs
       return ()
 
@@ -322,62 +356,98 @@ fork task = do
    sch <- R.ask
    liftIO$ pushWork sch task
    
-
---reschedule :: Sched -> C.ContT () IO a
 reschedule :: Sched -> ContIO a 
-reschedule mysched = C.ContT rescheduleR
- where 
-    rescheduleR :: a -> IO ()
-    -- As a continuation, reschedule ignores the value passed to it.
-    rescheduleR _ = do
-      m <- popWork mysched
-      case m of
-	Nothing -> return ()
-	Just reader  -> 
-	   -- Import the work to this thread and tell it what scheduler to use:
-	   let C.ContT f = R.runReaderT reader mysched
-	   in f rescheduleR 
+reschedule mysched = C.ContT (rescheduleIO mysched)
+
+rescheduleIO :: Sched -> a -> IO ()
+-- As a continuation, reschedule ignores the value passed to it:
+rescheduleIO mysched _ = do
+  m <- popWork mysched
+  case m of
+    Nothing -> liftIO (steal mysched)
+    Just reader  -> 
+       -- Import the work to this thread and tell it what scheduler to use:
+       let C.ContT f = R.runReaderT reader mysched
+       in f (rescheduleIO mysched)
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
-steal :: Sched -> IO a
-steal = undefined
-#if 0
-steal q@Sched{ idle, scheds, no=my_no } = do
-  -- printf "cpu %d stealing\n" my_no
-  go scheds
-  where
-    go [] = do m <- newEmptyMVar
-               r <- atomicModifyIORef idle $ \is -> (m:is, is)
+steal :: Sched -> IO ()
+steal q@Sched{ idle, scheds, rng, no=my_no } = do
+  when dbg$ printf "cpu %d stealing\n" my_no
+  i <- getnext (-1 :: Int)
+  go maxtries i
+ where
+#ifdef WAKEIDLE
+    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
+#else
+    maxtries = 20 * numCapabilities -- More if they don't wake up after.
+#endif
+
+    getnext _ = rand rng
+
+    go 0 _ = 
+            do m <- newEmptyMVar
+               r <- modifyHotVar idle $ \is -> (m:is, is)
                if length r == numCapabilities - 1
                   then do
-                     -- printf "cpu %d initiating shutdown\n" my_no
+                     when dbg$ printf "cpu %d initiating shutdown\n" my_no
                      mapM_ (\m -> putMVar m True) r
                   else do
                     done <- takeMVar m
                     if done
                        then do
-                         -- printf "cpu %d shutting down\n" my_no
+                         when dbg$ printf "cpu %d shutting down\n" my_no
                          return ()
                        else do
-                         -- printf "cpu %d woken up\n" my_no
-                         go scheds
-    go (x:xs)
-      | no x == my_no = go xs
+                         when dbg$ printf "cpu %d woken up\n" my_no
+			 i <- getnext (-1::Int)
+                         go maxtries i
+    go tries i
+      | i == my_no = do i' <- getnext i
+			go (tries-1) i'
+
       | otherwise     = do
-         r <- atomicModifyIORef (workpool x) $ \ ts ->
-                 case ts of
-                    []     -> ([], Nothing)
-                    (x:xs) -> (xs, Just x)
+         let schd = scheds!!i
+         when dbg$ printf "cpu %d trying steal from %d\n" my_no (no schd)
+
+         r <- modifyHotVar (workpool schd) takeback
+
          case r of
            Just t  -> do
-              -- printf "cpu %d got work from cpu %d\n" my_no (no x)
-              sched True q t
-           Nothing -> go xs
-#endif
+              when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
+	      rescheduleIO q unused
+
+           Nothing -> do i' <- getnext i
+			 go (tries-1) i'
+
+unused = error "this closure shouldn't be used"
+
+----------------------------------------------------------------------------------------------------
+-- TEMPORARY -- SCRAP:
 
 
+newFull_ ::  a -> Par (IVar a)
+-- The following is usually inefficient! 
+newFull_ a = do v <- new
+		put_ v a
+		return v
 
+newFull :: NFData a => a -> Par (IVar a)
+newFull a = deepseq a (newFull a)
 
-{-# INLINE atomicModifyIORef_ #-}
-atomicModifyIORef_ ref f = atomicModifyIORef ref (\x -> (f x, ()))
+put :: NFData a => IVar a -> a -> Par ()
+put v a = deepseq a (put_ v a)
+
+pval :: NFData a => a -> Par (IVar a)
+pval a = spawn (return a)
+
+spawn :: NFData a => Par a -> Par (IVar a)
+spawn p = do r <- new
+	     fork (p >>= put r)
+	     return r
+
+spawn_ :: Par a -> Par (IVar a)
+spawn_ p = do r <- new
+	      fork (p >>= put_ r)
+	      return r
