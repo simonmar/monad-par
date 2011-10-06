@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP
+             ExistentialQuantification, CPP, ScopedTypeVariables
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
@@ -20,6 +20,7 @@ module Control.Monad.Par.Scheds.Direct (
  ) where
 
 
+import Debug.Trace
 -- import Control.Monad as M hiding (mapM, sequence, join)
 -- import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
@@ -43,6 +44,7 @@ import qualified Control.Monad.ParClass as PC
 import Control.DeepSeq
 
 dbg = True
+#define FORKPARENT
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -73,7 +75,9 @@ data Sched = Sched
       killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
-      scheds   :: [Sched] -- A global list of schedulers.
+      scheds   :: [Sched], -- A global list of schedulers.
+
+      schedK   :: (() -> Par ()) -> Par ()  -- Continuation to return to the scheduler.
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))
@@ -124,7 +128,7 @@ takeback  (DQ ls)     = (DQ rest, Just final)
 -- TEMP: Experimental
 
 #ifndef HOTVAR
-#define HOTVAR 3
+#define HOTVAR 1
 #endif
 newHotVar      :: a -> IO (HotVar a)
 modifyHotVar   :: HotVar a -> (a -> (a,b)) -> IO b
@@ -206,11 +210,12 @@ writeHotVarRaw = writeTVar
 {-# INLINE popWork  #-}
 
 popWork :: Sched -> IO (Maybe (Par ()))
-popWork Sched{ workpool } = modifyHotVar  workpool  takefront
+popWork Sched{ workpool } = 
+  modifyHotVar  workpool  takefront
 
 pushWork :: Sched -> Par () -> IO ()
-pushWork Sched { workpool } t = do
-  modifyHotVar_ workpool (addfront t)
+pushWork Sched { workpool } task = do
+  modifyHotVar_ workpool (addfront task)
 #ifdef WAKEIDLE
   -- If any worker is idle, wake one up and give it work to do.
   idles <- readHotVar idle
@@ -222,11 +227,11 @@ pushWork Sched { workpool } t = do
 #endif
 
 rand :: HotVar StdGen -> IO Int
-rand ioref = 
- do g <- readHotVar ioref
+rand ref = 
+ do g <- readHotVar ref
     let (n,g') = next g
 	i = n `mod` numCapabilities
-    writeHotVar ioref g'
+    writeHotVar ref g'
     return i
 
 
@@ -265,12 +270,18 @@ runPar userComp = unsafePerformIO $ do
    forM_ (zip [0..] states) $ \(cpu,state) ->
         forkOnIO cpu $
           if (cpu /= main_cpu)
-             then rescheduleIO state unused
+             then do when dbg$ printf "CPU %d entering scheduling loop.\n" cpu
+		     rescheduleIO state unused
+		     when dbg$ printf "    CPU %d exited scheduling loop.  FINISHED.\n" cpu
              else do
                   rref <- newIORef Empty
-		  let userComp'  =  userComp >>= put_ (IVar rref)
-		      userComp'' =  R.runReaderT userComp' state
-		  C.runContT userComp'' (\_ -> return ()) -- Trivial continuation.
+		  let userComp'  = do when dbg$ liftIO$ printf "Starting real work on main thread (%d).\n" main_cpu
+				      res <- userComp
+				      when dbg$ liftIO$ printf "Done with real work on main thread (%d).\n" main_cpu
+				      put_ (IVar rref) res
+		      userComp'' = R.runReaderT userComp' state
+		  C.runContT userComp'' trivialCont
+                  when dbg$ putStrLn " *** Completely out of users computation.  Writing final value."
                   readIORef rref >>= putMVar m
    r <- takeMVar m
    case r of
@@ -285,7 +296,8 @@ makeScheds = do
    idle <- newHotVar []   
    killflag <- newHotVar False
    let states = [ Sched { no=x, idle, killflag, 
-			  workpool=wp, scheds=states, rng=rng
+			  workpool=wp, scheds=states, rng=rng,
+			  schedK = error "uninitialized continuation"
 			}
                 | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return states
@@ -296,6 +308,7 @@ makeScheds = do
 -- IVar operations
 --------------------------------------------------------------------------------
 
+{-# INLINE fork #-}
 {-# INLINE get  #-}
 {-# INLINE put_ #-}
 {-# INLINE new  #-}
@@ -322,53 +335,91 @@ get :: IVar a -> Par a
 get (IVar v) =  do 
   sc <- R.ask 
   lift $ 
-    mycallCC $ \cont -> 
+    callCC $ \cont -> 
     do
        e  <- liftIO$ readIORef v
- --      sc <- liR   R.ask
        case e of
 	  Full a -> return a
 	  _ -> do
 	    let resched = reschedule sc 
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
+#if 1
 	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
 		      Empty      -> (Blocked [cont], resched)
 		      Full a     -> (Full a, return a)
 		      Blocked cs -> (Blocked (cont:cs), resched)
 	    r
+#else
+-- TEMP: Debugging... here's a spinning version:
+-- Only works for most programs with parent/continuation stealing:
+            let loop = do snap <- readIORef v
+			  case snap of 
+			    Empty      -> loop 
+			    Full a     -> return a
+            liftIO loop
+#endif
 
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 put_ :: IVar a -> a -> Par ()
-put_ (IVar v) !a = do
---   sched <- C.lift R.ask 
+put_ (IVar v) !content = do
    sched <- R.ask 
    liftIO$ do 
       cs <- atomicModifyIORef v $ \e -> case e of
-               Empty    -> (Full a, [])
+               Empty    -> (Full content, [])
                Full _   -> error "multiple put"
-               Blocked cs -> (Full a, cs)
-      mapM_ (pushWork sched . lift . ($a)) cs
+               Blocked cs -> (Full content, cs)
+      mapM_ (pushWork sched . lift . ($content)) cs
+--      mapM_ (pushWork sched . ($a)) cs
       return ()
 
 -- TODO: Continuation (parent) stealing version.
 fork :: Par () -> Par ()
+#ifdef FORKPARENT
+fork task = do 
+   sched <- R.ask   
+   callCC$ \parent -> do
+      liftIO$ pushWork sched (parent ())
+      -- Then execute the child task and return to the scheduler when it is complete:
+      task 
+      -- If we get to this point we have finished the child task:
+      lift$ reschedule sched
+--       let ContT fn = R.runReaderT task sched
+--       liftIO$ fn (\_ -> rescheduleIO sched (error "unused cont3"))
+      liftIO$ putStrLn " !!! ERROR: Should not reach this point #1"   
+
+   liftIO$ when dbg$ putStrLn "     called parent continuation... which CPU?"   
+#else
 fork task = do
    sch <- R.ask
+   liftIO$ when dbg$ printf "  forking task from cpu %d...\n" (no sch)
    liftIO$ pushWork sch task
+#endif
    
+-- This routine "longjmp"s to the scheduler, throwing out its own continuation.
 reschedule :: Sched -> ContIO a 
 reschedule mysched = C.ContT (rescheduleIO mysched)
 
-rescheduleIO :: Sched -> a -> IO ()
--- As a continuation, reschedule ignores the value passed to it:
-rescheduleIO mysched _ = do
-  m <- popWork mysched
-  case m of
+-- rescheduleIO :: Sched -> a -> IO ()
+rescheduleIO :: Sched -> (a -> IO ()) -> IO ()
+-- rescheduleIO :: Sched -> (() -> IO ()) -> IO ()
+-- rescheduleIO :: Sched -> (a -> m b) -> IO ()
+-- Reschedule ignores its continuation:
+rescheduleIO mysched k = do
+  when dbg$ printf " - Reschedule: CPU %d\n" (no mysched)
+  mtask <- popWork mysched
+  case mtask of
     Nothing -> liftIO (steal mysched)
-    Just reader  -> 
+    Just task -> do
        -- Import the work to this thread and tell it what scheduler to use:
-       let C.ContT f = R.runReaderT reader mysched
-       in f (rescheduleIO mysched)
+       when dbg $ printf "  popped work from own queue (cpu %d)\n" (no mysched)
+       let C.ContT fn = R.runReaderT task mysched
+       -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
+       fn (\() -> do 
+           when dbg $ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no mysched)
+	   rescheduleIO mysched (error "unused continuation"))
+-- TODO: Check for performance diff between above and relaxing the type allowing the following:
+--       fn (rescheduleIO mysched)
+
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
@@ -386,6 +437,8 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
 
     getnext _ = rand rng
 
+    ----------------------------------------
+    -- IDLING behavior:
     go 0 _ = 
             do m <- newEmptyMVar
                r <- modifyHotVar idle $ \is -> (m:is, is)
@@ -403,6 +456,7 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
                          when dbg$ printf "cpu %d woken up\n" my_no
 			 i <- getnext (-1::Int)
                          go maxtries i
+    ----------------------------------------
     go tries i
       | i == my_no = do i' <- getnext i
 			go (tries-1) i'
@@ -414,14 +468,19 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
          r <- modifyHotVar (workpool schd) takeback
 
          case r of
-           Just t  -> do
+           Just task  -> do
               when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
-	      rescheduleIO q unused
+	      C.runContT (R.runReaderT task q) 
+	       (\_ -> do
+                 when dbg$ printf "cpu %d DONE running stolen work from %d\n" my_no (no schd)
+	         return ())
 
            Nothing -> do i' <- getnext i
 			 go (tries-1) i'
 
 unused = error "this closure shouldn't be used"
+trivialCont _ = trace "trivialCont evaluated!"
+		return ()
 
 ----------------------------------------------------------------------------------------------------
 -- TEMPORARY -- SCRAP:
