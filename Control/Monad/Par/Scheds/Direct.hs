@@ -44,7 +44,7 @@ import qualified Control.Monad.ParClass as PC
 import Control.DeepSeq
 
 dbg = True
-#define FORKPARENT
+-- define FORKPARENT
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -275,9 +275,10 @@ runPar userComp = unsafePerformIO $ do
 		     when dbg$ printf "    CPU %d exited scheduling loop.  FINISHED.\n" cpu
              else do
                   rref <- newIORef Empty
-		  let userComp'  = do when dbg$ liftIO$ printf "Starting real work on main thread (%d).\n" main_cpu
+		  let userComp'  = do when dbg$ liftIO$ printf "Starting Par computation on main thread (%d).\n" main_cpu
 				      res <- userComp
-				      when dbg$ liftIO$ printf "Done with real work on main thread (%d).\n" main_cpu
+                                      finalSched <- R.ask 
+				      when dbg$ liftIO$ printf "Done with Par computation on thread (%d).\n" (no finalSched)
 				      put_ (IVar rref) res
 		      userComp'' = R.runReaderT userComp' state
 		  C.runContT userComp'' trivialCont
@@ -313,16 +314,6 @@ makeScheds = do
 {-# INLINE put_ #-}
 {-# INLINE new  #-}
 
--- type M a = C.ContT () (R.ReaderT Sched IO) a
--- type M a = Par a
--- mycallCC :: ((forall b . a -> M r b) -> M r a) -> M r a
--- mycallCC f = C.ContT $ \c -> C.runContT (f (\a -> C.ContT $ \_ -> c a)) c
-
--- Option 2:
-type M = ContIO
-mycallCC :: ((forall b . a -> M b) -> M a) -> M a
-mycallCC f = C.ContT $ \c -> C.runContT (f (\a -> C.ContT $ \_ -> c a)) c
-
 -- | creates a new @IVar@
 new :: Par (IVar a)
 new  = liftIO $ do r <- newIORef Empty
@@ -333,7 +324,7 @@ new  = liftIO $ do r <- newIORef Empty
 -- @IVar@.
 get :: IVar a -> Par a
 get (IVar v) =  do 
-  sc <- R.ask 
+  sched <- R.ask 
   lift $ 
     callCC $ \cont -> 
     do
@@ -341,20 +332,23 @@ get (IVar v) =  do
        case e of
 	  Full a -> return a
 	  _ -> do
-	    let resched = reschedule sc 
+#ifndef FORKPARENT
+            -- Because we continue on the same processor the Sched stays the same:
+	    let resched = reschedule sched 
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
-#if 1
 	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
 		      Empty      -> (Blocked [cont], resched)
 		      Full a     -> (Full a, return a)
 		      Blocked cs -> (Blocked (cont:cs), resched)
 	    r
 #else
--- TEMP: Debugging... here's a spinning version:
+--------------------------------------------------
+-- TEMP: Debugging: Here's a spinning version:
+--------------------------------------------------
 -- Only works for most programs with parent/continuation stealing:
             let loop = do snap <- readIORef v
 			  case snap of 
-			    Empty      -> loop 
+			    Empty      -> do putStr "."; loop 
 			    Full a     -> return a
             liftIO loop
 #endif
@@ -378,16 +372,24 @@ fork :: Par () -> Par ()
 fork task = do 
    sched <- R.ask   
    callCC$ \parent -> do
-      liftIO$ pushWork sched (parent ())
+      let wrapped = parent ()
+      -- Is it possible to slip in a new Sched here?
+      -- let wrapped = lift$ R.runReaderT (parent ()) undefined
+      liftIO$ pushWork sched wrapped
       -- Then execute the child task and return to the scheduler when it is complete:
       task 
       -- If we get to this point we have finished the child task:
       lift$ reschedule sched
---       let ContT fn = R.runReaderT task sched
---       liftIO$ fn (\_ -> rescheduleIO sched (error "unused cont3"))
       liftIO$ putStrLn " !!! ERROR: Should not reach this point #1"   
 
-   liftIO$ when dbg$ putStrLn "     called parent continuation... which CPU?"   
+-- TODO!! The Reader monad may need to become a State monad.  When a
+-- continuation is stolen it has moved to a new Sched and needs to be
+-- updated.
+   
+   when dbg$ do 
+    sched2 <- R.ask 
+    liftIO$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+
 #else
 fork task = do
    sch <- R.ask
