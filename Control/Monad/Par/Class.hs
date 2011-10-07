@@ -9,6 +9,7 @@ module Control.Monad.Par.Class
   , ParIVar(..)
   , ParChan(..)
   , ParDist(..)
+  , ParGettable(..)
   )
 where
 
@@ -62,11 +63,15 @@ class ParChan m snd rcv | m -> snd, m -> rcv where
 -- Distributed operation:
 --------------------------------------------------------------------------------
 
+-- There doesn't seem to be a need to have a Future/IVar distinction here.
+-- Rather, implementations will or will not make IVars serializable.
+-- Likewise, some implementations will make the send ports of channels serializable.
+-- (And perhaps they will allow an IVar to be converted to such a send port.)
+
 class Monad m => ParDist m ivar | m -> ivar where
   longSpawn :: NFData a => m a -> m (ivar a)
-
-class Monad m => ParDistIVar m ivar | m -> ivar where
   longFork  :: m () -> m ()
+
 
 --------------------------------------------------------------------------------
 -- Standard instances:
