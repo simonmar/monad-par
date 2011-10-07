@@ -29,7 +29,7 @@ class Monad m => ParClass m ivar | m -> ivar where
 		  return v
 
   newFull :: NFData a => a -> m (ivar a)
-  newFull a = deepseq a (newFull a)
+  newFull a = deepseq a (newFull_ a)
 
   put :: NFData a => ivar a -> a -> m ()
   put v a = deepseq a (put_ v a)
