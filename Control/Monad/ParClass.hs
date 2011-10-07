@@ -44,7 +44,7 @@ class Monad m => ParIVar m ivar | m -> ivar where
 		  return v
 
   newFull :: NFData a => a -> m (ivar a)
-  newFull a = deepseq a (newFull a)
+  newFull a = deepseq a (newFull_ a)
 
 class Monad m => ParDist m ivar | m -> ivar where
   longSpawn :: NFData a => m a -> m (ivar a)
