@@ -20,12 +20,14 @@ import qualified Control.Monad.Par as P
 -- support (Futures, IVars, Streams.)
 --------------------------------------------------------------------------------
 
-class Monad m => ParFuture m future | m -> future where
+class Monad m => ParGettable m var | m -> var where
+  get :: var a -> m a
+
+class ParGettable m future => ParFuture m future | m -> future where
   spawn  :: NFData a => m a -> m (future a)
   spawn_ :: m a -> m (future a)
-  get    :: future a -> m a
 
-class (Monad m, ParFuture m ivar) => ParIVar m ivar | m -> ivar where
+class ParGettable m ivar => ParIVar m ivar | m -> ivar where
   fork :: m () -> m ()
   new  :: m (ivar a)
   put_ :: ivar a -> a -> m ()
@@ -69,10 +71,8 @@ class Monad m => ParDistIVar m ivar | m -> ivar where
 --------------------------------------------------------------------------------
 -- Standard instances:
 
-instance ParFuture P.Par P.IVar where 
-  get  = P.get
-#include "par_instance_boilerplate.hs"
-
+instance ParGettable P.Par P.IVar where
+  get = P.get
 
 instance ParIVar P.Par P.IVar where 
   fork = P.fork 
@@ -86,7 +86,7 @@ instance ParIVar P.Par P.IVar where
 
 ----------------------------------------------------------------------------------------------------
 
-#if 0
+#if 1
 instance ParIVar m var => ParFuture m var where 
   spawn p = do r <- new
 	       fork (p >>= put r)
