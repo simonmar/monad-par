@@ -110,6 +110,7 @@ Library
                , Control.Monad.Par.SerialElision
 -- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
+               , Control.Monad.Par.Chan
 -- IList is internal:
 --                 , Control.Monad.Par.IList
 

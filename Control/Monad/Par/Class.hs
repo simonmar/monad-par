@@ -5,31 +5,32 @@
 -- A class encompassing valid Par monads.
 
 module Control.Monad.Par.Class 
-  (
-    ParFuture(..),
-    ParIVar(..)
+  ( ParFuture(..)
+  , ParIVar(..)
+  , ParChan(..)
+  , ParDist(..)
   )
 where
 
 import Control.DeepSeq
 import qualified Control.Monad.Par as P
 
+--------------------------------------------------------------------------------
+-- The basic layers of the Par monad vary in what data structures they
+-- support (Futures, IVars, Streams.)
+--------------------------------------------------------------------------------
+
 class Monad m => ParFuture m future | m -> future where
   spawn  :: NFData a => m a -> m (future a)
   spawn_ :: m a -> m (future a)
   get    :: future a -> m a
 
-class Monad m => ParIVar m ivar | m -> ivar where
+class (Monad m, ParFuture m ivar) => ParIVar m ivar | m -> ivar where
   fork :: m () -> m ()
   new  :: m (ivar a)
   put_ :: ivar a -> a -> m ()
-
-  put :: NFData a => ivar a -> a -> m ()
+  put  :: NFData a => ivar a -> a -> m ()
   put v a = deepseq a (put_ v a)
-
-  -- We would ideally like to REUSE the name get here:
-  -- But that would require that ParFuture be a superclass.
-  -- get    :: ivar a -> m a
 
   -- TODO: I think we should add yield officially:
 --  yield  :: m ()
@@ -44,13 +45,33 @@ class Monad m => ParIVar m ivar | m -> ivar where
   newFull :: NFData a => a -> m (ivar a)
   newFull a = deepseq a (newFull_ a)
 
+-- class ParStream m strm | m -> strm where
+--   pop  :: strm a -> m a 
+--   push :: 
+
+-- Channels with split send and receive ports:
+class ParChan m snd rcv | m -> snd, m -> rcv where
+   newChan :: m (snd a, rcv a)
+--   receive :: rcv a -> m a
+   recv    :: rcv a -> m a
+   send    :: snd a -> a -> m ()
+
+--------------------------------------------------------------------------------
+-- Distributed operation:
+--------------------------------------------------------------------------------
+
 class Monad m => ParDist m ivar | m -> ivar where
   longSpawn :: NFData a => m a -> m (ivar a)
-
 
 class Monad m => ParDistIVar m ivar | m -> ivar where
   longFork  :: m () -> m ()
 
+--------------------------------------------------------------------------------
+-- Standard instances:
+
+instance ParFuture P.Par P.IVar where 
+  get  = P.get
+#include "par_instance_boilerplate.hs"
 
 
 instance ParIVar P.Par P.IVar where 
@@ -65,7 +86,7 @@ instance ParIVar P.Par P.IVar where
 
 ----------------------------------------------------------------------------------------------------
 
-#if 1
+#if 0
 instance ParIVar m var => ParFuture m var where 
   spawn p = do r <- new
 	       fork (p >>= put r)

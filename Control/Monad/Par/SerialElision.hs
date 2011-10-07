@@ -1,4 +1,5 @@
-{-# LANGUAGE RankNTypes, ImpredicativeTypes, MultiParamTypeClasses
+{-# LANGUAGE RankNTypes, ImpredicativeTypes, MultiParamTypeClasses, 
+             CPP
    #-}
 --    TypeSynonymInstances
 
@@ -44,10 +45,13 @@ instance Monad Par where
   (P m) >>= f = P (m >>= unP . f)
   return x = P (return x)
 
+instance PC.ParFuture Par IVar where 
+  get  = get
+#include "par_instance_boilerplate.hs"
+
 instance PC.ParIVar Par IVar where 
   fork = fork 
   new  = new
---  get  = get
   put  = put
   put_ = put_
   newFull  = newFull

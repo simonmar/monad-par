@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification,
+             ExistentialQuantification, CPP,
              PackageImports, ScopedTypeVariables, MultiParamTypeClasses
 	     #-}
 
@@ -47,10 +47,13 @@ instance Monad Par where
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
 
+instance PC.ParFuture Par IVar where 
+  get  = get
+#include "par_instance_boilerplate.hs"
+
 instance PC.ParIVar Par P.IVar where 
   fork = fork 
   new  = new
---  get  = get
   put  = put
   put_ = put_
   newFull  = newFull
