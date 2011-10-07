@@ -6,7 +6,7 @@
 -- This provides an alternative to Control.Monad.Par which
 -- deterministic parallel random number generation as an additional capability.
 
-module Control.Monad.ParRNG
+module Control.Monad.Par.RNG
   ( 
      rand, 
      Par, runParRNG, fork,
@@ -20,7 +20,7 @@ import qualified "transformers" Control.Monad.Trans.State.Strict as S
 import qualified "transformers" Control.Monad.Trans.Class as S
 
 import qualified Control.Monad.Par as P
-import qualified Control.Monad.ParClass as PC
+import qualified Control.Monad.Par.Class as PC
 
 -- These are reexported without modification:
 import Control.Monad.Par (IVar)
@@ -47,10 +47,10 @@ instance Monad Par where
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
 
-instance PC.ParClass Par P.IVar where 
+instance PC.ParIVar Par P.IVar where 
   fork = fork 
   new  = new
-  get  = get
+--  get  = get
   put  = put
   put_ = put_
   newFull  = newFull
@@ -109,7 +109,7 @@ put_ v x   = PRNG$ S.lift$ P.put_ v x
 
 
 --------------------------------------------------------------------------------
--- TEMP: These should be subsumed by the default definitions in the ParClass monad:
+-- TEMP: These should be subsumed by the default definitions in the ParIVar Class:
 pval :: NFData a => a -> Par (IVar a)
 pval a = spawn (return a)
 

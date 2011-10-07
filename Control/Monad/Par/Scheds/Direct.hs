@@ -40,7 +40,7 @@ import qualified Data.Sequence as Seq
 import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
 
-import qualified Control.Monad.ParClass as PC
+import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 
 dbg = True

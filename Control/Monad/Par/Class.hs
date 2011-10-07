@@ -4,9 +4,7 @@
 
 -- A class encompassing valid Par monads.
 
--- TODO: This should probably move to Control.Monad.Par.Class 
-
-module Control.Monad.ParClass 
+module Control.Monad.Par.Class 
   (
     ParFuture(..),
     ParIVar(..)
