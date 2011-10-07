@@ -45,6 +45,7 @@ import Control.DeepSeq
 
 dbg = True
 -- define FORKPARENT
+-- define WAKEIDLE
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -62,11 +63,8 @@ dbg = True
 -- Note that the result type for continuations is unit.  Forked
 -- computations return nothing.
 --
--- type Par a = C.ContT () (R.ReaderT Sched IO) a
-type Par a = R.ReaderT Sched ContIO a
--- type ContIO = C.ContT () IO
-type ContIO = C.ContT () IO
-
+type Par a = C.ContT () ROnly a
+type ROnly = R.ReaderT Sched IO
 
 data Sched = Sched 
     { 
@@ -82,7 +80,7 @@ data Sched = Sched
 
 newtype IVar a = IVar (IORef (IVarContents a))
 
-data IVarContents a = Full a | Empty | Blocked [a -> ContIO ()]
+data IVarContents a = Full a | Empty | Blocked [a -> Par ()]
 
 
 --------------------------------------------------------------------------------
@@ -102,24 +100,31 @@ addback   :: a -> Deque a -> Deque a
 takefront :: Deque a -> (Deque a, Maybe a)
 takeback  :: Deque a -> (Deque a, Maybe a)
 
+dqlen :: Deque a -> Int
+
 -- [2011.03.21] Presently lists are out-performing Seqs:
 #if 1
 newtype Deque a = DQ [a]
 emptydeque = DQ []
 
-addfront x (DQ l)    = DQ (x:l)
+addfront x (DQ l)    = trace (" * addfront brought queue up to: " ++ show (length (x:l))) $ 
+		       DQ (x:l)
 addback x (DQ [])    = DQ [x]
 addback x (DQ (h:t)) = DQ (h : rest)
  where DQ rest = addback x (DQ t)
 
 takefront (DQ [])     = (emptydeque, Nothing)
-takefront (DQ (x:xs)) = (DQ xs, Just x)
+takefront (DQ (x:xs)) = trace (" * takefront popped one, remaining: " ++ show (length xs)) $ 
+			(DQ xs, Just x)
 takeback  (DQ [])     = (emptydeque, Nothing)
-takeback  (DQ ls)     = (DQ rest, Just final)
+takeback  (DQ ls)     = trace (" * takeback popped one, remaining: " ++ show (length rest)) $ 
+			(DQ rest, Just final)
  where 
   (final,rest) = loop ls []
   loop [x]    acc = (x, reverse acc)
   loop (h:tl) acc = loop tl (h:acc)
+ 
+dqlen (DQ l) = length l
 #endif
 
 --------------------------------------------------------------------------------
@@ -214,12 +219,13 @@ popWork Sched{ workpool } =
   modifyHotVar  workpool  takefront
 
 pushWork :: Sched -> Par () -> IO ()
-pushWork Sched { workpool } task = do
+pushWork Sched { workpool, idle } task = do
   modifyHotVar_ workpool (addfront task)
 #ifdef WAKEIDLE
   -- If any worker is idle, wake one up and give it work to do.
   idles <- readHotVar idle
   when (not (null idles)) $ do
+    when dbg$ printf "Waking %d idle thread(s).\n" (length idles)
     r <- modifyHotVar idle (\is -> case is of
                              [] -> ([], return ())
                              (i:is) -> (is, putMVar i False))
@@ -271,7 +277,7 @@ runPar userComp = unsafePerformIO $ do
         forkOnIO cpu $
           if (cpu /= main_cpu)
              then do when dbg$ printf "CPU %d entering scheduling loop.\n" cpu
-		     rescheduleIO state unused
+		     runReaderWith state $ rescheduleR unused
 		     when dbg$ printf "    CPU %d exited scheduling loop.  FINISHED.\n" cpu
              else do
                   rref <- newIORef Empty
@@ -279,11 +285,23 @@ runPar userComp = unsafePerformIO $ do
 				      res <- userComp
                                       finalSched <- R.ask 
 				      when dbg$ liftIO$ printf "Done with Par computation on thread (%d).\n" (no finalSched)
+
+				      -- Sanity check our work queues:
+				      when dbg $ liftIO$ do
+					forM_ states $ \ Sched{no, workpool} -> do
+					  dq <- readHotVar workpool
+					  when (dqlen dq > 0) $ do 
+					     printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
+					printf "Sanity check complete.\n"
+
 				      put_ (IVar rref) res
-		      userComp'' = R.runReaderT userComp' state
-		  C.runContT userComp'' trivialCont
+
+		  
+		  R.runReaderT (C.runContT userComp' trivialCont) state
+
                   when dbg$ putStrLn " *** Completely out of users computation.  Writing final value."
                   readIORef rref >>= putMVar m
+
    r <- takeMVar m
    case r of
      Full a -> return a
@@ -324,17 +342,16 @@ new  = liftIO $ do r <- newIORef Empty
 -- @IVar@.
 get :: IVar a -> Par a
 get (IVar v) =  do 
-  sched <- R.ask 
-  lift $ 
-    callCC $ \cont -> 
+  callCC $ \cont -> 
     do
        e  <- liftIO$ readIORef v
        case e of
 	  Full a -> return a
 	  _ -> do
 #ifndef FORKPARENT
+            sch <- R.ask
+            let resched = trace (" cpu "++ show (no sch) ++ " rescheduling on unavailable ivar!") reschedule
             -- Because we continue on the same processor the Sched stays the same:
-	    let resched = reschedule sched 
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
 	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
 		      Empty      -> (Blocked [cont], resched)
@@ -362,13 +379,13 @@ put_ (IVar v) !content = do
                Empty    -> (Full content, [])
                Full _   -> error "multiple put"
                Blocked cs -> (Full content, cs)
-      mapM_ (pushWork sched . lift . ($content)) cs
---      mapM_ (pushWork sched . ($a)) cs
+      mapM_ (pushWork sched . ($content)) cs
       return ()
 
 -- TODO: Continuation (parent) stealing version.
 fork :: Par () -> Par ()
 #ifdef FORKPARENT
+#warning "FORK PARENT POLICY USED"
 fork task = do 
    sched <- R.ask   
    callCC$ \parent -> do
@@ -379,7 +396,7 @@ fork task = do
       -- Then execute the child task and return to the scheduler when it is complete:
       task 
       -- If we get to this point we have finished the child task:
-      lift$ reschedule sched
+      reschedule
       liftIO$ putStrLn " !!! ERROR: Should not reach this point #1"   
 
 -- TODO!! The Reader monad may need to become a State monad.  When a
@@ -398,35 +415,35 @@ fork task = do
 #endif
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
-reschedule :: Sched -> ContIO a 
-reschedule mysched = C.ContT (rescheduleIO mysched)
+reschedule :: Par a 
+reschedule = C.ContT rescheduleR
 
--- rescheduleIO :: Sched -> a -> IO ()
-rescheduleIO :: Sched -> (a -> IO ()) -> IO ()
--- rescheduleIO :: Sched -> (() -> IO ()) -> IO ()
--- rescheduleIO :: Sched -> (a -> m b) -> IO ()
 -- Reschedule ignores its continuation:
-rescheduleIO mysched k = do
-  when dbg$ printf " - Reschedule: CPU %d\n" (no mysched)
-  mtask <- popWork mysched
+rescheduleR :: ignoredCont -> ROnly ()
+rescheduleR k = do
+  mysched <- R.ask 
+  when dbg$ liftIO$ printf " - Reschedule: CPU %d\n" (no mysched)
+  mtask <- liftIO$ popWork mysched
   case mtask of
     Nothing -> liftIO (steal mysched)
     Just task -> do
-       -- Import the work to this thread and tell it what scheduler to use:
-       when dbg $ printf "  popped work from own queue (cpu %d)\n" (no mysched)
-       let C.ContT fn = R.runReaderT task mysched
+       -- When popping work from our own queue the Sched (Reader value) stays the same:
+       when dbg $ liftIO$ printf "  popped work from own queue (cpu %d)\n" (no mysched)
+       let C.ContT fn = task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
-       fn (\() -> do 
-           when dbg $ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no mysched)
-	   rescheduleIO mysched (error "unused continuation"))
--- TODO: Check for performance diff between above and relaxing the type allowing the following:
---       fn (rescheduleIO mysched)
+       fn (\ () -> do 
+           sch <- R.ask
+           when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
+	   rescheduleR (error "unused continuation"))
 
+
+{-# INLINE runReaderWith #-}
+runReaderWith state m = R.runReaderT m state
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
-steal q@Sched{ idle, scheds, rng, no=my_no } = do
+steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
   when dbg$ printf "cpu %d stealing\n" my_no
   i <- getnext (-1 :: Int)
   go maxtries i
@@ -472,10 +489,11 @@ steal q@Sched{ idle, scheds, rng, no=my_no } = do
          case r of
            Just task  -> do
               when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
-	      C.runContT (R.runReaderT task q) 
-	       (\_ -> do
-                 when dbg$ printf "cpu %d DONE running stolen work from %d\n" my_no (no schd)
-	         return ())
+	      runReaderWith mysched $ 
+		C.runContT task
+		 (\_ -> do
+		   when dbg$ liftIO$ printf "cpu %d DONE running stolen work from %d\n" my_no (no schd)
+		   return ())
 
            Nothing -> do i' <- getnext i
 			 go (tries-1) i'
