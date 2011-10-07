@@ -14,14 +14,14 @@
 --   serial baseline performance.
 --
 
-module Control.Monad.ParElision (
+module Control.Monad.Par.SerialElision (
     Par, IVar, runPar, fork,
     new, newFull, newFull_,
     get, put, put_,
     pval, spawn, spawn_,
   ) where
 
-import qualified Control.Monad.ParClass as PC
+import qualified Control.Monad.Par.Class as PC
 import Control.Exception
 import Control.DeepSeq
 import Control.Monad.ST

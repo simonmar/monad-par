@@ -1,11 +1,13 @@
 Name:                monad-par
-Version:             0.1.0.2
+Version:             0.1.1.0
 Synopsis:            A library for parallel programming based on a monad
 
 -- Version history:
 --  0.1      : First release
 --  0.1.0.1  : 
 --  0.1.0.2  : 
+--  0.1.1.0  : module reorganization, moving ParClass
+
 
 Description:         This library offers an alternative parallel programming
                      API to that provided by the @parallel@ package.
@@ -87,8 +89,8 @@ extra-source-files:
 
 Library
   Exposed-modules: Control.Monad.Par
-                 , Control.Monad.ParClass
-                 , Control.Monad.ParRNG
+                 , Control.Monad.Par.Class
+                 , Control.Monad.Par.RNG
                  , Control.Monad.Par.AList
                  , Control.Monad.Par.Internal
 
@@ -105,7 +107,8 @@ Library
   ghc-options: -O2
   Other-modules:
                  Control.Monad.Par.Stream
--- RRN: Not exposing OpenList yet.
+               , Control.Monad.Par.SerialElision
+-- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
 -- IList is internal:
 --                 , Control.Monad.Par.IList

@@ -2,7 +2,7 @@
 
 -- A class encompassing valid Par monads.
 
-module Control.Monad.ParClass 
+module Control.Monad.Par.Class 
   (
     ParClass(..)
   )

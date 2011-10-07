@@ -6,7 +6,7 @@
 -- This provides an alternative to Control.Monad.Par which
 -- deterministic parallel random number generation as an additional capability.
 
-module Control.Monad.ParRNG
+module Control.Monad.Par.RNG
   ( 
      rand, 
      Par, runParRNG, fork,
@@ -20,7 +20,7 @@ import qualified "transformers" Control.Monad.Trans.State.Strict as S
 import qualified "transformers" Control.Monad.Trans.Class as S
 
 import qualified Control.Monad.Par as P
-import qualified Control.Monad.ParClass as PC
+import qualified Control.Monad.Par.Class as PC
 
 -- These are reexported without modification:
 import Control.Monad.Par (IVar)
