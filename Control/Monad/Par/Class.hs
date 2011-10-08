@@ -2,7 +2,15 @@
      FlexibleInstances, UndecidableInstances
   #-}
 
--- A class encompassing valid Par monads.
+{-|
+
+    This module establishes a class hierarchy that captures the
+    interface for valid Par monads.  In particular, the functionality
+    is split into layers: for example Futures vs. full IVars.  
+
+    Not all Par monad schedulers must provide all functionality.
+
+ -}
 
 module Control.Monad.Par.Class 
   ( ParFuture(..)
@@ -14,7 +22,7 @@ module Control.Monad.Par.Class
 where
 
 import Control.DeepSeq
-import qualified Control.Monad.Par as P
+-- import qualified Control.Monad.Par as P
 
 --------------------------------------------------------------------------------
 -- The basic layers of the Par monad vary in what data structures they
@@ -73,22 +81,6 @@ class Monad m => ParDist m ivar | m -> ivar where
   longFork  :: m () -> m ()
 
 
---------------------------------------------------------------------------------
--- Standard instances:
-
-instance ParGettable P.Par P.IVar where
-  get = P.get
-
-instance ParIVar P.Par P.IVar where 
-  fork = P.fork 
-  new  = P.new
-  put  = P.put
-  put_ = P.put_
-  newFull  = P.newFull
-  newFull_ = P.newFull_
---  yield = P.yield
---  get  = P.get
-
 ----------------------------------------------------------------------------------------------------
 
 #if 1
@@ -116,9 +108,6 @@ t2 = do
   x <- new
   put x "hi"
   return 3
---  get x
-
-
 
 
 -- TODO: SPECIALIZE generic routines for the default par monad (and possibly ParRNG)?

@@ -23,9 +23,11 @@ where
 import Control.Monad hiding (join)
 import Control.DeepSeq
 import Control.Concurrent.MVar
-import Control.Monad.Par hiding (parMapM)
+-- import Control.Monad.Par hiding (parMapM)
 import Control.Monad.Par.IList
-import Control.Monad.Par.Internal
+
+import Control.Monad.Par.Scheds.Trace  hiding (parMapM)
+import Control.Monad.Par.Scheds.TraceInternal
 
 import Prelude hiding (length,head,tail,drop,take,null)
 import qualified Prelude as P

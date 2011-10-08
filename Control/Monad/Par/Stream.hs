@@ -20,8 +20,9 @@ module Control.Monad.Par.Stream
  )
 where
 import Control.Monad
-import Control.Monad.Par as P
-import Control.Monad.Par.Internal as PI
+-- import Control.Monad.Par as P
+import Control.Monad.Par.Scheds.Trace 
+import qualified Control.Monad.Par.Scheds.TraceInternal as PI
 import Control.Monad.Par.IList
 import Control.DeepSeq
 

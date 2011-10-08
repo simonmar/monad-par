@@ -92,7 +92,9 @@ Library
                  , Control.Monad.Par.Class
                  , Control.Monad.Par.RNG
                  , Control.Monad.Par.AList
-                 , Control.Monad.Par.Internal
+                 , Control.Monad.Par.Scheds.Trace
+                 , Control.Monad.Par.Scheds.TraceInternal
+
 
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,
@@ -114,6 +116,7 @@ Library
 -- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
                , Control.Monad.Par.Chan
+
 -- IList is internal:
 --                 , Control.Monad.Par.IList
 

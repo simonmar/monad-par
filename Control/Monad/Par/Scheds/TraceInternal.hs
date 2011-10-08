@@ -8,7 +8,7 @@
 -- module for purposes other than extending the @Par@ monad with new
 -- functionality.
 
-module Control.Monad.Par.Internal (
+module Control.Monad.Par.Scheds.TraceInternal (
    Trace(..), Sched(..), Par(..),
    IVar(..), IVarContents(..),
    sched,
