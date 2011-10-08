@@ -47,9 +47,12 @@ instance Monad Par where
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
 
-instance PC.ParFuture Par IVar where 
+-- instance PC.ParFuture Par IVar where 
+--   get  = get
+-- #include "par_instance_boilerplate.hs"
+
+instance PC.ParGettable Par IVar where 
   get  = get
-#include "par_instance_boilerplate.hs"
 
 instance PC.ParIVar Par P.IVar where 
   fork = fork 

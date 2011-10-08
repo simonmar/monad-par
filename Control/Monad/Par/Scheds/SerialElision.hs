@@ -1,7 +1,6 @@
 {-# LANGUAGE RankNTypes, ImpredicativeTypes, MultiParamTypeClasses, 
              CPP
    #-}
---    TypeSynonymInstances
 
 -- | This is a sequential implementation of the Par monad.
 -- 
@@ -15,7 +14,7 @@
 --   serial baseline performance.
 --
 
-module Control.Monad.Par.SerialElision (
+module Control.Monad.Par.Scheds.SerialElision (
     Par, IVar, runPar, fork,
     new, newFull, newFull_,
     get, put, put_,
@@ -45,9 +44,12 @@ instance Monad Par where
   (P m) >>= f = P (m >>= unP . f)
   return x = P (return x)
 
-instance PC.ParFuture Par IVar where 
+-- instance PC.ParFuture Par IVar where 
+--   get  = get
+-- #include "par_instance_boilerplate.hs"
+
+instance PC.ParGettable Par IVar where 
   get  = get
-#include "par_instance_boilerplate.hs"
 
 instance PC.ParIVar Par IVar where 
   fork = fork 

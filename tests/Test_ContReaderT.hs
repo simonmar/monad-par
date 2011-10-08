@@ -20,7 +20,7 @@ test ref = do
   liftIO$ printf "Observed value %d in invoked continuation\n" z
   return ()
 
-main = do ref :: IORef (a -> M ()) <- newIORef (error "should not be used")
+main = do ref :: IORef (() -> M ()) <- newIORef (error "should not be used")
           let m0 = test ref
 	      m1 = C.runContT m0 (\ () -> return ())
 	      m2 = R.runReaderT m1 (100::Int)

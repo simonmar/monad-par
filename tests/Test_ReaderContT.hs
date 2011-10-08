@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP #-}
 
--- This version captures the Reader value lexically and WILL NOT allow
--- you to change the value seen by a continuation.
 
 import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R

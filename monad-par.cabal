@@ -103,11 +103,14 @@ Library
                , array >= 0.3.0.2
                , random >= 1.0.0
                , transformers >= 0.2.2.0
---               , mtl >= 2.0.1.0
+               , mtl >= 2.0.1.0
+               , vector
+               , containers
   ghc-options: -O2
   Other-modules:
                  Control.Monad.Par.Stream
-               , Control.Monad.Par.SerialElision
+               , Control.Monad.Par.Scheds.SerialElision
+               , Control.Monad.Par.Scheds.Direct
 -- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
                , Control.Monad.Par.Chan
