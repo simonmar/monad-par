@@ -69,6 +69,7 @@ install-deps: deps
 deps:
 	cabal install parallel
 	cabal install fft
+	cabal install carray
 
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out *.exe
