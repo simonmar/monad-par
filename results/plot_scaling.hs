@@ -5,6 +5,7 @@
 -- This script generates gnuplot plots.
 -- Give it a .dat file as input... (or it will try to open results.dat)
 
+module Main where
 
 import Text.PrettyPrint.HughesPJClass
 import Text.Regex
@@ -310,7 +311,8 @@ main = do
                   parsed
 
  putStrLn$ "Parsed "++show (length parsed)++" lines containing data."
- print organized
+-- This can get big, I was just printing it for debugging:
+-- print organized
 
  let root = "./" ++ dropExtension file ++ "_graphs/"
  -- For hygiene, completely anhilate output directory:

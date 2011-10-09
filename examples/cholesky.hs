@@ -103,7 +103,8 @@ type Tile = IOUArray  (Int, Int) Float
 -- by (i, j, k+1) is the next generation of the (IVar Tile) mapped by (i, j, k).
 type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 
-instance NFData Tiles3D where
+-- This may need to be ifdef'd:
+-- instance NFData Tiles3D where
 
 instance NFData Tile where
 -- SDM: use the default.  All we require is that the IOUArray is evaluated,
