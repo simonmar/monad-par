@@ -11,6 +11,7 @@ import Control.Parallel.Strategies hiding (parMap)
 import Debug.Trace
 
 import Control.Monad.Par
+import qualified Control.Monad.Par.Combinator as C
 
 type Player = Evaluation -> Evaluation -> Evaluation
 type Move = (Board,Evaluation)
@@ -22,7 +23,7 @@ alternate _ _ _ _ b | static b == OWin = []
 alternate depth player f g board = move : alternate depth opponent g f board'
 	where
 	move@(board',eval) = best f possibles scores
-        scores = runPar $ parMapM (bestMove depth opponent g f) possibles
+        scores = runPar $ C.parMapM (bestMove depth opponent g f) possibles
 	possibles = newPositions player board
         opponent = opposite player
 
@@ -63,5 +64,5 @@ parMise :: Int -> Player -> Player -> (Tree Evaluation) -> Par Evaluation
 parMise 0 f g t = return (mise f g t)
 parMise n f g (Branch a []) = return a
 parMise n f g (Branch _ l) = do
-  es <- parMapM (parMise (n-1) g f) l
+  es <- C.parMapM (parMise (n-1) g f) l
   return (foldr f (g OWin XWin) es)

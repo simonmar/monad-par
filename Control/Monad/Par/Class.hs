@@ -37,6 +37,7 @@ class ParGettable m future => ParFuture m future | m -> future where
   spawn_ :: m a -> m (future a)
 
 class ParGettable m ivar => ParIVar m ivar | m -> ivar where
+  {-# INLINABLE fork #-}
   fork :: m () -> m ()
   new  :: m (ivar a)
   put_ :: ivar a -> a -> m ()

@@ -4,9 +4,10 @@ module Main(main) where
 
 import Control.Monad
 import Control.Monad.Par 
-import Control.Monad.Par.Internal (runParAsync)
+import Control.Monad.Par.Scheds.TraceInternal (runParAsync)
 import Control.Monad.Par.Stream as S
 import Control.Monad.Par.OpenList
+
 import Control.DeepSeq
 import Control.Exception
 

@@ -76,7 +76,7 @@ streamMapDP fn instrm =
 	Null -> put outstrm Null -- End of stream.
 	Cons h t -> 
 	  do newtl <- new
-	     h' <- pval (fn h)	     
+	     h' <- spawn (return$ fn h)
 
 -- WARNING: This only makes sense with continuation-stealing..  With child stealing this will go crazy.
 	     fork$ loop t newtl

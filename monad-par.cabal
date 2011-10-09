@@ -90,11 +90,11 @@ extra-source-files:
 Library
   Exposed-modules: Control.Monad.Par
                  , Control.Monad.Par.Class
+                 , Control.Monad.Par.Combinator
                  , Control.Monad.Par.RNG
                  , Control.Monad.Par.AList
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
-
 
   Build-depends: base >= 4 && < 5,
                  deepseq >= 1.1 && < 1.2,

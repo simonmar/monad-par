@@ -22,6 +22,7 @@ import Control.DeepSeq
 import Prelude hiding (length,head,tail,null)
 import qualified Prelude as P
 import Control.Monad.Par
+import qualified Control.Monad.Par.Combinator as C
 
 -- | List that support constant-time append (sometimes called
 -- join-lists).
@@ -161,27 +162,27 @@ appendM x y = return (append x y)
 --   over the degree of parallelism.  It indicates under what number
 --   of elements the build process should switch from parallel to
 --   serial.
-parBuildThresh :: NFData a => Int -> InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuildThresh :: NFData a => Int -> C.InclusiveRange -> (Int -> a) -> Par (AList a)
 parBuildThresh threshold range fn =
-  parMapReduceRangeThresh threshold range
+  C.parMapReduceRangeThresh threshold range
 			  (return . singleton . fn) appendM empty
 
 -- | Variant of 'parBuildThresh' in which the element-construction function is itself a 'Par' computation.
-parBuildThreshM :: NFData a => Int -> InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildThreshM :: NFData a => Int -> C.InclusiveRange -> (Int -> Par a) -> Par (AList a)
 parBuildThreshM threshold range fn =
-  parMapReduceRangeThresh threshold range 
+  C.parMapReduceRangeThresh threshold range 
 			  ((fmap singleton) . fn) appendM empty
 
 -- | \"Auto-partitioning\" version of 'parBuildThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parBuild :: NFData a => InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuild :: NFData a => C.InclusiveRange -> (Int -> a) -> Par (AList a)
 parBuild range fn =
-  parMapReduceRange range (return . singleton . fn) appendM empty
+  C.parMapReduceRange range (return . singleton . fn) appendM empty
 
 -- | like 'parBuild', but the construction function is monadic
-parBuildM :: NFData a => InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildM :: NFData a => C.InclusiveRange -> (Int -> Par a) -> Par (AList a)
 parBuildM range fn =
-  parMapReduceRange range ((fmap singleton) . fn) appendM empty
+  C.parMapReduceRange range ((fmap singleton) . fn) appendM empty
 
 
 -- | A parMap over an AList can result in more balanced parallelism than
