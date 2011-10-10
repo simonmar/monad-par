@@ -12,5 +12,3 @@ where
 
 import Control.Monad.Par.Class
 import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
-
-

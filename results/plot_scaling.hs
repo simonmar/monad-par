@@ -10,9 +10,10 @@ module Main where
 import Text.PrettyPrint.HughesPJClass
 import Text.Regex
 import Data.List
+import Data.Maybe (mapMaybe)
 import Data.Function
 import Control.Monad
-import System
+import System.Process (system)
 import System.IO
 import System.FilePath 
 import System.Environment
@@ -30,7 +31,7 @@ linewidth = "5.0"
 --scheduler_MASK = [5,6,99,10]
 scheduler_MASK = []
 
--- Ok, gunplot line type 6 is YELLOW... that's not to smart:
+-- Ok, gunplot line type 6 is YELLOW... that's not too smart:
 line_types = [0..5] ++ [7..]
 
 round_2digits :: Double -> Double
@@ -42,7 +43,7 @@ round_2digits n = (fromIntegral $round (n * 100)) / 100
 --x11 = terminal X11.cons
 
 -- Split 
-parse [a,b,c,d,e,f] =
+parse [a,b,c,d,e,f] = Just $
   Entry { name     = a, 
 	  variant  = b,
 	  sched    = "trace",
@@ -53,13 +54,10 @@ parse [a,b,c,d,e,f] =
 	  normfactor = 1.0
 	}
 
---parse [a,b,c,d,e,f,g,h,i] = 
---   trace ("Got line with norm factor: "++ show [a,b,c,d,e,f,g,h,i])
---   (parse [a,b,c,d,e,f,g,h]) { normfactor = read i }
-
-parse other = error$ "Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8 or 9: "++ show other
-
-
+parse other = 
+   trace ("WARNING: Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8 or 9: "++ show other) $ 
+   Nothing
+   
 --------------------------------------------------------------------------------
 -- Let's take a particular interpretation of Enum for pairs:
 instance (Enum t1, Enum t2) => Enum (t1,t2) where 
@@ -302,7 +300,8 @@ main = do
 	      []     -> "results.dat"
  dat <- run$ catFrom [file] -|- remComments "#" 
 
- let parsed = map (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
+ -- Here we remove
+ let parsed = mapMaybe (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
 	          (filter (not . isMatch (mkRegex "ERR")) $
 		   filter (not . isMatch (mkRegex "TIMEOUT")) $
 		   filter (not . null) dat)
@@ -336,7 +335,7 @@ main = do
  putStrLn$ "Now generating final plot files...\n\n"
 
  let summarize hnd = do 
-       hPutStrLn hnd $ "# Benchmark, scheduler, best #threads, best median time, max parallel speedup: "
+       hPutStrLn hnd $ "# Benchmark, variant, best #threads, best median time, max parallel speedup: "
        hPutStrLn hnd $ "# Summary for " ++ file
 
        let pads n s = take (n - length s) $ repeat ' '

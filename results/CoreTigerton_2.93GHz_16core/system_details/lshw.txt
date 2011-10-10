@@ -1,0 +1,718 @@
+hulk.soic.indiana.edu
+    description: Computer
+    width: 64 bits
+    capabilities: vsyscall64 vsyscall32
+  *-core
+       description: Motherboard
+       physical id: 0
+     *-memory
+          description: System memory
+          physical id: 0
+          size: 31GiB
+     *-cpu:0
+          product: Intel(R) Xeon(R) CPU           X7350  @ 2.93GHz
+          vendor: Intel Corp.
+          physical id: 1
+          bus info: cpu@0
+          size: 2933MHz
+          capacity: 2933MHz
+          width: 64 bits
+          capabilities: fpu fpu_exception wp vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx x86-64 constant_tsc arch_perfmon pebs bts rep_good aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm dca lahf_lm tpr_shadow vnmi flexpriority cpufreq
+     *-cpu:1
+          product: Intel(R) Xeon(R) CPU           X7350  @ 2.93GHz
+          vendor: Intel Corp.
+          physical id: 2
+          bus info: cpu@1
+          size: 1600MHz
+          capacity: 1600MHz
+          width: 64 bits
+          capabilities: fpu fpu_exception wp vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx x86-64 constant_tsc arch_perfmon pebs bts rep_good aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm dca lahf_lm tpr_shadow vnmi flexpriority cpufreq
+     *-cpu:2
+          product: Intel(R) Xeon(R) CPU           X7350  @ 2.93GHz
+          vendor: Intel Corp.
+          physical id: 3
+          bus info: cpu@2
+          size: 2933MHz
+          capacity: 2933MHz
+          width: 64 bits
+          capabilities: fpu fpu_exception wp vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx x86-64 constant_tsc arch_perfmon pebs bts rep_good aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm dca lahf_lm tpr_shadow vnmi flexpriority cpufreq
+     *-cpu:3
+          product: Intel(R) Xeon(R) CPU           X7350  @ 2.93GHz
+          vendor: Intel Corp.
+          physical id: 4
+          bus info: cpu@3
+          size: 1600MHz
+          capacity: 1600MHz
+          width: 64 bits
+          capabilities: fpu fpu_exception wp vme de pse tsc msr pae mce cx8 apic mtrr pge mca cmov pat pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx x86-64 constant_tsc arch_perfmon pebs bts rep_good aperfmperf pni dtes64 monitor ds_cpl vmx est tm2 ssse3 cx16 xtpr pdcm dca lahf_lm tpr_shadow vnmi flexpriority cpufreq
+     *-pci:0
+          description: Host bridge
+          product: 7300 Chipset Memory Controller Hub
+          vendor: Intel Corporation
+          physical id: 100
+          bus info: pci@0000:00:00.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+        *-pci:0
+             description: PCI bridge
+             product: 7300 Chipset PCI Express Port 1
+             vendor: Intel Corporation
+             physical id: 1
+             bus info: pci@0000:00:01.0
+             version: 01
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:56
+        *-pci:1
+             description: PCI bridge
+             product: 7300 Chipset PCI Express Port 2
+             vendor: Intel Corporation
+             physical id: 2
+             bus info: pci@0000:00:02.0
+             version: 01
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:57 ioport:e000(size=4096) memory:de100000-de3fffff
+           *-pci:0
+                description: PCI bridge
+                product: 6311ESB/6321ESB PCI Express Upstream Port
+                vendor: Intel Corporation
+                physical id: 0
+                bus info: pci@0000:16:00.0
+                version: 01
+                width: 32 bits
+                clock: 33MHz
+                capabilities: pci normal_decode bus_master cap_list
+                resources: ioport:e000(size=4096) memory:de200000-de3fffff
+              *-pci:0
+                   description: PCI bridge
+                   product: 6311ESB/6321ESB PCI Express Downstream Port E1
+                   vendor: Intel Corporation
+                   physical id: 0
+                   bus info: pci@0000:17:00.0
+                   version: 01
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   resources: ioport:e000(size=4096) memory:de200000-de3fffff
+                 *-storage
+                      description: RAID bus controller
+                      product: MegaRAID SAS 1078
+                      vendor: LSI Logic / Symbios Logic
+                      physical id: 0
+                      bus info: pci@0000:19:00.0
+                      version: 04
+                      width: 64 bits
+                      clock: 33MHz
+                      capabilities: storage bus_master cap_list rom
+                      configuration: driver=megaraid_sas latency=0
+                      resources: irq:17 memory:de380000-de3bffff ioport:ec00(size=256) memory:de3c0000-de3fffff memory:de200000-de207fff(prefetchable)
+              *-pci:1
+                   description: PCI bridge
+                   product: 6311ESB/6321ESB PCI Express Downstream Port E2
+                   vendor: Intel Corporation
+                   physical id: 1
+                   bus info: pci@0000:17:01.0
+                   version: 01
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+           *-pci:1
+                description: PCI bridge
+                product: 6311ESB/6321ESB PCI Express to PCI-X Bridge
+                vendor: Intel Corporation
+                physical id: 0.3
+                bus info: pci@0000:16:00.3
+                version: 01
+                width: 32 bits
+                clock: 33MHz
+                capabilities: pci normal_decode bus_master cap_list
+        *-pci:2
+             description: PCI bridge
+             product: 7300 Chipset PCI Express Port 3
+             vendor: Intel Corporation
+             physical id: 3
+             bus info: pci@0000:00:03.0
+             version: 01
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:58 memory:d6000000-ddffffff
+           *-pci
+                description: PCI bridge
+                product: PES24T6 PCI Express Switch
+                vendor: Integrated Device Technology, Inc.
+                physical id: 0
+                bus info: pci@0000:01:00.0
+                version: 0e
+                width: 32 bits
+                clock: 33MHz
+                capabilities: pci normal_decode bus_master cap_list
+                configuration: driver=pcieport
+                resources: irq:0 memory:d6000000-ddffffff
+              *-pci:0
+                   description: PCI bridge
+                   product: PES24T6 PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 1
+                   bus info: pci@0000:02:01.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:62
+              *-pci:1
+                   description: PCI bridge
+                   product: PES24T6 PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 2
+                   bus info: pci@0000:02:02.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:63 memory:d6000000-d7ffffff
+                 *-pci
+                      description: PCI bridge
+                      product: EPB PCI-Express to PCI-X Bridge
+                      vendor: Broadcom
+                      physical id: 0
+                      bus info: pci@0000:0a:00.0
+                      version: c3
+                      width: 32 bits
+                      clock: 33MHz
+                      capabilities: pci normal_decode bus_master cap_list
+                      resources: memory:d6000000-d7ffffff
+                    *-network DISABLED
+                         description: Ethernet interface
+                         product: NetXtreme II BCM5708 Gigabit Ethernet
+                         vendor: Broadcom Corporation
+                         physical id: 0
+                         bus info: pci@0000:0b:00.0
+                         logical name: eth3
+                         version: 12
+                         serial: 00:1e:4f:17:94:c6
+                         width: 64 bits
+                         clock: 66MHz
+                         capabilities: bus_master cap_list ethernet physical
+                         configuration: broadcast=yes driver=bnx2 driverversion=2.1.6 firmware=6.2.14 bc 5.0.4 latency=32 mingnt=64 multicast=yes
+                         resources: irq:18 memory:d6000000-d7ffffff
+              *-pci:2
+                   description: PCI bridge
+                   product: PES24T6 PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 3
+                   bus info: pci@0000:02:03.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:64 memory:d8000000-d9ffffff
+                 *-pci
+                      description: PCI bridge
+                      product: EPB PCI-Express to PCI-X Bridge
+                      vendor: Broadcom
+                      physical id: 0
+                      bus info: pci@0000:08:00.0
+                      version: c3
+                      width: 32 bits
+                      clock: 33MHz
+                      capabilities: pci normal_decode bus_master cap_list
+                      resources: memory:d8000000-d9ffffff
+                    *-network DISABLED
+                         description: Ethernet interface
+                         product: NetXtreme II BCM5708 Gigabit Ethernet
+                         vendor: Broadcom Corporation
+                         physical id: 0
+                         bus info: pci@0000:09:00.0
+                         logical name: eth2
+                         version: 12
+                         serial: 00:1e:4f:17:94:c4
+                         width: 64 bits
+                         clock: 66MHz
+                         capabilities: bus_master cap_list ethernet physical
+                         configuration: broadcast=yes driver=bnx2 driverversion=2.1.6 firmware=6.2.14 bc 5.0.4 latency=32 mingnt=64 multicast=yes
+                         resources: irq:19 memory:d8000000-d9ffffff
+              *-pci:3
+                   description: PCI bridge
+                   product: PES24T6 PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 4
+                   bus info: pci@0000:02:04.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:65 memory:da000000-dbffffff
+                 *-pci
+                      description: PCI bridge
+                      product: EPB PCI-Express to PCI-X Bridge
+                      vendor: Broadcom
+                      physical id: 0
+                      bus info: pci@0000:06:00.0
+                      version: c3
+                      width: 32 bits
+                      clock: 33MHz
+                      capabilities: pci normal_decode bus_master cap_list
+                      resources: memory:da000000-dbffffff
+                    *-network
+                         description: Ethernet interface
+                         product: NetXtreme II BCM5708 Gigabit Ethernet
+                         vendor: Broadcom Corporation
+                         physical id: 0
+                         bus info: pci@0000:07:00.0
+                         logical name: eth1
+                         version: 12
+                         serial: 00:1e:4f:17:94:c2
+                         width: 64 bits
+                         clock: 66MHz
+                         capabilities: bus_master cap_list ethernet physical
+                         configuration: broadcast=yes driver=bnx2 driverversion=2.1.6 firmware=6.2.14 bc 5.0.4 UMP 1.1.9 ip=192.168.247.17 latency=32 mingnt=64 multicast=yes
+                         resources: irq:73 memory:da000000-dbffffff
+              *-pci:4
+                   description: PCI bridge
+                   product: PES24T6 PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 5
+                   bus info: pci@0000:02:05.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:66 memory:dc000000-ddffffff
+                 *-pci
+                      description: PCI bridge
+                      product: EPB PCI-Express to PCI-X Bridge
+                      vendor: Broadcom
+                      physical id: 0
+                      bus info: pci@0000:04:00.0
+                      version: c3
+                      width: 64 bits
+                      clock: 33MHz
+                      capabilities: pci normal_decode bus_master cap_list
+                      resources: iomemory:220001f10-220001f0f memory:dc000000-ddffffff
+                    *-network
+                         description: Ethernet interface
+                         product: NetXtreme II BCM5708 Gigabit Ethernet
+                         vendor: Broadcom Corporation
+                         physical id: 0
+                         bus info: pci@0000:05:00.0
+                         logical name: eth0
+                         version: 12
+                         serial: 00:1e:4f:17:94:c0
+                         width: 64 bits
+                         clock: 66MHz
+                         capabilities: bus_master cap_list ethernet physical
+                         configuration: broadcast=yes driver=bnx2 driverversion=2.1.6 firmware=6.2.14 bc 5.0.4 UMP 1.1.9 ip=129.79.247.103 latency=32 mingnt=64 multicast=yes
+                         resources: irq:72 memory:dc000000-ddffffff
+        *-pci:3
+             description: PCI bridge
+             product: 7300 Chipset PCI Express Port 4
+             vendor: Intel Corporation
+             physical id: 4
+             bus info: pci@0000:00:04.0
+             version: 01
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:59
+           *-pci
+                description: PCI bridge
+                product: PES24N3A PCI Express Switch
+                vendor: Integrated Device Technology, Inc.
+                physical id: 0
+                bus info: pci@0000:0c:00.0
+                version: 0e
+                width: 64 bits
+                clock: 33MHz
+                capabilities: pci normal_decode bus_master cap_list
+                configuration: driver=pcieport
+                resources: iomemory:f00-eff irq:0
+              *-pci:0
+                   description: PCI bridge
+                   product: PES24N3A PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 2
+                   bus info: pci@0000:0d:02.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:67
+              *-pci:1
+                   description: PCI bridge
+                   product: PES24N3A PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 4
+                   bus info: pci@0000:0d:04.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:68
+        *-pci:4
+             description: PCI bridge
+             product: 7300 Chipset PCI Express Port 6
+             vendor: Intel Corporation
+             physical id: 6
+             bus info: pci@0000:00:06.0
+             version: 01
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:60
+           *-pci
+                description: PCI bridge
+                product: PES24N3A PCI Express Switch
+                vendor: Integrated Device Technology, Inc.
+                physical id: 0
+                bus info: pci@0000:10:00.0
+                version: 0e
+                width: 32 bits
+                clock: 33MHz
+                capabilities: pci normal_decode bus_master cap_list
+                configuration: driver=pcieport
+                resources: irq:0
+              *-pci:0
+                   description: PCI bridge
+                   product: PES24N3A PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 2
+                   bus info: pci@0000:11:02.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:69
+              *-pci:1
+                   description: PCI bridge
+                   product: PES24N3A PCI Express Switch
+                   vendor: Integrated Device Technology, Inc.
+                   physical id: 4
+                   bus info: pci@0000:11:04.0
+                   version: 0e
+                   width: 32 bits
+                   clock: 33MHz
+                   capabilities: pci normal_decode bus_master cap_list
+                   configuration: driver=pcieport
+                   resources: irq:70
+        *-generic
+             description: System peripheral
+             product: 7300 Chipset QuickData Technology Device
+             vendor: Intel Corporation
+             physical id: 8
+             bus info: pci@0000:00:08.0
+             version: 01
+             width: 64 bits
+             clock: 33MHz
+             capabilities: bus_master cap_list
+             configuration: driver=ioatdma latency=0
+             resources: irq:71 memory:de0ff800-de0ffbff
+        *-pci:5
+             description: PCI bridge
+             product: 631xESB/632xESB/3100 Chipset PCI Express Root Port 1
+             vendor: Intel Corporation
+             physical id: 1c
+             bus info: pci@0000:00:1c.0
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci normal_decode bus_master cap_list
+             configuration: driver=pcieport
+             resources: irq:61 ioport:1000(size=4096) memory:80000000-801fffff memory:80200000-803fffff(prefetchable)
+        *-usb:0
+             description: USB Controller
+             product: 631xESB/632xESB/3100 Chipset UHCI USB Controller #1
+             vendor: Intel Corporation
+             physical id: 1d
+             bus info: pci@0000:00:1d.0
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: uhci bus_master
+             configuration: driver=uhci_hcd latency=0
+             resources: irq:20 ioport:cc80(size=32)
+           *-usbhost
+                product: UHCI Host Controller
+                vendor: Linux 2.6.32-131.12.1.el6.x86_64 uhci_hcd
+                physical id: 1
+                bus info: usb@2
+                logical name: usb2
+                version: 2.06
+                capabilities: usb-1.10
+                configuration: driver=hub slots=2 speed=12Mbit/s
+        *-usb:1
+             description: USB Controller
+             product: 631xESB/632xESB/3100 Chipset UHCI USB Controller #2
+             vendor: Intel Corporation
+             physical id: 1d.1
+             bus info: pci@0000:00:1d.1
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: uhci bus_master
+             configuration: driver=uhci_hcd latency=0
+             resources: irq:20 ioport:cca0(size=32)
+           *-usbhost
+                product: UHCI Host Controller
+                vendor: Linux 2.6.32-131.12.1.el6.x86_64 uhci_hcd
+                physical id: 1
+                bus info: usb@3
+                logical name: usb3
+                version: 2.06
+                capabilities: usb-1.10
+                configuration: driver=hub slots=2 speed=12Mbit/s
+              *-usb
+                   description: Keyboard
+                   product: Dell 03R874
+                   vendor: Avocent
+                   physical id: 1
+                   bus info: usb@3:1
+                   version: 1.00
+                   capabilities: usb-1.10
+                   configuration: driver=usbhid maxpower=100mA speed=2Mbit/s
+        *-usb:2
+             description: USB Controller
+             product: 631xESB/632xESB/3100 Chipset UHCI USB Controller #3
+             vendor: Intel Corporation
+             physical id: 1d.2
+             bus info: pci@0000:00:1d.2
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: uhci bus_master
+             configuration: driver=uhci_hcd latency=0
+             resources: irq:20 ioport:ccc0(size=32)
+           *-usbhost
+                product: UHCI Host Controller
+                vendor: Linux 2.6.32-131.12.1.el6.x86_64 uhci_hcd
+                physical id: 1
+                bus info: usb@4
+                logical name: usb4
+                version: 2.06
+                capabilities: usb-1.10
+                configuration: driver=hub slots=2 speed=12Mbit/s
+        *-usb:3
+             description: USB Controller
+             product: 631xESB/632xESB/3100 Chipset UHCI USB Controller #4
+             vendor: Intel Corporation
+             physical id: 1d.3
+             bus info: pci@0000:00:1d.3
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: uhci bus_master
+             configuration: driver=uhci_hcd latency=0
+             resources: irq:20 ioport:cce0(size=32)
+           *-usbhost
+                product: UHCI Host Controller
+                vendor: Linux 2.6.32-131.12.1.el6.x86_64 uhci_hcd
+                physical id: 1
+                bus info: usb@5
+                logical name: usb5
+                version: 2.06
+                capabilities: usb-1.10
+                configuration: driver=hub slots=2 speed=12Mbit/s
+        *-usb:4
+             description: USB Controller
+             product: 631xESB/632xESB/3100 Chipset EHCI USB2 Controller
+             vendor: Intel Corporation
+             physical id: 1d.7
+             bus info: pci@0000:00:1d.7
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: ehci bus_master cap_list
+             configuration: driver=ehci_hcd latency=0
+             resources: irq:21 memory:de0ffc00-de0fffff
+           *-usbhost
+                product: EHCI Host Controller
+                vendor: Linux 2.6.32-131.12.1.el6.x86_64 ehci_hcd
+                physical id: 1
+                bus info: usb@1
+                logical name: usb1
+                version: 2.06
+                capabilities: usb-2.00
+                configuration: driver=hub slots=8 speed=480Mbit/s
+              *-usb:0
+                   description: USB hub
+                   product: Hub
+                   vendor: Winbond Electronics
+                   physical id: 2
+                   bus info: usb@1:2
+                   version: 0.00
+                   capabilities: usb-2.00
+                   configuration: driver=hub maxpower=100mA slots=2 speed=480Mbit/s
+                 *-usb
+                      description: Keyboard
+                      product: DRAC5
+                      vendor: Winbond Electronics
+                      physical id: 1
+                      bus info: usb@1:2.1
+                      version: 0.00
+                      serial: 0000000
+                      capabilities: usb-1.10
+                      configuration: driver=usbhid speed=12Mbit/s
+              *-usb:1
+                   description: USB hub
+                   product: CY7C65640 USB-2.0 "TetraHub"
+                   vendor: Cypress Semiconductor Corp.
+                   physical id: 7
+                   bus info: usb@1:7
+                   version: 90.15
+                   capabilities: usb-2.00
+                   configuration: driver=hub maxpower=174mA slots=2 speed=480Mbit/s
+                 *-usb
+                      description: USB hub
+                      product: CY7C65640 USB-2.0 "TetraHub"
+                      vendor: Cypress Semiconductor Corp.
+                      physical id: 1
+                      bus info: usb@1:7.1
+                      version: 90.15
+                      capabilities: usb-2.00
+                      configuration: driver=hub maxpower=174mA slots=2 speed=480Mbit/s
+        *-pci:6
+             description: PCI bridge
+             product: 82801 PCI Bridge
+             vendor: Intel Corporation
+             physical id: 1e
+             bus info: pci@0000:00:1e.0
+             version: d9
+             width: 32 bits
+             clock: 33MHz
+             capabilities: pci subtractive_decode bus_master cap_list
+             resources: ioport:d000(size=4096) memory:de400000-de4fffff ioport:c8000000(size=134217728)
+           *-display
+                description: VGA compatible controller
+                product: ES1000
+                vendor: ATI Technologies Inc
+                physical id: c
+                bus info: pci@0000:1b:0c.0
+                version: 02
+                width: 32 bits
+                clock: 33MHz
+                capabilities: vga_controller bus_master cap_list rom
+                configuration: driver=radeon latency=32 mingnt=8
+                resources: irq:17 memory:c8000000-cfffffff(prefetchable) ioport:dc00(size=256) memory:de4f0000-de4fffff memory:de400000-de41ffff(prefetchable)
+        *-isa
+             description: ISA bridge
+             product: 631xESB/632xESB/3100 Chipset LPC Interface Controller
+             vendor: Intel Corporation
+             physical id: 1f
+             bus info: pci@0000:00:1f.0
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: isa bus_master
+             configuration: latency=0
+        *-ide
+             description: IDE interface
+             product: 631xESB/632xESB IDE Controller
+             vendor: Intel Corporation
+             physical id: 1f.1
+             bus info: pci@0000:00:1f.1
+             version: 09
+             width: 32 bits
+             clock: 33MHz
+             capabilities: ide bus_master
+             configuration: driver=ata_piix latency=0
+             resources: irq:0 ioport:1f0(size=8) ioport:3f6 ioport:170(size=8) ioport:376 ioport:fc00(size=16)
+     *-pci:1
+          description: Host bridge
+          product: 7300 Chipset FSB Registers
+          vendor: Intel Corporation
+          physical id: 101
+          bus info: pci@0000:00:10.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+          configuration: driver=i7300_edac
+          resources: irq:0
+     *-pci:2
+          description: Host bridge
+          product: 7300 Chipset FSB Registers
+          vendor: Intel Corporation
+          physical id: 102
+          bus info: pci@0000:00:10.1
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:3
+          description: Host bridge
+          product: 7300 Chipset FSB Registers
+          vendor: Intel Corporation
+          physical id: 103
+          bus info: pci@0000:00:10.2
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:4
+          description: Host bridge
+          product: 7300 Chipset FSB Registers
+          vendor: Intel Corporation
+          physical id: 104
+          bus info: pci@0000:00:10.3
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:5
+          description: Host bridge
+          product: 7300 Chipset Snoop Filter Registers
+          vendor: Intel Corporation
+          physical id: 105
+          bus info: pci@0000:00:11.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:6
+          description: Host bridge
+          product: 7300 Chipset Snoop Filter Registers
+          vendor: Intel Corporation
+          physical id: 106
+          bus info: pci@0000:00:11.3
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:7
+          description: Host bridge
+          product: 7300 Chipset Debug and Miscellaneous Registers
+          vendor: Intel Corporation
+          physical id: 107
+          bus info: pci@0000:00:13.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:8
+          description: Host bridge
+          product: 7300 Chipset FBD Branch 0 Registers
+          vendor: Intel Corporation
+          physical id: 108
+          bus info: pci@0000:00:15.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
+     *-pci:9
+          description: Host bridge
+          product: 7300 Chipset FBD Branch 1 Registers
+          vendor: Intel Corporation
+          physical id: 109
+          bus info: pci@0000:00:16.0
+          version: 01
+          width: 32 bits
+          clock: 33MHz
