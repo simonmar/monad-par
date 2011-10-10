@@ -93,7 +93,8 @@ module Control.Monad.Par (
     InclusiveRange(..),
     parFor,
 
-  ) where
+    unsafeIO -- Dangerous.  To be used like Debug.Trace
+ ) where
 
 import Control.Monad.Par.Internal
 import Control.DeepSeq
@@ -101,7 +102,8 @@ import Data.Traversable
 import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 
-import GHC.Conc (numCapabilities)
+import GHC.Conc (numCapabilities, pseq)
+import System.IO.Unsafe (unsafePerformIO)
 
 -- -----------------------------------------------------------------------------
 
@@ -294,5 +296,4 @@ for_ start end fn = loop start
   loop !i | i == end  = return ()
 	  | otherwise = do fn i; loop (i+1)
 
-
-
+unsafeIO io = Par $ \c -> unsafePerformIO io `pseq` (c ())

@@ -1,0 +1,4 @@
+Linux hulk.soic.indiana.edu 2.6.32-131.12.1.el6.x86_64 #1 SMP Sun Jul 31 16:44:56 EDT 2011 x86_64 x86_64 x86_64 GNU/Linux
+Red Hat Enterprise Linux Server release 6.1 (Santiago)
+Kernel \r on an \m
+
