@@ -1,5 +1,7 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP, ScopedTypeVariables
+             ExistentialQuantification, CPP, ScopedTypeVariables,
+             TypeSynonymInstances, MultiParamTypeClasses,
+             GeneralizedNewtypeDeriving
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
@@ -63,7 +65,8 @@ dbg = True
 -- Note that the result type for continuations is unit.  Forked
 -- computations return nothing.
 --
-type Par a = C.ContT () ROnly a
+newtype Par a = Par { unPar :: C.ContT () ROnly a }
+    deriving (Monad, MonadIO, MonadCont, R.MonadReader Sched)
 type ROnly = R.ReaderT Sched IO
 
 data Sched = Sched 
@@ -297,14 +300,14 @@ runPar userComp = unsafePerformIO $ do
 				      put_ (IVar rref) res
 
 		  
-		  R.runReaderT (C.runContT userComp' trivialCont) state
+		  R.runReaderT (C.runContT (unPar userComp') trivialCont) state
 
                   when dbg$ putStrLn " *** Completely out of users computation.  Writing final value."
                   readIORef rref >>= putMVar m
-
    r <- takeMVar m
    case r of
      Full a -> return a
+     Blocked cs -> error "Work still blocked at end of Par computation. Something went wrong."
      _ -> error "No result from Par computation.  Something went wrong."
 
 
@@ -416,7 +419,7 @@ fork task = do
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
 reschedule :: Par a 
-reschedule = C.ContT rescheduleR
+reschedule = Par $ C.ContT rescheduleR
 
 -- Reschedule ignores its continuation:
 rescheduleR :: ignoredCont -> ROnly ()
@@ -429,7 +432,7 @@ rescheduleR k = do
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ liftIO$ printf "  popped work from own queue (cpu %d)\n" (no mysched)
-       let C.ContT fn = task 
+       let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
        fn (\ () -> do 
            sch <- R.ask
@@ -490,7 +493,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
            Just task  -> do
               when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
 	      runReaderWith mysched $ 
-		C.runContT task
+		C.runContT (unPar task)
 		 (\_ -> do
 		   when dbg$ liftIO$ printf "cpu %d DONE running stolen work from %d\n" my_no (no schd)
 		   return ())
@@ -530,3 +533,13 @@ spawn_ :: Par a -> Par (IVar a)
 spawn_ p = do r <- new
 	      fork (p >>= put_ r)
 	      return r
+
+--------------------------------------------------------------------------------
+-- MonadPar instance for IO; TEMPORARY
+--------------------------------------------------------------------------------
+
+instance PC.MonadPar Par IVar where
+    get = get
+    fork = fork
+    new = new
+    put_ = put_
