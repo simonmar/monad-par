@@ -304,10 +304,10 @@ runPar userComp = unsafePerformIO $ do
 
                   when dbg$ putStrLn " *** Completely out of users computation.  Writing final value."
                   readIORef rref >>= putMVar m
-
    r <- takeMVar m
    case r of
      Full a -> return a
+     Blocked cs -> error "Work still blocked at end of Par computation. Something went wrong."
      _ -> error "No result from Par computation.  Something went wrong."
 
 
