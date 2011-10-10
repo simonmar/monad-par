@@ -6,11 +6,11 @@
 module Control.Monad.Par 
  (
    module Control.Monad.Par.Class,
-   module Control.Monad.Par.Scheds.Trace 
+   module Control.Monad.Par.Scheds.Direct
  )
 where 
 
 import Control.Monad.Par.Class
-import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
+import Control.Monad.Par.Scheds.Direct hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
 
 

@@ -13,47 +13,52 @@
  -}
 
 module Control.Monad.Par.Class 
-  ( ParFuture(..)
-  , ParIVar(..)
-  , ParChan(..)
+  ( MonadPar(..)
+--  , ParFuture(..)
+--  , ParIVar(..)
+--  , ParChan(..)
   , ParDist(..)
-  , ParGettable(..)
+--  , ParGettable(..)
   )
 where
 
 import Control.DeepSeq
--- import qualified Control.Monad.Par as P
+-- import qualified Control.Monad.Par.Scheds.Direct as P
 
 --------------------------------------------------------------------------------
 -- The basic layers of the Par monad vary in what data structures they
--- support (Futures, IVars, Streams.)
+-- support (Futures, IVars, Streams.) Eventually, we would like the
+-- class structure to reflect this. For now, though, a monolithic
+-- class allows simpler experimentation
 --------------------------------------------------------------------------------
 
-class Monad m => ParGettable m var | m -> var where
+class Monad m => MonadPar m var | m -> var where
   get :: var a -> m a
-
-class ParGettable m future => ParFuture m future | m -> future where
-  spawn  :: NFData a => m a -> m (future a)
-  spawn_ :: m a -> m (future a)
-
-class ParGettable m ivar => ParIVar m ivar | m -> ivar where
+  spawn  :: NFData a => m a -> m (var a)
+  spawn p = do r <- new
+	       fork (p >>= put r)
+	       return r
+  spawn_ :: m a -> m (var a)
+  spawn_ p = do r <- new
+		fork (p >>= put_ r)
+		return r
   fork :: m () -> m ()
-  new  :: m (ivar a)
-  put_ :: ivar a -> a -> m ()
-  put  :: NFData a => ivar a -> a -> m ()
+  new  :: m (var a)
+  put_ :: var a -> a -> m ()
+  put  :: NFData a => var a -> a -> m ()
   put v a = deepseq a (put_ v a)
 
   -- TODO: I think we should add yield officially:
 --  yield  :: m ()
 
   -- Extra API routines that have default implementations:
-  newFull_ ::  a -> m (ivar a)
+  newFull_ ::  a -> m (var a)
   -- The following is usually inefficient! 
   newFull_ a = do v <- new
 		  put_ v a
 		  return v
 
-  newFull :: NFData a => a -> m (ivar a)
+  newFull :: NFData a => a -> m (var a)
   newFull a = deepseq a (newFull_ a)
 
 -- class ParStream m strm | m -> strm where
@@ -83,7 +88,7 @@ class Monad m => ParDist m ivar | m -> ivar where
 
 ----------------------------------------------------------------------------------------------------
 
-#if 1
+#if 0
 instance ParIVar m var => ParFuture m var where 
   spawn p = do r <- new
 	       fork (p >>= put r)
@@ -98,12 +103,12 @@ instance ParIVar m var => ParFuture m var where
 -- t1 :: P.Par Int
 -- If the ParIVar => ParFuture instance exists the following is sufficient:
 -- t1 :: ParIVar m v => m Int
-t1 :: (ParIVar m v, ParFuture m v) => m Int
+t1 :: (MonadPar m v) => m Int
 t1 = do 
   x <- spawn (return 3)
   get x
 
-t2 :: (ParIVar m v) => m Int
+t2 :: (MonadPar m v) => m Int
 t2 = do 
   x <- new
   put x "hi"
