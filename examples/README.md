@@ -8,10 +8,14 @@ benchmarks as well.
 
 The primary commands of interest in this directory are:
 
+    make deps
     make
     make test
 
-As well as more extensive benchmarking.  Ranging from the simple:
+Make deps will install package dependencies that aren't already
+installed by monad-par itself.
+
+Also, this directory provides benchmarking.  Ranging from the simple:
 
     SHORTRUN=1 THREADSETTINGS="1" ./benchmark.sh
 

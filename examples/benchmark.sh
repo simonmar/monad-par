@@ -38,9 +38,10 @@ if [ "$GHC" == "" ];  then GHC=ghc; fi
 # control systems I run into permissions problems sometimes:
 chmod +x ./ntime* ./*.sh
 
+NAME=`hostname -s`
 
 # Where to put the timing results:
-RESULTS=results_"$HOSTNAME".dat
+RESULTS=results_"$NAME".dat
 if [ -e $RESULTS ];
 then BAK="$RESULTS".bak.`date +%s`
      echo "Backing up old results to $BAK"
@@ -68,7 +69,9 @@ then THREADSETTINGS="$MAXTHREADS"
 fi
 
 GHC_FLAGS="$GHC_FLAGS -O2 -rtsopts"
-GHC_RTS="$GHC_RTS -qa"
+if [ "$GHC_RTS" == "" ]; then
+  GHC_RTS="-qa"
+fi
 
 # ================================================================================
 echo "# TestName Variant NumThreads   MinTime MedianTime MaxTime" > $RESULTS

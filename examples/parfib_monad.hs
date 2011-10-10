@@ -1,4 +1,4 @@
-
+{-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
 import Control.Monad.Par
@@ -7,23 +7,6 @@ import Control.Monad.Par
 import GHC.Conc
 
 type FibType = Int64
-
--- sequential version of the code
-fib :: FibType -> FibType
-fib 0 = 1
-fib 1 = 1
-fib x = fib (x-2) + fib (x-1) + 1
-
-
--- Basic, non-monadic parallel-fib:
-parfib0 :: FibType -> FibType
-parfib0 n | n < 2 = 1 
-parfib0 n = x `par` y `pseq` (x+y)
-  where 
-     x = parfib0 (n-1)
-     y = parfib0 (n-2)  
-
-
 
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1 
@@ -37,16 +20,14 @@ parfib1 n =
 main = do args <- getArgs	  
           let (version,size) = 
                    case args of 
-		      []    -> ("monad",10)
-		      [v,n] -> (v,read n)
+		      []    -> ("trace",10)
+		      [v,n] -> (v      ,read n)
 
 	  case version of 
-	    "monad"  -> do 
-			   putStrLn "Monad-par based version:"
+	    "trace"  -> do 
+			   putStrLn "Trace-based monad-par version:"
 			   print$ runPar$ parfib1 size
-	    "sparks" -> do 
-           	           putStrLn "Sparks-based, Non-monadic version:"
-		           print$ parfib0 size
+
 	    _        -> error$ "unknown version: "++version
 
 
