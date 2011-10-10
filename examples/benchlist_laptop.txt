@@ -1,10 +1,20 @@
 # A simple command/argument data file with hashed-comments.
 #
 # This file contains a pared down benchmark suite for typical dual-core laptops.
+#
+# Version: laptop v??
+# 
+# I'm attempting to keep track of changes to this config with the above.
+# Note that changes to the benchmarks themselves also require changing
+# this version number.
+# 
+# CHANGELOG:
+# 
 
-parfib monad  34
-parfib sparks 34
+parfib_monad trace 34
+parfib_pseq        34
 
+# TODO: size the rest of the benchmarks:
 # blackscholes 10000 15000000
 
 # cholesky 1000 50 cholesky_matrix1000.dat
