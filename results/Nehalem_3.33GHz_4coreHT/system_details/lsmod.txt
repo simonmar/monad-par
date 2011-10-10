@@ -1,0 +1,78 @@
+Module                  Size  Used by
+hid_apple              13324  0 
+usbhid                 46956  0 
+hid                    91020  2 hid_apple,usbhid
+binfmt_misc            17565  1 
+vboxnetadp             13340  0 
+vboxnetflt             28297  0 
+vboxdrv               252684  2 vboxnetadp,vboxnetflt
+kvm_intel              56851  0 
+kvm                   367707  1 kvm_intel
+deflate                12661  0 
+zlib_deflate           27074  1 deflate
+ctr                    13101  0 
+twofish_generic        16635  0 
+twofish_x86_64         12567  0 
+twofish_common         20919  2 twofish_generic,twofish_x86_64
+camellia               29348  0 
+serpent                29125  0 
+blowfish               16762  0 
+cast5                  25112  0 
+des_generic            21415  0 
+cryptd                 20510  0 
+aes_x86_64             17208  0 
+aes_generic            38279  1 aes_x86_64
+xcbc                   12815  0 
+rmd160                 16744  0 
+sha512_generic         12796  0 
+sha256_generic         21031  0 
+sha1_generic           12679  0 
+crypto_null            12918  0 
+af_key                 36335  0 
+dm_crypt               22993  0 
+vesafb                 13761  1 
+snd_hda_codec_realtek   336771  1 
+nvidia              10709116  0 
+snd_hda_intel          33211  2 
+ppdev                  17113  0 
+snd_hda_codec         103804  2 snd_hda_codec_realtek,snd_hda_intel
+snd_hwdep              13604  1 snd_hda_codec
+snd_pcm                96391  2 snd_hda_intel,snd_hda_codec
+snd_seq_midi           13324  0 
+snd_rawmidi            30486  1 snd_seq_midi
+snd_seq_midi_event     14899  1 snd_seq_midi
+snd_seq                61621  2 snd_seq_midi,snd_seq_midi_event
+snd_timer              29602  2 snd_pcm,snd_seq
+snd_seq_device         14462  3 snd_seq_midi,snd_rawmidi,snd_seq
+psmouse                73535  0 
+serio_raw              13166  0 
+snd                    67382  13 snd_hda_codec_realtek,snd_hda_intel,snd_hda_codec,snd_hwdep,snd_pcm,snd_rawmidi,snd_seq,snd_timer,snd_seq_device
+soundcore              12680  1 snd
+i7core_edac            27903  0 
+snd_page_alloc         18529  2 snd_hda_intel,snd_pcm
+edac_core              53845  1 i7core_edac
+parport_pc             36959  1 
+lp                     17825  0 
+parport                46458  3 ppdev,parport_pc,lp
+raid10                 30673  0 
+raid456                62777  0 
+async_pq               12995  1 raid456
+async_xor              12879  2 raid456,async_pq
+ses                    17321  0 
+async_memcpy           12529  1 raid456
+async_raid6_recov      12776  1 raid456
+enclosure              15217  1 ses
+raid6_pq               88307  2 async_pq,async_raid6_recov
+async_tx               13349  5 raid456,async_pq,async_xor,async_memcpy,async_raid6_recov
+raid0                  17271  0 
+multipath              13187  0 
+linear                 12966  0 
+dm_raid45              77827  0 
+xor                    12890  2 async_xor,dm_raid45
+raid1                  30596  1 
+usb_storage            53538  0 
+uas                    17996  0 
+ahci                   25951  3 
+libahci                26642  1 ahci
+r8169                  48022  0 
+pata_jmicron           12747  0 

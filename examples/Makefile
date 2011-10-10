@@ -1,8 +1,9 @@
 include common.mk
 
 # 9 benchmarks
-BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs parfib.hs \
-            primes.hs cholesky.hs parfib.hs coins.hs
+BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
+            parfib_monad.hs parfib_pseq.hs \
+            primes.hs cholesky.hs coins.hs
 
 # binomial_lattice.hs
 EXES= $(BENCHMARKS:.hs=.exe)
@@ -69,6 +70,7 @@ install-deps: deps
 deps:
 	cabal install parallel
 	cabal install fft
+	cabal install carray
 
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out *.exe
