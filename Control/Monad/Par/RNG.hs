@@ -3,8 +3,8 @@
              PackageImports, ScopedTypeVariables, MultiParamTypeClasses
 	     #-}
 
--- This provides an alternative to Control.Monad.Par which
--- deterministic parallel random number generation as an additional capability.
+-- | This module provides adds deterministic parallel random number
+--   generation as an additional capability for a 'Control.Monad.Par.Class.ParIVar' monad.
 
 module Control.Monad.Par.RNG
   ( 
@@ -87,7 +87,7 @@ fork (PRNG sm) = PRNG$
      S.put g1
      return ()
 
--- | `rand` is the only new method added by ParRNG over Par.
+-- | `rand` is the only new method added by ParRNG over `Control.Monad.Par.Class.ParIvar`.
 -- 
 --    It produce a randomized value and advances the RNG on the current
 --    thread of the parallel computation.  

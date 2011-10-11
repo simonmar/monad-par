@@ -21,9 +21,9 @@ module Main where
 
 import System.Environment (getArgs)
 
-import Control.Monad.Par
-
 import Control.Monad (when)
+import Control.Monad.Par
+import qualified Control.Monad.Par.Combinator as C
 
 import ListAux -- split/join functions, put in new module
 import SumEulerPrimes
@@ -133,7 +133,7 @@ sumEulerJFP_Final c n = sum ([(sum . map euler) x | x <- splitAtN c [n,n-1..0]]
 sumEuler_monadpar :: Int -> Int -> Int
 sumEuler_monadpar c n = runPar $
 --   sum `fmap` parMap (sum . map euler) (splitAtN c [n,n-1..0])
-   sum `fmap` parMap euler [n,n-1..0]
+   sum `fmap` C.parMap euler [n,n-1..0]
 
 
 -- -- using a fold-of-map strategy w/ folding inside a chunk

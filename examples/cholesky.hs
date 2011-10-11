@@ -81,6 +81,7 @@ import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
 import Control.Monad.Par
+import Control.Monad.Par.Combinator (pval)
 
 timeit io = 
     do strt <- getCurrentTime

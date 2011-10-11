@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.1.1.0
+Version:             0.2
 Synopsis:            A library for parallel programming based on a monad
 
 -- Version history:
@@ -8,7 +8,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.1.0.2  : 
 --  0.1.1.0  : module reorganization, moving ParClass
 
---  0.2 -- target, release with new API.
+--  0.2      : Bumped for new class-based API
 
 
 Description:         This library offers an alternative parallel programming
@@ -92,11 +92,12 @@ extra-source-files:
 Library
   Exposed-modules: Control.Monad.Par
                  , Control.Monad.Par.Class
+                 , Control.Monad.Par.Combinator
                  , Control.Monad.Par.RNG
                  , Control.Monad.Par.AList
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
-
+                 , Control.Monad.Par.Scheds.SerialElision
 
   Build-depends: base >= 4 && < 5
 -- The parallel package currently requires deepseq 1.1:
@@ -121,8 +122,9 @@ Library
   ghc-options: -O2
   Other-modules:
                  Control.Monad.Par.Stream
-               , Control.Monad.Par.Scheds.SerialElision
                , Control.Monad.Par.Scheds.Direct
+               , Control.Monad.Par.Logging
+               , Control.Monad.Par.IList
 -- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
                , Control.Monad.Par.Chan

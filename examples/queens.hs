@@ -4,6 +4,7 @@ import Control.Monad
 import Control.Seq
 
 import Control.Monad.Par
+import qualified Control.Monad.Par.Combinator as C
 -- import Control.Monad.Par_Strawman
 
 nqueens :: Int -> Par [[Int]]
@@ -15,7 +16,7 @@ nqueens nq = step 0 []
     step !n b
        | n >= threshold = return (iterate gen [b] !! (nq - n))
        | otherwise = do
-          rs <- parMapM (step (n+1)) (gen [b])
+          rs <- C.parMapM (step (n+1)) (gen [b])
           return (concat rs)
 
     safe :: Int -> Int -> [Int] -> Bool

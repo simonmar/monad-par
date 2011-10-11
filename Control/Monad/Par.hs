@@ -1,7 +1,7 @@
 
-{-| NOTE: This is a convenience module that reexports a default scheduler
-    and Par type classes and instances. Please see the interface
-    documentation in @Control.Monad.Par.Class@.
+{-| NOTE: This is a convenience module that reexports the Par type
+    classes and instances, together with a default scheduler. Please
+    see the interface documentation in "Control.Monad.Par.Class".
 
   The @monad-par@ package provides a family of @Par@ monads, for speeding up pure
   computations using parallel processors.  They cannot be used for

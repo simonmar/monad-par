@@ -5,7 +5,7 @@
 {-|
 
     This module establishes a class hierarchy that captures the
-    interface for valid Par monads.  In particular, the functionality
+    interface(s) for valid Par monads.  In particular, the functionality
     is split into layers: for example Futures vs. full IVars vs. Chans (Streams).  
 
     Not all Par monad schedulers must provide all functionality.
