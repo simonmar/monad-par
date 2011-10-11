@@ -18,7 +18,7 @@ module Control.Monad.Par.Scheds.SerialElision (
     Par, IVar, runPar, fork,
     new, newFull, newFull_,
     get, put, put_,
-    pval, spawn, spawn_,
+--    pval, spawn, spawn_
   ) where
 
 import qualified Control.Monad.Par.Class as PC
@@ -44,12 +44,10 @@ instance Monad Par where
   (P m) >>= f = P (m >>= unP . f)
   return x = P (return x)
 
--- instance PC.ParFuture Par IVar where 
---   get  = get
--- #include "par_instance_boilerplate.hs"
-
-instance PC.ParGettable Par IVar where 
+instance PC.ParFuture Par IVar where 
   get  = get
+#include "par_instance_boilerplate.hs"
+
 
 instance PC.ParIVar Par IVar where 
   fork = fork 
@@ -93,19 +91,3 @@ runPar (P m) =
   trace ("ParElision: Running with unsafeIO...")
   unsafePerformIO m 
 
-
---------------------------------------------------------------------------------
--- TEMP: Not strictly needed:
-
-pval :: NFData a => a -> Par (IVar a)
-spawn_ :: Par a -> Par (IVar a)
-spawn  :: NFData a => Par a -> Par (IVar a)
-
-pval a = spawn (P$ return a)
-spawn  (P m) = P$ do x <- m; 
-		     evaluate (rnf x); 
-		     ref <- newIORef (Just x); 
-		     return (I ref)
-spawn_ (P m) = P$ do x <- m; 
-		     ref <- newIORef (Just x); 
-		     return (I ref)

@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, MultiParamTypeClasses
+             ExistentialQuantification, MultiParamTypeClasses, CPP
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
@@ -115,30 +115,11 @@ fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 -- -----------------------------------------------------------------------------
 -- Derived functions
 
--- | Like 'spawn', but the result is only head-strict, not fully-strict.
-spawn_ :: Par a -> Par (IVar a)
-spawn_ p = do
-  r <- new
-  fork (p >>= put_ r)
-  return r
-
--- | Like 'fork', but returns a @IVar@ that can be used to query the
--- result of the forked computataion.
---
--- >  spawn p = do
--- >    r <- new
--- >    fork (p >>= put r)
--- >    return r
---
-spawn :: NFData a => Par a -> Par (IVar a)
-spawn p = do
-  r <- new
-  fork (p >>= put r)
-  return r
 
 -- | equivalent to @spawn . return@
 pval :: NFData a => a -> Par (IVar a)
 pval a = spawn (return a)
+-- TODO: ^^ Remove
 
 -- -----------------------------------------------------------------------------
 -- Parallel maps over Traversable data structures
@@ -295,14 +276,15 @@ for_ start end fn = loop start
   loop !i | i == end  = return ()
 	  | otherwise = do fn i; loop (i+1)
 
-
-
-
 -- --------------------------------------------------------------------------------
 -- -- Standard instances:
 
-instance PC.ParGettable Par IVar where
+#include "par_instance_boilerplate.hs"
+
+instance PC.ParFuture Par IVar where
   get = get
+  spawn = spawn
+  spawn_ = spawn_
 
 instance PC.ParIVar Par IVar where 
   fork = fork 
@@ -312,4 +294,3 @@ instance PC.ParIVar Par IVar where
   newFull  = newFull
   newFull_ = newFull_
 --  yield = yield
---  get  = get

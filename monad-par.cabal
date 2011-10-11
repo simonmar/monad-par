@@ -111,6 +111,7 @@ Library
                , vector
                , containers
                , mtl >= 2.0.1.0
+               , parallel
 
 -- NOTE!  These dependencies DO NOT include all dependencies required
 -- by the examples/benchmarks.  Run "make deps" in the examples

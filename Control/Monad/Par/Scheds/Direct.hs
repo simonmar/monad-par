@@ -336,7 +336,7 @@ makeScheds = do
 {-# INLINE new  #-}
 
 -- | creates a new @IVar@
-new :: Par (IVar a)
+-- new :: Par (IVar a)
 new  = liftIO $ do r <- newIORef Empty
                    return (IVar r)
 
@@ -538,8 +538,13 @@ spawn_ p = do r <- new
 -- MonadPar instance for IO; TEMPORARY
 --------------------------------------------------------------------------------
 
-instance PC.MonadPar Par IVar where
-    get = get
-    fork = fork
-    new = new
-    put_ = put_
+instance PC.ParFuture Par IVar where
+  get = get
+#include "par_instance_boilerplate.hs"
+
+instance PC.ParIVar Par IVar where
+  fork = fork
+  new  = new
+  put_ = put_
+  newFull = newFull
+  newFull_ = newFull_

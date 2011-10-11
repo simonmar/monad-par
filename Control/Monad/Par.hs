@@ -6,7 +6,8 @@
 module Control.Monad.Par 
  (
    module Control.Monad.Par.Class,
-   module Control.Monad.Par.Scheds.Direct
+   module Control.Monad.Par.Scheds.Trace
+--   module Control.Monad.Par.Scheds.Direct
  )
 where 
 
