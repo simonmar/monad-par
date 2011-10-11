@@ -243,50 +243,30 @@ runParAsync :: Par a -> a
 runParAsync = runPar_internal False
 
 -- | An alternative version in which the consumer of the result has
--- | the option to "help" run the Par computation if results it is
--- | interested in are not ready yet.
+--   the option to "help" run the Par computation if results it is
+--   interested in are not ready yet.
 runParAsyncHelper :: Par a -> (a, IO ())
 runParAsyncHelper = undefined -- TODO: Finish Me.
 
 -- -----------------------------------------------------------------------------
 
--- | creates a new @IVar@
 new :: Par (IVar a)
 new  = Par $ New Empty
 
--- | creates a new @IVar@ that contains a value
 newFull :: NFData a => a -> Par (IVar a)
 newFull x = deepseq x (Par $ New (Full x))
 
--- | creates a new @IVar@ that contains a value (head-strict only)
 newFull_ :: a -> Par (IVar a)
 newFull_ !x = Par $ New (Full x)
 
--- | read the value in a @IVar@.  The 'get' can only return when the
--- value has been written by a prior or parallel @put@ to the same
--- @IVar@.
 get :: IVar a -> Par a
 get v = Par $ \c -> Get v c
 
--- | like 'put', but only head-strict rather than fully-strict.
 put_ :: IVar a -> a -> Par ()
 put_ v !a = Par $ \c -> Put v a (c ())
 
--- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
--- are not allowed, and result in a runtime error.
---
--- 'put' fully evaluates its argument, which therefore must be an
--- instance of 'NFData'.  The idea is that this forces the work to
--- happen when we expect it, rather than being passed to the consumer
--- of the @IVar@ and performed later, which often results in less
--- parallelism than expected.
---
--- Sometimes partial strictness is more appropriate: see 'put_'.
---
 put :: NFData a => IVar a -> a -> Par ()
 put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
--- | Allows other parallel computations to progress.  (should not be
--- necessary in most cases).
 yield :: Par ()
 yield = Par $ \c -> Yield (c ())

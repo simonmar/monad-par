@@ -37,7 +37,7 @@ import GHC.Conc
 import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R
 -- import qualified Data.Array as A
-import qualified Data.Vector as A
+-- import qualified Data.Vector as A
 import qualified Data.Sequence as Seq
 import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
@@ -521,26 +521,25 @@ newFull a = deepseq a (newFull a)
 put :: NFData a => IVar a -> a -> Par ()
 put v a = deepseq a (put_ v a)
 
-pval :: NFData a => a -> Par (IVar a)
-pval a = spawn (return a)
-
-spawn :: NFData a => Par a -> Par (IVar a)
-spawn p = do r <- new
-	     fork (p >>= put r)
-	     return r
-
-spawn_ :: Par a -> Par (IVar a)
-spawn_ p = do r <- new
-	      fork (p >>= put_ r)
-	      return r
+-- pval :: NFData a => a -> Par (IVar a)
+-- pval a = spawn (return a)
 
 --------------------------------------------------------------------------------
 -- MonadPar instance for IO; TEMPORARY
 --------------------------------------------------------------------------------
 
+spawn  :: NFData a => Par a -> Par (IVar a)
+spawn_ :: Par a -> Par (IVar a)
+
+-- <boilerplate>
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+-- </boilerplate>
+
 instance PC.ParFuture Par IVar where
-  get = get
-#include "par_instance_boilerplate.hs"
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
 
 instance PC.ParIVar Par IVar where
   fork = fork

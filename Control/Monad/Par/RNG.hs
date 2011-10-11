@@ -49,7 +49,10 @@ instance Monad Par where
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
 
-#include "Scheds/par_instance_boilerplate.hs"
+-- <boilerplate>
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+-- </boilerplate>>
 
 instance PC.ParFuture Par IVar where 
   get    = get

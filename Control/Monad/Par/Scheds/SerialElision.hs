@@ -45,9 +45,14 @@ instance Monad Par where
   return x = P (return x)
 
 instance PC.ParFuture Par IVar where 
-  get  = get
-#include "par_instance_boilerplate.hs"
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
 
+-- <boilerplate>
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+-- </boilerplate>>
 
 instance PC.ParIVar Par IVar where 
   fork = fork 
