@@ -1,9 +1,12 @@
 {-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
-import Control.Monad.Par
+-- import Control.Monad.Par
 -- Testing:
 -- import Control.Monad.ParElision
+-- import Control.Monad.Par.Scheds.Sparks
+import Control.Monad.Par.Scheds.Trace
+--import Control.Monad.Par.Scheds.Direct
 import GHC.Conc
 
 type FibType = Int64
@@ -69,5 +72,14 @@ number of resident items), then I get these numbers:
   fib(34) 4 thread: 13.96 -- 1.63X 
 
 ESTIMATED 3573.76 seconds for fib(42).
+
+[2011.10.11] {Westmere 4-core testing}
+
+Testing schedulers directly, without going through the generic (type
+class) interface.  Starting with Scheds.Sparks:
+
+  fib(42) 4 threads: 4.56  17.83   -- Sparks
+  fib(42) 4 threads: 50.0  191.6   -- Trace 
+
 
 -}

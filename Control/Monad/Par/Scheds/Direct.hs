@@ -45,7 +45,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 
-dbg = True
+dbg = False
 -- define FORKPARENT
 -- define WAKEIDLE
 
@@ -110,17 +110,17 @@ dqlen :: Deque a -> Int
 newtype Deque a = DQ [a]
 emptydeque = DQ []
 
-addfront x (DQ l)    = trace (" * addfront brought queue up to: " ++ show (length (x:l))) $ 
+addfront x (DQ l)    = -- trace (" * addfront brought queue up to: " ++ show (length (x:l))) $ 
 		       DQ (x:l)
 addback x (DQ [])    = DQ [x]
 addback x (DQ (h:t)) = DQ (h : rest)
  where DQ rest = addback x (DQ t)
 
 takefront (DQ [])     = (emptydeque, Nothing)
-takefront (DQ (x:xs)) = trace (" * takefront popped one, remaining: " ++ show (length xs)) $ 
+takefront (DQ (x:xs)) = -- trace (" * takefront popped one, remaining: " ++ show (length xs)) $ 
 			(DQ xs, Just x)
 takeback  (DQ [])     = (emptydeque, Nothing)
-takeback  (DQ ls)     = trace (" * takeback popped one, remaining: " ++ show (length rest)) $ 
+takeback  (DQ ls)     = -- trace (" * takeback popped one, remaining: " ++ show (length rest)) $ 
 			(DQ rest, Just final)
  where 
   (final,rest) = loop ls []
@@ -353,7 +353,8 @@ get (IVar v) =  do
 	  _ -> do
 #ifndef FORKPARENT
             sch <- R.ask
-            let resched = trace (" cpu "++ show (no sch) ++ " rescheduling on unavailable ivar!") reschedule
+            let resched = -- trace (" cpu "++ show (no sch) ++ " rescheduling on unavailable ivar!") 
+			  reschedule
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
 	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
