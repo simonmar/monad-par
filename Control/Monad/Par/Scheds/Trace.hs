@@ -39,10 +39,14 @@ spawn p  = do r <- new;  fork (p >>= put r);   return r
 spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
 -- </boilerplate>>
 
+spawnP :: NFData a => a -> Par (IVar a)
+spawnP a = spawn (return a)
+
 instance PC.ParFuture Par IVar where
   get    = get
   spawn  = spawn
   spawn_ = spawn_
+  spawnP = spawnP
 
 instance PC.ParIVar Par IVar where 
   fork = fork 

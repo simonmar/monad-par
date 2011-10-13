@@ -11,7 +11,7 @@ module Control.Monad.Par.RNG
      rand, 
      Par, runParRNG, fork,
      IVar, new, newFull, newFull_, get, put, put_,
-     spawn, spawn_
+     spawn, spawn_, spawnP
   )
 where
 
@@ -48,26 +48,6 @@ unPRNG (PRNG x) = x
 instance Monad Par where 
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
-
--- <boilerplate>
-spawn p  = do r <- new;  fork (p >>= put r);   return r
-spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
--- </boilerplate>>
-
-instance PC.ParFuture Par IVar where 
-  get    = get
-  spawn  = spawn
-  spawn_ = spawn_
-
-instance PC.ParIVar Par P.IVar where 
-  fork = fork 
-  new  = new
-  put  = put
-  put_ = put_
-  newFull  = newFull
-  newFull_ = newFull_
---  yield = yield
-
 
 --------------------------------------------------------------------------------
 -- Par API + rand
@@ -119,7 +99,28 @@ put  v x   = PRNG$ S.lift$ P.put  v x
 put_ v x   = PRNG$ S.lift$ P.put_ v x
 
 
+----------------------------------------------------------------------------------------------------
+-- TEMP: Factor out this boilerplate somehow.
+-- <boilerplate>
+spawn  :: NFData a => Par a -> Par (IVar a)
+spawn_ :: Par a -> Par (IVar a)
+spawnP :: NFData a => a -> Par (IVar a)
+
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+spawnP a = spawn (return a)
+
+instance PC.ParFuture Par IVar where
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+
+instance PC.ParIVar Par IVar where
+  fork = fork
+  new  = new
+  put_ = put_
+  newFull = newFull
+  newFull_ = newFull_
+-- </boilerplate>
 --------------------------------------------------------------------------------
--- TEMP: These should be subsumed by the default definitions in the ParIVar Class:
--- pval :: NFData a => a -> Par (IVar a)
--- pval a = spawn (return a)

@@ -1,7 +1,8 @@
 
-{-| NOTE: This is a convenience module that reexports the Par type
-    classes and instances, together with a default scheduler. Please
-    see the interface documentation in "Control.Monad.Par.Class".
+{-| (NOTE: This module reexports a default Par scheduler.  A generic
+    interface can be found in "Control.Monad.Par.Class" and other
+    schedulers, sometimes with different capabilities, can be found in
+    "Control.Monad.Par.Scheds".)
 
   The @monad-par@ package provides a family of @Par@ monads, for speeding up pure
   computations using parallel processors.  They cannot be used for
@@ -15,8 +16,8 @@
   @(f x)@ and @(g x)@ in parallel, and returns a pair of their results:
 
   >  runPar $ do
-  >      fx <- pval (f x)  -- start evaluating (f x)
-  >      gx <- pval (g x)  -- start evaluating (g x)
+  >      fx <- spawn (return (f x))  -- start evaluating (f x)
+  >      gx <- spawn (return (g x))  -- start evaluating (g x)
   >      a <- get fx       -- wait for fx
   >      b <- get gx       -- wait for gx
   >      return (a,b)      -- return results
@@ -76,12 +77,62 @@
 
 module Control.Monad.Par 
  (
-   module Control.Monad.Par.Class,
-   module Control.Monad.Par.Scheds.Trace
+  -- * The Par Monad
+  Par, 
+  runPar, 
+
+  fork,
+  -- | forks a computation to happen in parallel.  The forked
+  -- computation may exchange values with other computations using
+  -- @IVar@s.
+
+  -- * Communication: IVars
+  IVar,
+  -- | creates a new @IVar@
+  new, 
+  -- | creates a new @IVar@ that contains a value
+  newFull, 
+  -- | creates a new @IVar@ that contains a value (head-strict only)
+  newFull_, 
+
+  -- | read the value in a future (or @IVar@).  In the case of IVars,
+  -- the 'get' can only return when the value has been written by a
+  -- prior or parallel @put@ to the same @IVar@.
+  get, 
+  -- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
+  -- are not allowed, and result in a runtime error.
+  --
+  -- 'put' fully evaluates its argument, which therefore must be an
+  -- instance of 'NFData'.  The idea is that this forces the work to
+  -- happen when we expect it, rather than being passed to the consumer
+  -- of the @IVar@ and performed later, which often results in less
+  -- parallelism than expected.
+  --
+  -- Sometimes partial strictness is more appropriate: see 'put_'.
+  --
+  put, 
+  -- | like 'put', but only head-strict rather than fully-strict.
+  put_,
+
+  -- * Operations
+  -- | Like 'fork', but returns a @IVar@ that can be used to query the
+  -- result of the forked computataion.  Therefore @spawn@ provides /futures/ or /promises/.
+  --
+  -- >  spawn p = do
+  -- >    r <- new
+  -- >    fork (p >>= put r)
+  -- >    return r
+  --
+  spawn,
+  -- | Like 'spawn', but the result is only head-strict, not fully-strict.
+  spawn_
+
+--   module Control.Monad.Par.Class,
+--   module Control.Monad.Par.Scheds.Trace
 --   module Control.Monad.Par.Scheds.Direct
  )
 where 
 
-import Control.Monad.Par.Class
-import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
+-- import Control.Monad.Par.Class
+import Control.Monad.Par.Scheds.Trace -- hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
 -- import Control.Monad.Par.Scheds.Direct hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)

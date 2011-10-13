@@ -5,7 +5,7 @@
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
--- A scheduler for the Par monad based on directly performing IO
+-- | A scheduler for the Par monad based on directly performing IO
 -- actions when Par methods are called (i.e. without using a lazy
 -- trace data structure).
 
@@ -44,6 +44,10 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
+
+--------------------------------------------------------------------------------
+-- Configuration Toggles
+--------------------------------------------------------------------------------
 
 dbg = False
 -- define FORKPARENT
@@ -507,9 +511,9 @@ trivialCont _ = trace "trivialCont evaluated!"
 		return ()
 
 ----------------------------------------------------------------------------------------------------
--- TEMPORARY -- SCRAP:
+-- TEMP: Factor out this boilerplate somehow.
 
-
+-- <boilerplate>
 newFull_ ::  a -> Par (IVar a)
 -- The following is usually inefficient! 
 newFull_ a = do v <- new
@@ -517,30 +521,27 @@ newFull_ a = do v <- new
 		return v
 
 newFull :: NFData a => a -> Par (IVar a)
-newFull a = deepseq a (newFull a)
+newFull a = deepseq a (newFull_ a)
 
 put :: NFData a => IVar a -> a -> Par ()
 put v a = deepseq a (put_ v a)
-
--- pval :: NFData a => a -> Par (IVar a)
--- pval a = spawn (return a)
+-- </boilerplate>
 
 --------------------------------------------------------------------------------
--- MonadPar instance for IO; TEMPORARY
---------------------------------------------------------------------------------
-
+-- <boilerplate>
 spawn  :: NFData a => Par a -> Par (IVar a)
 spawn_ :: Par a -> Par (IVar a)
+spawnP :: NFData a => a -> Par (IVar a)
 
--- <boilerplate>
 spawn p  = do r <- new;  fork (p >>= put r);   return r
 spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
--- </boilerplate>
+spawnP a = spawn (return a)
 
 instance PC.ParFuture Par IVar where
   get    = get
   spawn  = spawn
   spawn_ = spawn_
+  spawnP = spawnP
 
 instance PC.ParIVar Par IVar where
   fork = fork
@@ -548,3 +549,5 @@ instance PC.ParIVar Par IVar where
   put_ = put_
   newFull = newFull
   newFull_ = newFull_
+-- </boilerplate>
+--------------------------------------------------------------------------------

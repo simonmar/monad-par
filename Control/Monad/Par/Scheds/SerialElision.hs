@@ -33,34 +33,15 @@ import GHC.IO
 --------------------------------------------------------------------------------
 -- Central type definitions:
 newtype Par a = P (IO a)
--- newtype Par a = Par (IO a)
 newtype IVar a = I (IORef (Maybe a))
 
 unP (P x) = x
 
--- The newtype's above were necessary for the ParClass instance below
--- and thus we need a Monad instance as well:
+-- The newtype's above were necessary for the 'ParIVar'/'ParFuture'
+-- instance below and thus we need a Monad instance as well:
 instance Monad Par where 
   (P m) >>= f = P (m >>= unP . f)
   return x = P (return x)
-
-instance PC.ParFuture Par IVar where 
-  get    = get
-  spawn  = spawn
-  spawn_ = spawn_
-
--- <boilerplate>
-spawn p  = do r <- new;  fork (p >>= put r);   return r
-spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
--- </boilerplate>>
-
-instance PC.ParIVar Par IVar where 
-  fork = fork 
-  new  = new
-  put  = put
-  put_ = put_
-  newFull  = newFull
-  newFull_ = newFull_
 
 --------------------------------------------------------------------------------
 
@@ -96,3 +77,29 @@ runPar (P m) =
   trace ("ParElision: Running with unsafeIO...")
   unsafePerformIO m 
 
+
+----------------------------------------------------------------------------------------------------
+-- TEMP: Factor out this boilerplate somehow.
+-- <boilerplate>
+spawn  :: NFData a => Par a -> Par (IVar a)
+spawn_ :: Par a -> Par (IVar a)
+spawnP :: NFData a => a -> Par (IVar a)
+
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+spawnP a = spawn (return a)
+
+instance PC.ParFuture Par IVar where
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+
+instance PC.ParIVar Par IVar where
+  fork = fork
+  new  = new
+  put_ = put_
+  newFull = newFull
+  newFull_ = newFull_
+-- </boilerplate>
+--------------------------------------------------------------------------------

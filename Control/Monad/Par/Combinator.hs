@@ -9,12 +9,10 @@
 
 module Control.Monad.Par.Combinator
   (
-
     parMap, parMapM,
     parMapReduceRangeThresh, parMapReduceRange,
     InclusiveRange(..),
-    parFor,
-    pval
+    parFor
   )
 where 
 
@@ -35,10 +33,6 @@ import qualified Control.Monad.Par.Scheds.Trace as T
 -- {-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> PT.Par [b] #-}
 -- {-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> PD.Par [b] #-}
 
--- | equivalent to @spawn . return@
-pval :: (NFData a, ParFuture p fut) => a -> p (fut a)
-pval a = spawn (return a)
-
 -- -----------------------------------------------------------------------------
 -- Parallel maps over Traversable data structures
 
@@ -46,14 +40,14 @@ pval a = spawn (return a)
 -- in parallel (fully evaluating the results), and returns a new data
 -- structure containing the results.
 --
--- > parMap f xs = mapM (pval . f) xs >>= mapM get
+-- > parMap f xs = mapM (spawnP . f) xs >>= mapM get
 --
 -- @parMap@ is commonly used for lists, where it has this specialised type:
 --
 -- > parMap :: NFData b => (a -> b) -> [a] -> Par [b]
 --
 parMap :: (Traversable t, NFData b, ParFuture p iv) => (a -> b) -> t a -> p (t b)
-parMap f xs = mapM (pval . f) xs >>= mapM get
+parMap f xs = mapM (spawnP . f) xs >>= mapM get
 
 -- | Like 'parMap', but the function is a @Par@ monad operation.
 --

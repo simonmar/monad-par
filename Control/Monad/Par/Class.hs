@@ -6,9 +6,11 @@
 
     This module establishes a class hierarchy that captures the
     interface(s) for valid Par monads.  In particular, the functionality
-    is split into layers: for example Futures vs. full IVars vs. Chans (Streams).  
-
+    is split into layers: e.g. Futures vs. full IVars vs. Chans (Streams).  
+    
     Not all Par monad schedulers must provide all functionality.
+
+    For documentation of individual Par functions, please see "Control.Monad.Par".
 
  -}
 
@@ -33,61 +35,30 @@ import Control.DeepSeq
 --------------------------------------------------------------------------------
 
 -- | @ParFuture@ captures the class of Par monads which support
---   futures.  This level of functionality subsumes "par/pseq" and is
---   similar to the @Eval@ monad.
+--   futures.  This level of functionality subsumes @par@/@pseq@ and is
+--   similar to the "Control.Parallel.Strategies.Eval" monad.
 class Monad m => ParFuture m future | m -> future where
-  -- | Like 'fork', but returns a @IVar@ that can be used to query the
-  -- result of the forked computataion.
-  --
-  -- >  spawn p = do
-  -- >    r <- new
-  -- >    fork (p >>= put r)
-  -- >    return r
-  --
   spawn  :: NFData a => m a -> m (future a)
-  -- | Like 'spawn', but the result is only head-strict, not fully-strict.
+  spawnP :: NFData a =>   a -> m (future a)
   spawn_ :: m a -> m (future a)
-
-  -- | read the value in a future (or @IVar@).  In the case of IVars,
-  -- the 'get' can only return when the value has been written by a
-  -- prior or parallel @put@ to the same @IVar@.
   get    :: future a -> m a
 
 --------------------------------------------------------------------------------
 
--- | @ParIVar@ builds on futures by adding full "anyone-writes, anyone-reads" IVars.
+-- | @ParIVar@ builds on futures by adding full /anyone-writes, anyone-reads/ IVars.
 --   These are more expressive but may not be supported by all distributed schedulers.
 class ParFuture m ivar => ParIVar m ivar | m -> ivar where
-  -- | forks a computation to happen in parallel.  The forked
-  -- computation may exchange values with other computations using
-  -- @IVar@s.
   fork :: m () -> m ()
-  -- | creates a new @IVar@
   new  :: m (ivar a)
-
-  -- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
-  -- are not allowed, and result in a runtime error.
-  --
-  -- 'put' fully evaluates its argument, which therefore must be an
-  -- instance of 'NFData'.  The idea is that this forces the work to
-  -- happen when we expect it, rather than being passed to the consumer
-  -- of the @IVar@ and performed later, which often results in less
-  -- parallelism than expected.
-  --
-  -- Sometimes partial strictness is more appropriate: see 'put_'.
-  --
   put  :: NFData a => ivar a -> a -> m ()
   put v a = deepseq a (put_ v a)
-  -- | like 'put', but only head-strict rather than fully-strict.
   put_ :: ivar a -> a -> m ()
 
   -- Extra API routines that have default implementations:
 
-  -- | creates a new @IVar@ that contains a value
   newFull :: NFData a => a -> m (ivar a)
   newFull a = deepseq a (newFull_ a)
 
-  -- | creates a new @IVar@ that contains a value (head-strict only)
   newFull_ ::  a -> m (ivar a)
   newFull_ a = do v <- new
                   -- This is usually inefficient! 
@@ -107,7 +78,7 @@ class ParFuture m ivar => ParIVar m ivar | m -> ivar where
 --
 --   The critical thing to know about @Chan@s in @Par@ monads is that
 --   while the @recv@ method destructively advances the position of
---   the consumers "cursor" in the stream, this is only observable in
+--   the consumers \"cursor\" in the stream, this is only observable in
 --   the local @Par@ thread.  That is, at @fork@ points it is
 --   necessary to give the child a separate set of stream cursors so
 --   that it observes the same sequences as the parent.
