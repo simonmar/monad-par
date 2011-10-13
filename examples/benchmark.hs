@@ -32,6 +32,8 @@
    $GHC, if available, to select the $GHC executable.
 
    ---------------------------------------------------------------------------
+
+TODO: Factor out compilation from execution so that compilation can be parallelized.
 -}
 
 import System.Environment
@@ -74,8 +76,10 @@ data BenchSettings = BenchSettings
 -- ntimes = "./ntimes_binsearch.sh"
 ntimes = "./ntimes_minmedmax"
 
+
 --------------------------------------------------------------------------------
 -- Configuration
+--------------------------------------------------------------------------------
 
 -- Retrieve the configuration from the environment.
 getConfig = do
@@ -120,42 +124,42 @@ getConfig = do
 	   , trials     = read$ get "TRIALS"    "1"
 	   , benchlist  = parseBenchList benchstr
 	   , maxthreads = read maxthreads
-	   , threadsettings = parseList$ get "THREADS" maxthreads
+	   , threadsettings = parseIntList$ get "THREADS" maxthreads
 	   , shortrun    
 	   , keepgoing   = strBool (get "KEEPGOING" "0")
 	   , resultsFile = "results_" ++ hostname ++ ".dat"
 	   }
 
 pruneThreadedOpts :: [String] -> [String]
---pruneThreadedOpts = filter (`notElem` ["-qa", "-qb"])
-pruneThreadedOpts ls = trace ("PRUNED of "++show ls++" was "++ show x)x 
- where 
-  x = filter (`notElem` ["-qa", "-qb"]) ls
+pruneThreadedOpts = filter (`notElem` ["-qa", "-qb"])
 
 --------------------------------------------------------------------------------
 -- Misc Small Helpers
 
-parseList :: String -> [Int]
-parseList = map read . words 
+-- These int list arguments are provided in a space-separated form:
+parseIntList :: String -> [Int]
+parseIntList = map read . words 
 
+-- Remove whitespace from both ends of a string:
 trim :: String -> String
 trim = f . f
    where f = reverse . dropWhile isSpace
 
+-- Create a sliding window over the list.  The last element of each
+-- window is the "current position" and samples each element of the
+-- original list once.  Any additional elements are "history".
 slidingWin w ls = 
   reverse $ map reverse $ 
   filter (not . null) $ 
---  filter ((== w) . length) $ 
---  map (take w) (tails ls)
   map (take w) (tails$ reverse ls)
 
+prop1 w ls = map (head . reverse) (slidingWin w ls) == ls
+t1 = prop1 3  [1..50]
+t2 = prop1 30 [1..20]
 
 parseBenchList str = 
---   trace (" GOT LIST "++ show ls) $ 
-   map (\ (h:t) -> (h,t)) ls
- where 
- ls = 
-  filter (not . null) $
+  map (\ (h:t) -> (h,t)) $         -- separate operator, operands
+  filter (not . null) $            -- discard empty lines
   map words $ 
   filter (not . isPrefixOf "#") $  -- filter comments
   map trim $
@@ -172,6 +176,28 @@ inDirectory dir action = do
   action
   liftIO$ setCurrentDirectory d1
   
+-- Compute a cut-down version of a benchmark's args list that will do
+-- a short (quick) run.  The way this works is that benchmarks are
+-- expected to run and do something quick if they are invoked with no
+-- arguments.  (A proper benchmarking run, therefore, requires larger
+-- numeric arguments be supplied.)
+-- 
+-- HOWEVER: there's a further hack here which is that leading
+-- non-numeric arguments are considered qualitative (e.g. "monad" vs
+-- "sparks") rather than quantitative and are not pruned by this
+-- function.
+shortArgs [] = []
+-- Crop as soon as we see something that is a number:
+shortArgs (h:tl) | isNumber h = []
+		 | otherwise  = h : shortArgs tl
+
+isNumber s =
+  case reads s :: [(Double, String)] of 
+    [(n,"")] -> True
+    _        -> False
+
+--------------------------------------------------------------------------------
+-- Error handling
 --------------------------------------------------------------------------------
 
 -- Check the return code from a call to a test executable:
@@ -376,7 +402,8 @@ main = do
 			     [last,current] -> False
 		  numthreads = head$ reverse win
               when recomp $ log "First time or changing threading mode, recompile required:"
-	      runOne recomp test (if shortrun then [] else args) numthreads (n,total)
+	      runOne recomp test (if shortrun then shortArgs args else args) 
+		     numthreads (n,total)
 
         log$ "\n--------------------------------------------------------------------------------"
         log "  Finished with all test configurations."

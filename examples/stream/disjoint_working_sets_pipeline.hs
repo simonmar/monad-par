@@ -108,9 +108,9 @@ sparks_version (_,numfilters, bufsize, statecoef, numwins) = do
       initstate = UV.generate statesize fromIntegral
       applyKern = scan statefulKern initstate
 
--- This one has the problem that it fully evaluates the stream for the
--- first kernel before moving on to the second:
---      strm_last = (parRepeatFun numfilters applyKern) strm1
+      -- This one has the problem that it fully evaluates the stream for the
+      -- first kernel before moving on to the second:
+      --      strm_last = (parRepeatFun numfilters applyKern) strm1
 
       pipe_end = applyNKernels statefulKern numfilters initstate strm1
 
@@ -183,19 +183,20 @@ parRepeatFun n f =
 
 default_version = "monad"
 default_numfilters = 4
-default_bufsize    = 256
-default_statecoef  = 10   -- in MULTIPLES of bufsize
-default_numwins    = 10 * 1000
-
+default_bufsize    = 64
+default_statecoef  = 8   -- in MULTIPLES of bufsize
+default_numwins    = 500
+-- 4 256 10 10000
 
 main = do
   args <- getArgs
   arg_tup@(version,_,_,_,_) <- 
        case args of 
 	 []          -> return (default_version, default_numfilters, default_bufsize, default_statecoef, default_numwins)
+	 [ver]       -> return (            ver, default_numfilters, default_bufsize, default_statecoef, default_numwins)
 	 [a,b,c,d,e] -> return (a, read b, read c, read d, read e)
 	 _         -> do 
-	               putStrLn$ "ERROR: Invalid arguments, must take 0 or 5 args."
+	               putStrLn$ "ERROR: Invalid arguments, must take 0,1, or 5 args."
 		       putStrLn$ "  Expected args: (version='monad'|'sparks' #filters, bufsize, stateSizeMultiplier, #bufsToProcess)"
 		       putStrLn$ "  Received args: "++ show args
 		       exitFailure 

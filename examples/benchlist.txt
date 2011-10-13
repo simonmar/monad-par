@@ -12,8 +12,8 @@
 # CHANGELOG:
 # 
 
-parfib_monad trace 36
-parfib_pseq        36
+parfib_monad  36
+parfib_pseq   36
 
 blackscholes 10000 15000000
 
@@ -28,7 +28,7 @@ coins 8 1250
 queens 14
 
 stream/disjoint_working_sets_pipeline monad  4 256 10 10000
-stream/disjoint_working_sets_pipeline sparks 4 256 10 10000
+Stream/disjoint_working_sets_pipeline sparks 4 256 10 10000
 
 partree/partree 600 20
 
