@@ -1,5 +1,6 @@
 
 -- Ported from Haskell CnC version (BSD license)
+--   by Chih-Ping Chen
 
 -- NOTE: This is a contributed program that uses unsafePerformIO and
 -- thus is not a representative Par program.
@@ -66,7 +67,6 @@ import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
 import Control.Monad.Par
-import Control.Monad.Par.Combinator (pval)
 
 timeit io = 
     do strt <- getCurrentTime
@@ -177,7 +177,7 @@ s3Compute lkji b (k,j,i) | i == j =
        aBlock <- get $ getTileV (j,i,k) lkji
        l2Block <- get $ getTileV (j,k,k+1) lkji
        put (getTileV (j,i,k+1) lkji) (s3Core aBlock l2Block b)
---       pval lkji
+--       spawnP lkji
        return ()
     where s3Core aBlock l2Block b = unsafePerformIO $
                                     do forM_ [0..b-1] (outer aBlock l2Block b)
@@ -214,14 +214,14 @@ initLkji arrA n p b =
         fn c (i, j, k) | k == 0 = 
             do mv <- c
                m <- get mv
-               tv <- pval $ tile i j
-               pval $ insert (i, j, k) tv m
+               tv <- spawnP $ tile i j
+               spawnP $ insert (i, j, k) tv m
         fn c (i, j, k) | otherwise = 
             do mv <- c
                m <- get mv
                tv <- new
-               pval $ insert (i, j, k) tv m
-    in foldl fn (pval empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
+               spawnP $ insert (i, j, k) tv m
+    in foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
      
 
 -- composeResult collect the tiles with the final results back into one single matrix.    
