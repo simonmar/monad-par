@@ -208,8 +208,9 @@ main = do
     "sparks" -> sparks_version  arg_tup
     _        -> error$ "unknown version: "++version
 
-  putStrLn$ "Finally, dumping all logs:"
-  printAllLogs
+-- This is very verbose:
+--  putStrLn$ "Finally, dumping all logs:"
+--  printAllLogs
 
 
 

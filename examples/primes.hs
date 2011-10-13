@@ -1,6 +1,5 @@
 
 
-
 -- This is a simplistic benchmark but is included just for comparison with Haskell CnC
 
 -- Author: Ryan Newton 

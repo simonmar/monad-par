@@ -60,6 +60,11 @@ test: all $(OUTS)
 	@echo ----------------------------------------
 	@rm -f "$(<:.exe=.err)"
 
+# DANGER DANGER:
+wiperesults:
+	rm -f results_*.dat results_*.dat.*
+	rm -f bench_*.log bench_*.log.*
+
 
 # ================================================================================
 # Install dependencies used by test programs.
@@ -72,6 +77,7 @@ deps:
 	cabal install fft
 	cabal install carray
 
+# Redifen clean from common.mk
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out *.exe
 	(cd sumeuler; $(MAKE) clean)
