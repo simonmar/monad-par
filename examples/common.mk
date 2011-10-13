@@ -12,5 +12,5 @@ ALLPARSRC= ../Control/Monad/Par.hs ../Control/Monad/Par/AList.hs ../Control/Mona
 
 default: all
 
-clean:
+defaultclean:
 	rm -f $(EXES) *.o *.hi *.out

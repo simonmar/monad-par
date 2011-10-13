@@ -29,3 +29,4 @@ nothread: $(NOTHREAD)
 runtests: 
 	../run_tests.sh $(EXES) 
 
+clean: defaultclean
