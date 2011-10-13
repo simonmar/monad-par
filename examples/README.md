@@ -26,6 +26,33 @@ To the involved:
 Both of which will populate a file named results_$HOSTNAME.dat.  
 
 
+NOTES ON BENCHLIST TEXT FILES
+=============================
+
+The bechmarking configurations are stored in simple text files.  There
+are three of them currently [2011.10.13] checked in which are tuned
+for different sized runs:
+
+  * benchlist.txt -- desktop version, e.g. 4 core workstation
+  * benchlist_server.txt -- big multicore, e.g. 16-32 core server
+  * benchlist_laptop.txt -- ~dual processor mobile processor
+
+These files have hash-prefixed comments and use the following Schema:
+
+    NAME MODE ARGS...
+
+Name is the name of the benchmark, the root to which ".hs" and ".exe"
+are appended.  Mode determines which Monad Par schedulers can be used
+and is one of the following:
+
+  * default -- whatever is provided by Control.Monad.Par and only that
+  * future  -- all schedulers supporting ParFuture
+  * ivars   -- all schedulers supporting ParIVar
+  * chans   -- all schedulers supporting ParChan
+
+Note that this mode setting could in theory be inferred automatically
+by looking at the code for each example and what Par methods it uses.
+
 
 HOW TO ADD A NEW BENCHMARK
 ==========================
@@ -39,4 +66,3 @@ Here is the recipe:
     well as the _laptop and _server variants.
   * Make sure the benchmark runs with no arguments.  This is "test"
     mode and should run quickly.
-

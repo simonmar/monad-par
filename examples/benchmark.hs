@@ -52,7 +52,7 @@ import Data.List (isPrefixOf, tails)
 
 -- The global configuration for benchmarking:
 data Config = Config 
- { benchlist      :: [(String,[String])]
+ { benchlist      :: [Benchmark]
  , threadsettings :: [Int]  -- A list of #threads to test.  0 signifies non-threaded mode.
  , maxthreads     :: Int
  , trials         :: Int    -- number of runs of each configuration
@@ -70,6 +70,12 @@ data Config = Config
 -- TODO: Add more systematic management of the configuration of
 -- individual runs (number of threads, other flags, etc):
 data BenchSettings = BenchSettings
+
+data Benchmark = Benchmark
+ { name :: String
+ , mode :: String
+ , args :: [String]
+ } 
 
 -- Name of a script to time N runs of a program:
 -- (I used a haskell script for this but ran into problems at one point):
@@ -158,12 +164,15 @@ t1 = prop1 3  [1..50]
 t2 = prop1 30 [1..20]
 
 parseBenchList str = 
-  map (\ (h:t) -> (h,t)) $         -- separate operator, operands
+  map parseBench $                 -- separate operator, operands
   filter (not . null) $            -- discard empty lines
   map words $ 
   filter (not . isPrefixOf "#") $  -- filter comments
   map trim $
   lines str
+
+parseBench (h:m:tl) = Benchmark h m tl
+parseBench ls = error$ "entry in benchlist does not have enough fields (name mode args): "++ unwords ls
 
 strBool ""  = False
 strBool "0" = False
@@ -391,7 +400,7 @@ main = do
         log$ "Testing "++show total++" total configurations of "++ show (length benchlist) ++" benchmarks"
         log$ "--------------------------------------------------------------------------------"
         
-        forM_ (zip [1..] benchlist) $ \ (n, (test,args)) -> 
+        forM_ (zip [1..] benchlist) $ \ (n, Benchmark test mode args) -> 
           forM_ (slidingWin 2 threadsettings) $ \ win -> do
               let recomp = case win of 
 			     [x]   -> True -- First run, must compile.
