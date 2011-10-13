@@ -67,15 +67,22 @@ data Config = Config
  , logFile        :: String -- Where to put more verbose testing output.
  }
 
--- TODO: Add more systematic management of the configuration of
--- individual runs (number of threads, other flags, etc):
-data BenchSettings = BenchSettings
+
+-- Represents a configuration of an individual run.
+--  (number of
+-- threads, other flags, etc):
+data BenchRun = BenchRun
+ { threads :: Int
+ , sched   :: String -- e.g. "Trace" to be appended to "Control.Monad.Scheds."
+ , bench   :: Benchmark
+ } deriving (Eq, Show)
+
 
 data Benchmark = Benchmark
  { name :: String
  , mode :: String
  , args :: [String]
- } 
+ } deriving (Eq, Show)
 
 -- Name of a script to time N runs of a program:
 -- (I used a haskell script for this but ran into problems at one point):
@@ -138,6 +145,25 @@ getConfig = do
 
 pruneThreadedOpts :: [String] -> [String]
 pruneThreadedOpts = filter (`notElem` ["-qa", "-qb"])
+
+-- Does a change in settings require recompilation?
+recompRequired (BenchRun t1 s1 b1) (BenchRun t2 s2 b2) =
+ if b1 /= b2 || s1 /= s2 then True else
+ case (t1,t2) of
+   -- Switching from serial to parallel or back requires recompile:
+   (0,t) | t > 0  -> True 
+   (t,0) | t > 0  -> True 
+   -- Otherwise, no recompile:
+   (last,current) -> False
+
+-- Expand the mode string into a list of specific schedulers to run:
+expandMode "default" = ["Control.Monad.Par"]
+-- TODO: Add RNG:
+expandMode "futures" = map p ["Trace", "Direct", "Sparks"]
+expandMode "ivars"   = map p ["Trace", "Direct"]
+expandMode "chans"   = map p []
+
+p = ("Control.Monad.Par.Scheds."++)
 
 --------------------------------------------------------------------------------
 -- Misc Small Helpers
@@ -394,23 +420,22 @@ main = do
 	log " -> Succeeded."
 	liftIO$ removeFile "make_output.tmp"
 
-        let total = length threadsettings * length benchlist
+        let allruns = [ BenchRun t s b | 
+			b@(Benchmark _ mode _) <- benchlist, 
+			s <- expandMode mode,
+			t <- threadsettings ]
+            total = length allruns
         log$ "\n--------------------------------------------------------------------------------"
         log$ "Running all benchmarks for all thread settings in "++show threadsettings
         log$ "Testing "++show total++" total configurations of "++ show (length benchlist) ++" benchmarks"
         log$ "--------------------------------------------------------------------------------"
-        
-        forM_ (zip [1..] benchlist) $ \ (n, Benchmark test mode args) -> 
-          forM_ (slidingWin 2 threadsettings) $ \ win -> do
+
+        forM_ (zip [1..] (slidingWin 2 allruns)) $ \ (n,win) -> do
               let recomp = case win of 
 			     [x]   -> True -- First run, must compile.
-			     -- Switching from serial to parallel or back requires recompile:
-			     [0,t] | t > 0 -> True 
-			     [t,0] | t > 0 -> True 
-			     -- Otherwise, no recompile:
-			     [last,current] -> False
-		  numthreads = head$ reverse win
-              when recomp $ log "First time or changing threading mode, recompile required:"
+			     [a,b] -> recompRequired a b
+		  BenchRun numthreads sched (Benchmark test _ args) = head$ reverse win
+              when recomp $ log "Recompile required for next config:"
 	      runOne recomp test (if shortrun then shortArgs args else args) 
 		     numthreads (n,total)
 
