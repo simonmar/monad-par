@@ -281,25 +281,25 @@ backupResults Config{resultsFile, logFile} = do
 
 -- If the benchmark has already been compiled doCompile=False can be
 -- used to skip straight to the execution.
-runOne :: Bool -> String -> [String] -> Int -> (Int,Int) -> ReaderT Config IO ()
-runOne doCompile test args numthreads (iterNum,totalIters) = do
+runOne :: Bool -> BenchRun -> (Int,Int) -> ReaderT Config IO ()
+runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,totalIters) = do
+
+  Config{..} <- ask
+  let args = if shortrun then shortArgs args_ else args_
   
   log$ "\n--------------------------------------------------------------------------------"
   log$ "  Running Config "++show iterNum++" of "++show totalIters++
        ": "++test++" (args \""++unwords args++"\") scheduler ?  threads "++show numthreads
   log$ "--------------------------------------------------------------------------------\n"
-
-  -- pwd <- runSL "pwd"
   pwd <- lift$ getCurrentDirectory
   log$ "(In directory "++ pwd ++")"
 
-  Config{..} <- ask
-
   -- numthreads == 0 indicates a serial run:
-  let (rts,flags) = case numthreads of
+  let (rts,flags_) = case numthreads of
 		     0 -> (ghc_RTS, ghc_flags)
 		     _ -> (ghc_RTS  ++" -N"++show numthreads, 
 			   ghc_flags++" -threaded")
+      flags = flags_ ++ " -fforce-recomp -DPARSCHED="++sched
 
       (containingdir,_) = splitFileName test
       hsfile = test++".hs"
@@ -320,7 +320,7 @@ runOne doCompile test args numthreads (iterNum,totalIters) = do
      mf <- lift$ doesFileExist$     containingdir ++ "/Makefile"
      if e then do 
 	 log "Compiling with a single GHC command: "
-	 let cmd = unwords [ghc, "-i../", "-i"++containingdir, flags ++ " -fforce-recomp", 
+	 let cmd = unwords [ghc, "-i../", "-i"++containingdir, flags, 
 			    hsfile, "-o "++test++".exe"]		
 	 log$ "  "++cmd ++"\n"
 	 -- Having trouble getting the &> redirection working.  Need to specify bash specifically:
@@ -434,10 +434,9 @@ main = do
               let recomp = case win of 
 			     [x]   -> True -- First run, must compile.
 			     [a,b] -> recompRequired a b
-		  BenchRun numthreads sched (Benchmark test _ args) = head$ reverse win
+		  bench = head$ reverse win
               when recomp $ log "Recompile required for next config:"
-	      runOne recomp test (if shortrun then shortArgs args else args) 
-		     numthreads (n,total)
+	      runOne recomp bench (n,total)
 
         log$ "\n--------------------------------------------------------------------------------"
         log "  Finished with all test configurations."
