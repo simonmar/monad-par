@@ -7,7 +7,7 @@
 --   It only works for the subset of programs in which a
 --   top-to-bottom/left-to-right execution of the program writes all
 --   IVars before reading them.  It is analogous to the Cilk notion of
---   a "serial elision" -- eliding the parallel annotations and
+--   a \"serial elision\" -- eliding the parallel annotations and
 --   running in serial.
 --
 --   This module can be used for debugging as well as for establishing a
@@ -18,7 +18,7 @@ module Control.Monad.Par.Scheds.SerialElision (
     Par, IVar, runPar, fork,
     new, newFull, newFull_,
     get, put, put_,
---    pval, spawn, spawn_
+    spawn, spawn_, spawnP
   ) where
 
 import qualified Control.Monad.Par.Class as PC

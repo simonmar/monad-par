@@ -66,7 +66,7 @@
   Unlike @Control.Parallel@, in @Control.Monad.Par@ parallelism is
   not combined with laziness, so sharing and granulairty are
   completely under the control of the programmer.  New units of
-  parallel work are only created by @fork@, @par@, and a few other
+  parallel work are only created by @fork@ and a few other
   combinators.
 
   The implementation is based on a work-stealing scheduler that
@@ -88,17 +88,22 @@ module Control.Monad.Par
 
   -- * Communication: IVars
   IVar,
-  -- | creates a new @IVar@
-  new, 
-  -- | creates a new @IVar@ that contains a value
-  newFull, 
-  -- | creates a new @IVar@ that contains a value (head-strict only)
-  newFull_, 
 
-  -- | read the value in a future (or @IVar@).  In the case of IVars,
-  -- the 'get' can only return when the value has been written by a
-  -- prior or parallel @put@ to the same @IVar@.
+  new, 
+  -- | creates a new @IVar@
+
+  newFull, 
+  -- | creates a new @IVar@ that contains a value
+
+  newFull_, 
+  -- | creates a new @IVar@ that contains a value (head-strict only)
+
   get, 
+  -- | read the value in an @IVar@.  'get' can only return when the
+  -- value has been written by a prior or parallel @put@ to the same
+  -- @IVar@.
+
+  put, 
   -- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
   -- are not allowed, and result in a runtime error.
   --
@@ -110,11 +115,12 @@ module Control.Monad.Par
   --
   -- Sometimes partial strictness is more appropriate: see 'put_'.
   --
-  put, 
-  -- | like 'put', but only head-strict rather than fully-strict.
+
   put_,
+  -- | like 'put', but only head-strict rather than fully-strict.
 
   -- * Operations
+  spawn,
   -- | Like 'fork', but returns a @IVar@ that can be used to query the
   -- result of the forked computataion.  Therefore @spawn@ provides /futures/ or /promises/.
   --
@@ -123,16 +129,18 @@ module Control.Monad.Par
   -- >    fork (p >>= put r)
   -- >    return r
   --
-  spawn,
-  -- | Like 'spawn', but the result is only head-strict, not fully-strict.
-  spawn_
 
---   module Control.Monad.Par.Class,
---   module Control.Monad.Par.Scheds.Trace
---   module Control.Monad.Par.Scheds.Direct
+  spawn_,
+  -- | Like 'spawn', but the result is only head-strict, not fully-strict.
+
+  spawnP
+  -- | Spawn a pure (rather than monadic) computation.  Fully-strict.
+  -- 
+  -- >  spawnP = spawn . return
+
  )
 where 
 
 -- import Control.Monad.Par.Class
 import Control.Monad.Par.Scheds.Trace -- hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
--- import Control.Monad.Par.Scheds.Direct hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
+-- import Control.Monad.Par.Scheds.Direct 

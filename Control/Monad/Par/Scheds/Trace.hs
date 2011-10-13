@@ -13,7 +13,7 @@
 module Control.Monad.Par.Scheds.Trace (
     Par, runPar, fork,
     IVar, new, newFull, newFull_, get, put, put_,
-    spawn, spawn_
+    spawn, spawn_, spawnP 
   ) where
 
 import qualified Control.Monad.Par.Class as PC

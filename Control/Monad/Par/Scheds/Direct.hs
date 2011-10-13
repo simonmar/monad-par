@@ -16,7 +16,7 @@ module Control.Monad.Par.Scheds.Direct (
     runPar, 
     new, get, put_, fork,
     newFull, newFull_, put,
-    spawn, spawn_
+    spawn, spawn_, spawnP 
 --   runParAsync, runParAsyncHelper,
 --   pollIVar, yield,
  ) where
