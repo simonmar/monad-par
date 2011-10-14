@@ -1,9 +1,15 @@
+{-# LANGUAGE CPP #-}
 
 -- A quicksort benchmark for monad-par
 
-import Control.Monad.Par
 import System.Random
 import System.Environment
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
 
 quicksortP :: [Int] -> Par [Int]
 quicksortP [] = return []
@@ -23,7 +29,7 @@ genRandoms n = take n $ randoms (mkStdGen 120) :: [Int]
 main = do args <- getArgs
           let size =
                 case args of
-                  [] -> 250000
+                  [] -> 25000
                   [n] -> (read n)
           
           let rands = genRandoms size
