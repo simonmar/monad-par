@@ -13,12 +13,15 @@
 # CHANGELOG:
 # 
 
+quicksort/parquicksort_monad default 250000
+quicksort/parquicksort_pseq default 250000
+
 parfib_monad  default 36
 parfib_pseq   default 36
 
 blackscholes  default 10000 15000000
 
-cholesky      default 1000 50 cholesky_matrix1000.dat
+# cholesky      default 1000 50 cholesky_matrix1000.dat
 
 nbody         default 13000
 
@@ -31,7 +34,7 @@ queens        default 14
 # binomial lattice?
 
 stream/disjoint_working_sets_pipeline default monad  4 256 10 10000
-Stream/disjoint_working_sets_pipeline default sparks 4 256 10 10000
+stream/disjoint_working_sets_pipeline default sparks 4 256 10 10000
 
 partree/partree   default 600 20
 
