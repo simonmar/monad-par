@@ -28,6 +28,8 @@ mandel        default 2000 2000 3000000
 coins         default 8 1250
 queens        default 14
 
+# binomial lattice?
+
 stream/disjoint_working_sets_pipeline default monad  4 256 10 10000
 Stream/disjoint_working_sets_pipeline default sparks 4 256 10 10000
 
@@ -39,3 +41,4 @@ partree/partree   default 600 20
 # These don't match the naming convention at the moment.
 matmult/matmult   default 768 0 64
 sumeuler/sumeuler default 38 8000 100
+

@@ -65,7 +65,11 @@ import Control.Exception
 import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 timeit io = 
     do strt <- getCurrentTime

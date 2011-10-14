@@ -6,11 +6,14 @@ import Data.Complex
 import System.IO
 import Debug.Trace
 import Control.DeepSeq
-import Control.Monad.Par
 import Control.Exception
-
 import PortablePixmap
 import Control.Monad.Par.AList as A
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0

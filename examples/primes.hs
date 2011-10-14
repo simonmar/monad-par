@@ -1,14 +1,17 @@
-
+{-# LANGUAGE CPP  #-}
 
 -- This is a simplistic benchmark but is included just for comparison with Haskell CnC
 
 -- Author: Ryan Newton 
 
 import System.Environment
-import Control.Monad.Par
 import Control.Monad.Par.AList as A
 import Debug.Trace
-
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 -- First a naive serial test for primality:
 isPrime :: Int -> Bool

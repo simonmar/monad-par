@@ -2,7 +2,7 @@ include ../common.mk
 
 all: matmult.exe 
 
-matmult.exe : $(wildcard *.hs) ../../Control/Monad/Par.hs
-	$(GHC) -O2 -cpp --make -i../.. MatMult.hs -o $@ -threaded -rtsopts
+matmult.exe : $(wildcard *.hs) $(DPRPARSRC)
+	$(GHC) $(GHC_FLAGS) -cpp --make -i../.. MatMult.hs -o $@  -rtsopts
 
 clean: defaultclean

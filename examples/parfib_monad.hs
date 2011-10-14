@@ -1,7 +1,12 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 -- Testing:
 -- import Control.Monad.ParElision
 import GHC.Conc

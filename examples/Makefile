@@ -4,8 +4,8 @@ include common.mk
 BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
             parfib_monad.hs parfib_pseq.hs \
             primes.hs cholesky.hs coins.hs
-
 # binomial_lattice.hs
+
 EXES= $(BENCHMARKS:.hs=.exe)
 
 # Another four in their own subdirectories:
@@ -35,7 +35,7 @@ buildsubs: $(EXES)
 	(cd partree;  $(MAKE))
 
 %.exe : %.hs $(ALLPARSRC)
-	$(GHC) -O2 --make -i.. $< -o $@ -threaded -rtsopts
+	$(GHC) $(GHC_FLAGS) --make -i.. $< -o $@ -rtsopts
 
 test: all $(OUTS)
 	@echo 

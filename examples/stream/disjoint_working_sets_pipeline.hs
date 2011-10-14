@@ -15,7 +15,6 @@
 module Main where
 
 import Control.Monad as C
-import Control.Monad.Par 
 import Control.Monad.Par.Stream as S
 import Control.Monad.Par.OpenList
 import Control.DeepSeq
@@ -42,6 +41,14 @@ import Control.Monad.Par.Logging
 
 import qualified Data.Vector.Unboxed as UV
 import           Data.Vector.Unboxed hiding ((++))
+
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
+
 
 -- Performs some (presently meaningless) computation on a state & a
 -- window (stream element) to compute a new state and new window.

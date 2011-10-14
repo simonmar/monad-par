@@ -18,15 +18,16 @@
 ---------------------------------------------------------------------------
 
 module Main where
-
 import System.Environment (getArgs)
-
-import Control.Monad.Par
-
 import Control.Monad (when)
-
 import ListAux -- split/join functions, put in new module
 import SumEulerPrimes
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
 
 ---------------------------------------------------------------------------
 -- Generic clustering routines

@@ -34,8 +34,11 @@ import Control.Monad
 import Control.DeepSeq
 import Control.Exception
 
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
-import Control.Monad.Par.AList
+#endif
 
 import Data.Array
 import Data.List

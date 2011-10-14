@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- -*- haskell -*-
 --
 -- ADT of a binary tree (values only in leaves).
@@ -12,7 +13,11 @@ module Tree(Tree,
 
 import Control.Parallel
 import Control.Parallel.Strategies
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 infixl 2 ^:
 

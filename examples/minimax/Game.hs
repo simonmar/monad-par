@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- Time-stamp: <2011-02-12 21:11:31 simonmar>
 -----------------------------------------------------------------------------
 
@@ -9,8 +10,11 @@ import Tree
 import Control.Parallel
 import Control.Parallel.Strategies hiding (parMap)
 import Debug.Trace
-
+#ifdef PARSCHED
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 type Player = Evaluation -> Evaluation -> Evaluation
 type Move = (Board,Evaluation)

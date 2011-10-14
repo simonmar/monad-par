@@ -131,7 +131,7 @@ getConfig = do
     Config { hostname
 	   , logFile  
 	   , ghc        =       get "GHC"       "ghc"
-	   , ghc_RTS    =       get "GHC_RTS"   "-qa -s"
+	   , ghc_RTS    =       get "GHC_RTS" (if shortrun then "" else "-qa -s")
   	   , ghc_flags  = (get "GHC_FLAGS" (if shortrun then "" else "-O2")) 
 	                  ++ " -rtsopts" -- Always turn on rts opts.
 	   , trials     = read$ get "TRIALS"    "1"
@@ -155,6 +155,9 @@ recompRequired (BenchRun t1 s1 b1) (BenchRun t2 s2 b2) =
    (t,0) | t > 0  -> True 
    -- Otherwise, no recompile:
    (last,current) -> False
+
+benchChanged (BenchRun _ _ b1) (BenchRun _ _ b2) = b1 /= b2
+
 
 -- Expand the mode string into a list of specific schedulers to run:
 expandMode "default" = ["Control.Monad.Par"]
@@ -208,8 +211,9 @@ strBool  x  = error$ "Invalid boolean setting for environment variable: "++x
 inDirectory dir action = do
   d1 <- liftIO$ getCurrentDirectory
   liftIO$ setCurrentDirectory dir
-  action
+  x <- action
   liftIO$ setCurrentDirectory d1
+  return x
   
 -- Compute a cut-down version of a benchmark's args list that will do
 -- a short (quick) run.  The way this works is that benchmarks are
@@ -236,7 +240,7 @@ isNumber s =
 --------------------------------------------------------------------------------
 
 -- Check the return code from a call to a test executable:
-check ExitSuccess _           = return ()
+check ExitSuccess _           = return True
 check (ExitFailure code) msg  = do
   Config{..} <- ask
   let report = log$ printf " #      Return code %d Params: %s, RTS %s " (143::Int) ghc_flags ghc_RTS
@@ -250,16 +254,26 @@ check (ExitFailure code) msg  = do
         log "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         unless keepgoing $ 
           lift$ exit code
-
+  return False
 
 --------------------------------------------------------------------------------
 -- Logging
 --------------------------------------------------------------------------------
 
+
+-- Stdout and logFile:
 log :: String -> ReaderT Config IO ()
 log str = do
   Config{logFile} <- ask
   lift$ logOn logFile str
+
+-- Stdout, logFile, and resultsFile
+logBoth str = do log str; logR str 
+
+-- Results file only:
+logR str = do 
+  Config{resultsFile} <- ask
+  lift$ runIO$ echo (str++"\n") -|- appendTo resultsFile
 
 logOn :: String -> String -> IO ()
 logOn file s = 
@@ -268,7 +282,8 @@ logOn file s =
 backupResults Config{resultsFile, logFile} = do 
   e    <- doesFileExist resultsFile
   --  date <- runSL "date +%s"
-  date <- runSL "date +%Y%m%d_%R"
+--  date <- runSL "date +%Y%m%d_%R"
+  date <- runSL "date +%Y%m%d_%s"
   when e $ do
     renameFile resultsFile (resultsFile ++"."++date++".bak")
   e2   <- doesFileExist logFile
@@ -305,7 +320,8 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
       hsfile = test++".hs"
       tmpfile = "._Temp_output_buffer.txt"
       flushtmp = do lift$ runIO$ catFrom [tmpfile] -|- indent -|- appendTo logFile
-		    lift$ runIO$ catFrom [tmpfile] -|- indent -- To stdout
+		    unless shortrun $ 
+		       lift$ runIO$ catFrom [tmpfile] -|- indent -- To stdout
 		    lift$ removeFile tmpfile
       -- Indent for prettier output
       indent = map ("    "++)
@@ -313,7 +329,7 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
   ----------------------------------------
   -- Do the Compile
   ----------------------------------------
-  when doCompile $ do 
+  success <- if not doCompile then return True else do 
 
      e  <- lift$ doesFileExist hsfile
      d  <- lift$ doesDirectoryExist containingdir
@@ -332,8 +348,12 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
      else if (d && mf && containingdir /= ".") then do 
 	log " ** Benchmark appears in a subdirectory with Makefile.  Using it."
 	log " ** WARNING: Can't currently control compiler options for this benchmark!"
-	inDirectory containingdir $ do 
-	   code <- lift$ system "make"
+	inDirectory containingdir $ do
+
+--        lift$ runIO$ setenv [("GHC_FLAGS",flags)]
+--	   code <- lift$ system "make"
+           error$ "SETENV "++flags
+	   code <- lift$ run$ setenv [("GHC_FLAGS",flags)] "make"
 	   check code "ERROR, benchmark.hs: Compilation via benchmark Makefile failed:"
 
      else do 
@@ -344,6 +364,8 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
   -- Done Compiling, now Execute:
   ----------------------------------------
 
+  -- If we failed compilation we don't bother running either:
+  -- when success $ 
   let prunedRTS = unwords (pruneThreadedOpts (words rts)) -- ++ "-N" ++ show numthreads
       ntimescmd = printf "%s %d ./%s.exe %s +RTS %s -RTS" ntimes trials test (unwords args) prunedRTS
   log$ "Executing " ++ ntimescmd
@@ -351,20 +373,20 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
   -- One option woud be dynamic feedback where if the first one
   -- takes a long time we don't bother doing more trials.  
 
---  if [ "$SHORTRUN" != "" ]; then export HIDEOUTPUT=1; fi
-
   -- NOTE: With this form we don't get the error code.  Rather there will be an exception on error:
   (str::String,finish) <- lift$ run (ntimescmd ++" 2> "++ tmpfile) -- HSH can't capture stderr presently
   (_  ::String,code)   <- lift$ finish                       -- Wait for child command to complete
   flushtmp 
   check code ("ERROR, benchmark.hs: test command \""++ntimescmd++"\" failed with code "++ show code)
 
-  log$ " >>> MIN/MEDIAN/MAX TIMES " ++ 
-     case code of
-      ExitSuccess     -> str
-      ExitFailure 143 -> "TIMEOUT TIMEOUT TIMEOUT"
-      ExitFailure _   -> "ERR ERR ERR"
-		     
+  let times = 
+       case code of
+	ExitSuccess     -> str
+	ExitFailure 143 -> "TIMEOUT TIMEOUT TIMEOUT"
+	ExitFailure _   -> "ERR ERR ERR"		     
+
+  log $ " >>> MIN/MEDIAN/MAX TIMES " ++ times
+  logR$ test ++" "++ sched ++" "++ show numthreads ++" "++ times
 
   return ()
   
@@ -396,6 +418,12 @@ resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, l
 ----------------------------------------------------------------------------------------------------
 -- Main Script
 ----------------------------------------------------------------------------------------------------
+
+
+data ActionList = 
+   Run Bool BenchRun -- Bool signifies recompile required.
+ | Print String
+
 
 main = do
 
@@ -431,11 +459,13 @@ main = do
         log$ "--------------------------------------------------------------------------------"
 
         forM_ (zip [1..] (slidingWin 2 allruns)) $ \ (n,win) -> do
-              let recomp = case win of 
-			     [x]   -> True -- First run, must compile.
-			     [a,b] -> recompRequired a b
-		  bench = head$ reverse win
-              when recomp $ log "Recompile required for next config:"
+              let (recomp,newbench) = 
+                        case win of 
+			     [x]   -> (True,True) -- First run, must compile.
+			     [a,b] -> (recompRequired a b, benchChanged a b)
+		  bench@(BenchRun _ _ (Benchmark test _ args)) = head$ reverse win
+              when recomp   $ log "Recompile required for next config:"
+              when newbench $ logR$ "\n# *** Config ["++show n++"], testing with ./"++ test ++".exe "++unwords args
 	      runOne recomp bench (n,total)
 
         log$ "\n--------------------------------------------------------------------------------"

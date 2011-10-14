@@ -1,13 +1,14 @@
-
-
-
+{-# LANGUAGE CPP  #-}
 -- #include "flops.hs"
 
 -- parMapReduceRange :: NFData a => InclusiveRange -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
-import Control.Monad.Par
 import Data.Int
 import System.Environment
-
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 main = do 
           putStrLn "Program to sum 2^N ones with 2^N parallel tasks.  (Similar to parFib.)"
