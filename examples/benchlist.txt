@@ -13,6 +13,9 @@
 # CHANGELOG:
 # 
 
+quicksort/parquicksort_monad default 250000
+quicksort/parquicksort_pseq default 250000
+
 parfib_monad  default 36
 parfib_pseq   default 36
 
