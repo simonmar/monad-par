@@ -10,17 +10,21 @@ import PARSCHED
 import Control.Monad.Par
 #endif
 
+-- TODO: Rewrite with AList.. lists are not good for this.
 
 quicksortP :: [Int] -> Par [Int]
 quicksortP [] = return []
 quicksortP [x] = return [x]
+-- This quicksort always choses the pivot to be the first element:
 quicksortP (pivot:xs) = 
   do
-    let low = (filter (< pivot) xs)
-        high = (filter (>= pivot) xs)
+    let low  =  filter (<  pivot) xs
+        high =  filter (>= pivot) xs
     lf <- spawn$ quicksortP low
-    h <-         quicksortP high
-    l <- get lf
+    h  <-        quicksortP high
+    l  <- get lf
+
+    -- This O(N) append is serial:
     return (l ++ [pivot] ++ h)
     
 genRandoms :: Int -> [Int]

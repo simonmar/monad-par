@@ -417,7 +417,7 @@ resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, l
   , e$ "#  ... with compiler options: " ++ ghc_flags
   , e$ "#  ... with runtime options: " ++ ghc_RTS
   , e$ "# Using the following settings from the benchmarking environment:" 
-  , e$ "# BENCHLIST=$BENCHLIST  THREADSETTINGS=$THREADSETTINGS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN  KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
+  , e$ "# BENCHLIST=$BENCHLIST  THREADS=$THREADS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN  KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
   ]
  where 
     e s = ("echo \""++s++"\"") -|- tee ["/dev/stdout", logFile] -|- appendTo resultsFile

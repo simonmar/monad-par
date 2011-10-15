@@ -13,8 +13,11 @@
 # CHANGELOG:
 # 
 
-quicksort/parquicksort_monad futures 250000
-quicksort/parquicksort_pseq  none    250000
+# quicksort/parquicksort_monad futures 250000
+# quicksort/parquicksort_pseq  none    250000
+
+quicksort/parquicksort_monad futures 1500000
+quicksort/parquicksort_pseq  none    1500000
 
 parfib_monad  futures 36
 parfib_pseq   none 36
