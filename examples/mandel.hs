@@ -5,6 +5,9 @@ import Control.Seq
 import Control.DeepSeq
 import Control.Exception
 import PortablePixmap
+import Data.Complex
+import System.Environment
+import System.IO
 import Control.Monad.Par.AList as A
 import qualified Control.Monad.Par.Combinator as C
 #ifdef PARSCHED 
