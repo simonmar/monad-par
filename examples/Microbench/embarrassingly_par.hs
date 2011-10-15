@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 -- Author: Ryan Newton 
 
 -- Embarassingly parallel.
@@ -15,8 +15,12 @@ import System.Environment
 
 import Microbench.Flops
 -- import Control.Monad.Par.Scheds.Trace
-import Control.Monad.Par
 import Control.Exception
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 puts = unsafeIO . putStr
 

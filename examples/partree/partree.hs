@@ -16,7 +16,8 @@ main = do args <- getArgs
             (n,c) = case args of 
                       [arg1,arg2] -> (read arg1 :: Int, 
 				      read arg2 :: Int)
-                      []          -> (256, 10)
+--                      []          -> (256, 10)
+                      []          -> (64, 5)
 		      _           -> error "partree program takes zero or two arguments: <size in nodes> <work per node>"
             res = partree c n
           putStrLn ("partree " ++ unwords [show n,show c] ++ " = " ++ show res)

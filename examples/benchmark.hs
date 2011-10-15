@@ -32,6 +32,8 @@
    $GHC, if available, to select the $GHC executable.
 
    ---------------------------------------------------------------------------
+
+TODO: Factor out compilation from execution so that compilation can be parallelized.
 -}
 
 import System.Environment
@@ -50,7 +52,7 @@ import Data.List (isPrefixOf, tails)
 
 -- The global configuration for benchmarking:
 data Config = Config 
- { benchlist      :: [(String,[String])]
+ { benchlist      :: [Benchmark]
  , threadsettings :: [Int]  -- A list of #threads to test.  0 signifies non-threaded mode.
  , maxthreads     :: Int
  , trials         :: Int    -- number of runs of each configuration
@@ -65,17 +67,34 @@ data Config = Config
  , logFile        :: String -- Where to put more verbose testing output.
  }
 
--- TODO: Add more systematic management of the configuration of
--- individual runs (number of threads, other flags, etc):
-data BenchSettings = BenchSettings
+
+-- Represents a configuration of an individual run.
+--  (number of
+-- threads, other flags, etc):
+data BenchRun = BenchRun
+ { threads :: Int
+ , sched   :: Sched 
+ , bench   :: Benchmark
+ } deriving (Eq, Show)
+
+data Sched = Trace | Direct | Sparks | None
+ deriving (Eq,Show)
+
+data Benchmark = Benchmark
+ { name :: String
+ , mode :: String
+ , args :: [String]
+ } deriving (Eq, Show)
 
 -- Name of a script to time N runs of a program:
 -- (I used a haskell script for this but ran into problems at one point):
 -- ntimes = "./ntimes_binsearch.sh"
 ntimes = "./ntimes_minmedmax"
 
+
 --------------------------------------------------------------------------------
 -- Configuration
+--------------------------------------------------------------------------------
 
 -- Retrieve the configuration from the environment.
 getConfig = do
@@ -114,52 +133,83 @@ getConfig = do
     Config { hostname
 	   , logFile  
 	   , ghc        =       get "GHC"       "ghc"
-	   , ghc_RTS    =       get "GHC_RTS"   "-qa -s"
+	   , ghc_RTS    =       get "GHC_RTS" (if shortrun then "" else "-qa -s")
   	   , ghc_flags  = (get "GHC_FLAGS" (if shortrun then "" else "-O2")) 
 	                  ++ " -rtsopts" -- Always turn on rts opts.
 	   , trials     = read$ get "TRIALS"    "1"
 	   , benchlist  = parseBenchList benchstr
 	   , maxthreads = read maxthreads
-	   , threadsettings = parseList$ get "THREADS" maxthreads
+	   , threadsettings = parseIntList$ get "THREADS" maxthreads
 	   , shortrun    
 	   , keepgoing   = strBool (get "KEEPGOING" "0")
 	   , resultsFile = "results_" ++ hostname ++ ".dat"
 	   }
 
 pruneThreadedOpts :: [String] -> [String]
---pruneThreadedOpts = filter (`notElem` ["-qa", "-qb"])
-pruneThreadedOpts ls = trace ("PRUNED of "++show ls++" was "++ show x)x 
- where 
-  x = filter (`notElem` ["-qa", "-qb"]) ls
+pruneThreadedOpts = filter (`notElem` ["-qa", "-qb"])
+
+-- Does a change in settings require recompilation?
+recompRequired (BenchRun t1 s1 b1) (BenchRun t2 s2 b2) =
+ if b1 /= b2 || s1 /= s2 then True else
+ case (t1,t2) of
+   -- Switching from serial to parallel or back requires recompile:
+   (0,t) | t > 0  -> True 
+   (t,0) | t > 0  -> True 
+   -- Otherwise, no recompile:
+   (last,current) -> False
+
+benchChanged (BenchRun _ _ b1) (BenchRun _ _ b2) = b1 /= b2
+
+-- Expand the mode string into a list of specific schedulers to run:
+expandMode "default" = [Trace]
+expandMode "none"    = [None]
+-- TODO: Add RNG:
+expandMode "futures" = [Trace, Direct, Sparks]
+expandMode "ivars"   = [Trace, Direct]
+expandMode "chans"   = [] -- Not working yet!
+
+schedToModule s = 
+  case s of 
+   Trace  -> "Control.Monad.Par"
+   Direct -> "Control.Monad.Par.Scheds.Direct"
+   Sparks -> "Control.Monad.Par.Scheds.Sparks"
+   None   -> "qualified Control.Monad.Par as NotUsed"
+  
 
 --------------------------------------------------------------------------------
 -- Misc Small Helpers
 
-parseList :: String -> [Int]
-parseList = map read . words 
+-- These int list arguments are provided in a space-separated form:
+parseIntList :: String -> [Int]
+parseIntList = map read . words 
 
+-- Remove whitespace from both ends of a string:
 trim :: String -> String
 trim = f . f
    where f = reverse . dropWhile isSpace
 
+-- Create a sliding window over the list.  The last element of each
+-- window is the "current position" and samples each element of the
+-- original list once.  Any additional elements are "history".
 slidingWin w ls = 
   reverse $ map reverse $ 
   filter (not . null) $ 
---  filter ((== w) . length) $ 
---  map (take w) (tails ls)
   map (take w) (tails$ reverse ls)
 
+prop1 w ls = map (head . reverse) (slidingWin w ls) == ls
+t1 = prop1 3  [1..50]
+t2 = prop1 30 [1..20]
 
 parseBenchList str = 
---   trace (" GOT LIST "++ show ls) $ 
-   map (\ (h:t) -> (h,t)) ls
- where 
- ls = 
-  filter (not . null) $
+  map parseBench $                 -- separate operator, operands
+  filter (not . null) $            -- discard empty lines
   map words $ 
   filter (not . isPrefixOf "#") $  -- filter comments
   map trim $
   lines str
+
+parseBench (h:m:tl) = Benchmark h m tl
+parseBench ls = error$ "entry in benchlist does not have enough fields (name mode args): "++ unwords ls
 
 strBool ""  = False
 strBool "0" = False
@@ -169,13 +219,36 @@ strBool  x  = error$ "Invalid boolean setting for environment variable: "++x
 inDirectory dir action = do
   d1 <- liftIO$ getCurrentDirectory
   liftIO$ setCurrentDirectory dir
-  action
+  x <- action
   liftIO$ setCurrentDirectory d1
+  return x
   
+-- Compute a cut-down version of a benchmark's args list that will do
+-- a short (quick) run.  The way this works is that benchmarks are
+-- expected to run and do something quick if they are invoked with no
+-- arguments.  (A proper benchmarking run, therefore, requires larger
+-- numeric arguments be supplied.)
+-- 
+-- HOWEVER: there's a further hack here which is that leading
+-- non-numeric arguments are considered qualitative (e.g. "monad" vs
+-- "sparks") rather than quantitative and are not pruned by this
+-- function.
+shortArgs [] = []
+-- Crop as soon as we see something that is a number:
+shortArgs (h:tl) | isNumber h = []
+		 | otherwise  = h : shortArgs tl
+
+isNumber s =
+  case reads s :: [(Double, String)] of 
+    [(n,"")] -> True
+    _        -> False
+
+--------------------------------------------------------------------------------
+-- Error handling
 --------------------------------------------------------------------------------
 
 -- Check the return code from a call to a test executable:
-check ExitSuccess _           = return ()
+check ExitSuccess _           = return True
 check (ExitFailure code) msg  = do
   Config{..} <- ask
   let report = log$ printf " #      Return code %d Params: %s, RTS %s " (143::Int) ghc_flags ghc_RTS
@@ -189,16 +262,26 @@ check (ExitFailure code) msg  = do
         log "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
         unless keepgoing $ 
           lift$ exit code
-
+  return False
 
 --------------------------------------------------------------------------------
 -- Logging
 --------------------------------------------------------------------------------
 
+
+-- Stdout and logFile:
 log :: String -> ReaderT Config IO ()
 log str = do
   Config{logFile} <- ask
   lift$ logOn logFile str
+
+-- Stdout, logFile, and resultsFile
+logBoth str = do log str; logR str 
+
+-- Results file only:
+logR str = do 
+  Config{resultsFile} <- ask
+  lift$ runIO$ echo (str++"\n") -|- appendTo resultsFile
 
 logOn :: String -> String -> IO ()
 logOn file s = 
@@ -207,7 +290,8 @@ logOn file s =
 backupResults Config{resultsFile, logFile} = do 
   e    <- doesFileExist resultsFile
   --  date <- runSL "date +%s"
-  date <- runSL "date +%Y%m%d_%R"
+--  date <- runSL "date +%Y%m%d_%R"
+  date <- runSL "date +%Y%m%d_%s"
   when e $ do
     renameFile resultsFile (resultsFile ++"."++date++".bak")
   e2   <- doesFileExist logFile
@@ -220,31 +304,32 @@ backupResults Config{resultsFile, logFile} = do
 
 -- If the benchmark has already been compiled doCompile=False can be
 -- used to skip straight to the execution.
-runOne :: Bool -> String -> [String] -> Int -> (Int,Int) -> ReaderT Config IO ()
-runOne doCompile test args numthreads (iterNum,totalIters) = do
+runOne :: Bool -> BenchRun -> (Int,Int) -> ReaderT Config IO ()
+runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,totalIters) = do
+
+  Config{..} <- ask
+  let args = if shortrun then shortArgs args_ else args_
   
   log$ "\n--------------------------------------------------------------------------------"
   log$ "  Running Config "++show iterNum++" of "++show totalIters++
-       ": "++test++" (args \""++unwords args++"\") scheduler ?  threads "++show numthreads
+       ": "++test++" (args \""++unwords args++"\") scheduler "++show sched++"  threads "++show numthreads
   log$ "--------------------------------------------------------------------------------\n"
-
-  -- pwd <- runSL "pwd"
   pwd <- lift$ getCurrentDirectory
   log$ "(In directory "++ pwd ++")"
 
-  Config{..} <- ask
-
   -- numthreads == 0 indicates a serial run:
-  let (rts,flags) = case numthreads of
+  let (rts,flags_) = case numthreads of
 		     0 -> (ghc_RTS, ghc_flags)
 		     _ -> (ghc_RTS  ++" -N"++show numthreads, 
 			   ghc_flags++" -threaded")
+      flags = flags_ ++ " -fforce-recomp -DPARSCHED=\""++ (schedToModule sched) ++ "\""
 
       (containingdir,_) = splitFileName test
       hsfile = test++".hs"
       tmpfile = "._Temp_output_buffer.txt"
       flushtmp = do lift$ runIO$ catFrom [tmpfile] -|- indent -|- appendTo logFile
-		    lift$ runIO$ catFrom [tmpfile] -|- indent -- To stdout
+		    unless shortrun $ 
+		       lift$ runIO$ catFrom [tmpfile] -|- indent -- To stdout
 		    lift$ removeFile tmpfile
       -- Indent for prettier output
       indent = map ("    "++)
@@ -252,14 +337,14 @@ runOne doCompile test args numthreads (iterNum,totalIters) = do
   ----------------------------------------
   -- Do the Compile
   ----------------------------------------
-  when doCompile $ do 
+  success <- if not doCompile then return True else do 
 
      e  <- lift$ doesFileExist hsfile
      d  <- lift$ doesDirectoryExist containingdir
      mf <- lift$ doesFileExist$     containingdir ++ "/Makefile"
      if e then do 
 	 log "Compiling with a single GHC command: "
-	 let cmd = unwords [ghc, "-i../", "-i"++containingdir, flags ++ " -fforce-recomp", 
+	 let cmd = unwords [ghc, "-i../", "-i"++containingdir, flags, 
 			    hsfile, "-o "++test++".exe"]		
 	 log$ "  "++cmd ++"\n"
 	 -- Having trouble getting the &> redirection working.  Need to specify bash specifically:
@@ -271,8 +356,12 @@ runOne doCompile test args numthreads (iterNum,totalIters) = do
      else if (d && mf && containingdir /= ".") then do 
 	log " ** Benchmark appears in a subdirectory with Makefile.  Using it."
 	log " ** WARNING: Can't currently control compiler options for this benchmark!"
-	inDirectory containingdir $ do 
-	   code <- lift$ system "make"
+	inDirectory containingdir $ do
+
+--        lift$ runIO$ setenv [("GHC_FLAGS",flags)]
+--	   code <- lift$ system "make"
+           error$ "SETENV "++flags
+	   code <- lift$ run$ setenv [("GHC_FLAGS",flags)] "make"
 	   check code "ERROR, benchmark.hs: Compilation via benchmark Makefile failed:"
 
      else do 
@@ -283,6 +372,8 @@ runOne doCompile test args numthreads (iterNum,totalIters) = do
   -- Done Compiling, now Execute:
   ----------------------------------------
 
+  -- If we failed compilation we don't bother running either:
+  -- when success $ 
   let prunedRTS = unwords (pruneThreadedOpts (words rts)) -- ++ "-N" ++ show numthreads
       ntimescmd = printf "%s %d ./%s.exe %s +RTS %s -RTS" ntimes trials test (unwords args) prunedRTS
   log$ "Executing " ++ ntimescmd
@@ -290,20 +381,20 @@ runOne doCompile test args numthreads (iterNum,totalIters) = do
   -- One option woud be dynamic feedback where if the first one
   -- takes a long time we don't bother doing more trials.  
 
---  if [ "$SHORTRUN" != "" ]; then export HIDEOUTPUT=1; fi
-
   -- NOTE: With this form we don't get the error code.  Rather there will be an exception on error:
   (str::String,finish) <- lift$ run (ntimescmd ++" 2> "++ tmpfile) -- HSH can't capture stderr presently
   (_  ::String,code)   <- lift$ finish                       -- Wait for child command to complete
   flushtmp 
   check code ("ERROR, benchmark.hs: test command \""++ntimescmd++"\" failed with code "++ show code)
 
-  log$ " >>> MIN/MEDIAN/MAX TIMES " ++ 
-     case code of
-      ExitSuccess     -> str
-      ExitFailure 143 -> "TIMEOUT TIMEOUT TIMEOUT"
-      ExitFailure _   -> "ERR ERR ERR"
-		     
+  let times = 
+       case code of
+	ExitSuccess     -> str
+	ExitFailure 143 -> "TIMEOUT TIMEOUT TIMEOUT"
+	ExitFailure _   -> "ERR ERR ERR"		     
+
+  log $ " >>> MIN/MEDIAN/MAX TIMES " ++ times
+  logR$ test ++" "++ show sched ++" "++ show numthreads ++" "++ trim times
 
   return ()
   
@@ -336,6 +427,12 @@ resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, l
 -- Main Script
 ----------------------------------------------------------------------------------------------------
 
+
+data ActionList = 
+   Run Bool BenchRun -- Bool signifies recompile required.
+ | Print String
+
+
 main = do
 
   -- HACK: with all the inter-machine syncing and different version
@@ -359,24 +456,25 @@ main = do
 	log " -> Succeeded."
 	liftIO$ removeFile "make_output.tmp"
 
-        let total = length threadsettings * length benchlist
+        let allruns = [ BenchRun t s b | 
+			b@(Benchmark _ mode _) <- benchlist, 
+			s <- expandMode mode,
+			t <- threadsettings ]
+            total = length allruns
         log$ "\n--------------------------------------------------------------------------------"
         log$ "Running all benchmarks for all thread settings in "++show threadsettings
         log$ "Testing "++show total++" total configurations of "++ show (length benchlist) ++" benchmarks"
         log$ "--------------------------------------------------------------------------------"
-        
-        forM_ (zip [1..] benchlist) $ \ (n, (test,args)) -> 
-          forM_ (slidingWin 2 threadsettings) $ \ win -> do
-              let recomp = case win of 
-			     [x]   -> True -- First run, must compile.
-			     -- Switching from serial to parallel or back requires recompile:
-			     [0,t] | t > 0 -> True 
-			     [t,0] | t > 0 -> True 
-			     -- Otherwise, no recompile:
-			     [last,current] -> False
-		  numthreads = head$ reverse win
-              when recomp $ log "First time or changing threading mode, recompile required:"
-	      runOne recomp test (if shortrun then [] else args) numthreads (n,total)
+
+        forM_ (zip [1..] (slidingWin 2 allruns)) $ \ (n,win) -> do
+              let (recomp,newbench) = 
+                        case win of 
+			     [x]   -> (True,True) -- First run, must compile.
+			     [a,b] -> (recompRequired a b, benchChanged a b)
+		  bench@(BenchRun _ _ (Benchmark test _ args)) = head$ reverse win
+              when recomp   $ log "Recompile required for next config:"
+              when newbench $ logR$ "\n# *** Config ["++show n++"..?], testing with ./"++ test ++".exe "++unwords args
+	      runOne recomp bench (n,total)
 
         log$ "\n--------------------------------------------------------------------------------"
         log "  Finished with all test configurations."

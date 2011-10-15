@@ -20,14 +20,18 @@
 -- Ported to Monad-par by Ryan Newton.
 
 -- This program uses CnC to calculate the accelerations of the bodies in a 3D system.  
-  
-import Control.Monad.Par
+
 import Control.Monad
 import Data.Int
 import qualified Data.List as List
 import qualified Data.Array as A
 import GHC.Exts
 import System.Environment
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 type Float3D = (Float, Float, Float)
 type UFloat3D = (# Float#, Float#, Float# #)

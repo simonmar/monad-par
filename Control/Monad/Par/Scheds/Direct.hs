@@ -10,7 +10,7 @@
 -- trace data structure).
 
 module Control.Monad.Par.Scheds.Direct (
-   Sched(..), Par(..),
+   Sched(..), Par,
    IVar(..), IVarContents(..),
 --    sched,
     runPar, 

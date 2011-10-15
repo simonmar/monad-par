@@ -1,7 +1,13 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
--- import Control.Monad.Par
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
 -- Testing:
 -- import Control.Monad.ParElision
 -- import Control.Monad.Par.Scheds.Sparks
@@ -21,18 +27,12 @@ parfib1 n =
      return (x+y)
 
 main = do args <- getArgs	  
-          let (version,size) = 
+          let size = 
                    case args of 
-		      []    -> ("trace",10)
-		      [v,n] -> (v      ,read n)
+		      []  -> 10
+		      [n] -> read n
 
-	  case version of 
-	    "trace"  -> do 
-			   putStrLn "Trace-based monad-par version:"
-			   print$ runPar$ parfib1 size
-
-	    _        -> error$ "unknown version: "++version
-
+          print$ runPar$ parfib1 size
 
 {- [2011.03] On 4-core nehalem, 3.33ghz:
 

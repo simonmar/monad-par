@@ -4,14 +4,14 @@ import Control.Monad
 import Control.Seq
 import Control.DeepSeq
 import Control.Exception
-import Control.Monad.Par
-import qualified Control.Monad.Par.Combinator as C
-import Control.Monad.Par.AList as A
-import Data.Complex
-import Debug.Trace
 import PortablePixmap
-import System.Environment
-import System.IO
+import Control.Monad.Par.AList as A
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0

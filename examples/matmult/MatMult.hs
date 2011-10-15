@@ -24,12 +24,14 @@ module Main(main) where
 
 import System.Environment
 import Data.List hiding (foldl', foldl1')
-
 import ListAux
 import Control.DeepSeq
-
-import Control.Monad.Par
 import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 -------------------------------------
 

@@ -1,11 +1,13 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 import System.Environment
 import Control.Monad
 import Control.Seq
-
-import Control.Monad.Par
 import qualified Control.Monad.Par.Combinator as C
--- import Control.Monad.Par_Strawman
+#ifdef PARSCHED
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 nqueens :: Int -> Par [[Int]]
 nqueens nq = step 0 []

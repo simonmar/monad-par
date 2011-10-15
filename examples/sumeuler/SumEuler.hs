@@ -18,15 +18,17 @@
 ---------------------------------------------------------------------------
 
 module Main where
-
 import System.Environment (getArgs)
-
 import Control.Monad (when)
-import Control.Monad.Par
-import qualified Control.Monad.Par.Combinator as C
-
 import ListAux -- split/join functions, put in new module
 import SumEulerPrimes
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
 
 ---------------------------------------------------------------------------
 -- Generic clustering routines
@@ -78,8 +80,8 @@ main = do args <- getArgs
                             | otherwise   = defVal
             x, n, c :: Int
             x = argDef 0 38   -- which sumEuler to use
-            n = argDef 1 5000 -- size of the interval
-            c = argDef 2 100  -- chunksize
+            n = argDef 1 500  -- size of the interval
+            c = argDef 2 20   -- chunksize
             -- parallel computation
             (res, _str) = case x of
 
