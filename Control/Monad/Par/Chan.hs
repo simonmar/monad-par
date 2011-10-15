@@ -60,6 +60,8 @@ instance (SplittableState s, PC.ParFuture p iv)
 		     lift$ PC.spawn_ x'
   spawn p = PC.spawn_ (do p' <- p; pseq (rnf p') return p' )
 
+  spawnP = error "unimplemented"
+
 --  spawn = spawn
 --  spawn p  = do r <- new;  fork (p >>= put r);   return r
 --  spawn_ p = do r <- new;  fork (p >>= put_ r);  return r

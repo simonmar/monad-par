@@ -36,7 +36,7 @@ queens        futures 14
 stream/disjoint_working_sets_pipeline ivars  monad  4 256 10 10000
 stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
 
-partree/partree futures  default 600 20
+partree/partree futures 600 20
 
 # What should the arguments be here:
 # minimax/minimax ? ? 

@@ -2,18 +2,12 @@
 {-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
+import GHC.Conc
 #ifdef PARSCHED 
 import PARSCHED
 #else
 import Control.Monad.Par
 #endif
-
--- Testing:
--- import Control.Monad.ParElision
--- import Control.Monad.Par.Scheds.Sparks
-import Control.Monad.Par.Scheds.Trace
---import Control.Monad.Par.Scheds.Direct
-import GHC.Conc
 
 type FibType = Int64
 

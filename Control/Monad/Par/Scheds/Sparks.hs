@@ -19,20 +19,11 @@ import qualified Control.Monad.Par.Class as PC
 {-# INLINE runPar #-}
 {-# INLINE spawn #-}
 {-# INLINE spawn_ #-}
+{-# INLINE spawnP #-}
 {-# INLINE get #-}
 
 data Par    a = Done   a
 data Future a = Future a
-
-instance Monad Par where
-  return x = Done x
-  Done x >>= k = k x
-
-instance PC.ParFuture Par Future where 
-  get    = get
-  spawn  = spawn
-  spawn_ = spawn_
-
 
 runPar :: Par a -> a
 runPar (Done x) = x
@@ -44,5 +35,19 @@ spawn_ a = let a' = runPar a in a' `par` return (Future a')
 spawn :: NFData a => Par a -> Par (Future a)
 spawn a = let a' = runPar a in a' `par` return (Future (rnf a' `pseq` a'))
 
+spawnP :: NFData a => a -> Par (Future a)
+spawnP a = a `par` return (Future (rnf a `pseq` a))
+
 get :: Future a -> Par a
 get (Future a) = a `pseq` return a
+
+
+instance Monad Par where
+  return x = Done x
+  Done x >>= k = k x
+
+instance PC.ParFuture Par Future where 
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
