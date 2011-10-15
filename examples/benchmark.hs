@@ -73,10 +73,12 @@ data Config = Config
 -- threads, other flags, etc):
 data BenchRun = BenchRun
  { threads :: Int
- , sched   :: String -- e.g. "Trace" to be appended to "Control.Monad.Scheds."
+ , sched   :: Sched 
  , bench   :: Benchmark
  } deriving (Eq, Show)
 
+data Sched = Trace | Direct | Sparks | None
+ deriving (Eq,Show)
 
 data Benchmark = Benchmark
  { name :: String
@@ -158,15 +160,21 @@ recompRequired (BenchRun t1 s1 b1) (BenchRun t2 s2 b2) =
 
 benchChanged (BenchRun _ _ b1) (BenchRun _ _ b2) = b1 /= b2
 
-
 -- Expand the mode string into a list of specific schedulers to run:
-expandMode "default" = ["Control.Monad.Par"]
+expandMode "default" = [Trace]
+expandMode "none"    = [None]
 -- TODO: Add RNG:
-expandMode "futures" = map p ["Trace", "Direct", "Sparks"]
-expandMode "ivars"   = map p ["Trace", "Direct"]
-expandMode "chans"   = map p []
+expandMode "futures" = [Trace, Direct, Sparks]
+expandMode "ivars"   = [Trace, Direct]
+expandMode "chans"   = [] -- Not working yet!
 
-p = ("Control.Monad.Par.Scheds."++)
+schedToModule s = 
+  case s of 
+   Trace  -> "Control.Monad.Par"
+   Direct -> "Control.Monad.Par.Scheds.Direct"
+   Sparks -> "Control.Monad.Par.Scheds.Sparks"
+   None   -> "qualified Control.Monad.Par as NotUsed"
+  
 
 --------------------------------------------------------------------------------
 -- Misc Small Helpers
@@ -304,7 +312,7 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
   
   log$ "\n--------------------------------------------------------------------------------"
   log$ "  Running Config "++show iterNum++" of "++show totalIters++
-       ": "++test++" (args \""++unwords args++"\") scheduler ?  threads "++show numthreads
+       ": "++test++" (args \""++unwords args++"\") scheduler "++show sched++"  threads "++show numthreads
   log$ "--------------------------------------------------------------------------------\n"
   pwd <- lift$ getCurrentDirectory
   log$ "(In directory "++ pwd ++")"
@@ -314,7 +322,7 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
 		     0 -> (ghc_RTS, ghc_flags)
 		     _ -> (ghc_RTS  ++" -N"++show numthreads, 
 			   ghc_flags++" -threaded")
-      flags = flags_ ++ " -fforce-recomp -DPARSCHED="++sched
+      flags = flags_ ++ " -fforce-recomp -DPARSCHED=\""++ (schedToModule sched) ++ "\""
 
       (containingdir,_) = splitFileName test
       hsfile = test++".hs"
@@ -386,7 +394,7 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
 	ExitFailure _   -> "ERR ERR ERR"		     
 
   log $ " >>> MIN/MEDIAN/MAX TIMES " ++ times
-  logR$ test ++" "++ sched ++" "++ show numthreads ++" "++ times
+  logR$ test ++" "++ show sched ++" "++ show numthreads ++" "++ trim times
 
   return ()
   
@@ -465,7 +473,7 @@ main = do
 			     [a,b] -> (recompRequired a b, benchChanged a b)
 		  bench@(BenchRun _ _ (Benchmark test _ args)) = head$ reverse win
               when recomp   $ log "Recompile required for next config:"
-              when newbench $ logR$ "\n# *** Config ["++show n++"], testing with ./"++ test ++".exe "++unwords args
+              when newbench $ logR$ "\n# *** Config ["++show n++"..?], testing with ./"++ test ++".exe "++unwords args
 	      runOne recomp bench (n,total)
 
         log$ "\n--------------------------------------------------------------------------------"

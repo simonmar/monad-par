@@ -13,35 +13,34 @@
 # CHANGELOG:
 # 
 
-quicksort/parquicksort_monad default 250000
-quicksort/parquicksort_pseq default 250000
+quicksort/parquicksort_monad futures 250000
+quicksort/parquicksort_pseq  none    250000
 
-parfib_monad  default 36
-parfib_pseq   default 36
+parfib_monad  futures 36
+parfib_pseq   none 36
 
-blackscholes  default 10000 15000000
+blackscholes  futures 10000 15000000
 
 # cholesky      default 1000 50 cholesky_matrix1000.dat
 
-nbody         default 13000
+nbody         ivars  13000
 
 # mandel 300 300 4000
-mandel        default 2000 2000 3000000
+mandel        futures 2000 2000 3000000
 
-coins         default 8 1250
-queens        default 14
+coins         futures 8 1250
+queens        futures 14
 
 # binomial lattice?
 
-stream/disjoint_working_sets_pipeline default monad  4 256 10 10000
-stream/disjoint_working_sets_pipeline default sparks 4 256 10 10000
+stream/disjoint_working_sets_pipeline ivars  monad  4 256 10 10000
+stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
 
-partree/partree   default 600 20
+partree/partree futures  default 600 20
 
 # What should the arguments be here:
 # minimax/minimax ? ? 
 
 # These don't match the naming convention at the moment.
-matmult/matmult   default 768 0 64
-sumeuler/sumeuler default 38 8000 100
-
+matmult/matmult   futures 768 0 64
+sumeuler/sumeuler futures 38 8000 100
