@@ -8,6 +8,9 @@
 # Running each test for 3 trials.
 #  ... with default compiler options:  -O2 -rtsopts
 #  ... with default runtime options:  -qa
+# Benchmarks_File: benchlist.txt
+# Benchmarks_Variant: desktop
+# Benchmarks_Version: 1.0
 # Using the following settings from the benchmarking environment:
 # BENCHLIST=  THREADSETTINGS=1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16  TRIALS=3  SHORTRUN=  KEEPGOING=1  GHC=  GHC_FLAGS=  GHC_RTS=
 # *** Config [0 ..], testing with command/args: parfib_monad.exe trace 36 

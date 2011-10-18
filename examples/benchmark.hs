@@ -25,7 +25,7 @@
      BENCHLIST=foo.txt to select the benchmarks and their arguments
 		       (uses benchlist.txt by default)
 
-     SCHEDS="Trace Direct Sparks"  (or a subset thereof)
+     SCHEDS="Trace Direct Sparks" -- Restricts to a subset of schedulers.
 
    Additionally, this script will propagate any flags placed in the
    environment variables $GHC_FLAGS and $GHC_RTS.  It will also use
@@ -33,7 +33,15 @@
 
    ---------------------------------------------------------------------------
 
-TODO: Factor out compilation from execution so that compilation can be parallelized.
+      ----
+   << TODO >>
+      ====
+
+   * Factor out compilation from execution so that compilation can be parallelized.
+     * Further enable packing up a benchmark set to run on a machine
+       without GHC (as with Haskell Cnc)
+   * Replace environment variable argument passing with proper flags/getopt.
+
 -}
 
 import System.Environment
@@ -48,11 +56,12 @@ import Control.Monad.Reader
 import Text.Printf
 import Debug.Trace
 import Data.Char (isSpace)
-import Data.List (isPrefixOf, tails)
+import Data.List (isPrefixOf, tails, isInfixOf)
 
 -- The global configuration for benchmarking:
 data Config = Config 
  { benchlist      :: [Benchmark]
+ , benchversion   :: (String, Double) -- benchlist file name and version number (e.g. X.Y)
  , threadsettings :: [Int]  -- A list of #threads to test.  0 signifies non-threaded mode.
  , maxthreads     :: Int
  , trials         :: Int    -- number of runs of each configuration
@@ -111,6 +120,10 @@ getConfig = do
   -- We can't use numCapabilities as the number of hardware threads
   -- because this script may not be running in threaded mode.
 
+  case get "SCHEDS" "" of 
+    "" -> return ()
+    s  -> error$ "SCHEDS env variable not handled yet.  Set to: " ++ show s
+
   ----------------------------------------
   -- Determine the number of cores.
   d <- doesDirectoryExist "/sys/devices/system/cpu/"
@@ -127,6 +140,9 @@ getConfig = do
 
   logOn logFile$ "Reading list of benchmarks/parameters from: "++bench
   benchstr <- readFile bench
+  let ver = case filter (isInfixOf "ersion") (lines benchstr) of 
+	      (h:t) -> read $ head $ filter isNumber (words h)
+	      []    -> 0
 
   -- Here are the DEFAULT VALUES:
   return$ 
@@ -138,6 +154,7 @@ getConfig = do
 	                  ++ " -rtsopts" -- Always turn on rts opts.
 	   , trials     = read$ get "TRIALS"    "1"
 	   , benchlist  = parseBenchList benchstr
+	   , benchversion = (bench, ver)
 	   , maxthreads = read maxthreads
 	   , threadsettings = parseIntList$ get "THREADS" maxthreads
 	   , shortrun    
@@ -401,8 +418,14 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
 
 --------------------------------------------------------------------------------
 
+whichVariant "benchlist.txt"        = "desktop"
+whichVariant "benchlist_server.txt" = "server"
+whichVariant "benchlist_laptop.txt" = "laptop"
+whichVariant _                      = "unknown"
+
 resultsHeader :: Config -> IO ()
-resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, logFile} = 
+resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, logFile, benchversion, shortrun } = 
+  let (benchfile, ver) = benchversion in
   mapM_ runIO $ 
 --  map (-|- appendTo results) $
   [
@@ -416,8 +439,12 @@ resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, l
   , e$ "# Running each test for "++show trials++" trial(s)."
   , e$ "#  ... with compiler options: " ++ ghc_flags
   , e$ "#  ... with runtime options: " ++ ghc_RTS
-  , e$ "# Using the following settings from the benchmarking environment:" 
-  , e$ "# BENCHLIST=$BENCHLIST  THREADS=$THREADS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN  KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
+  , e$ "# Benchmarks_File: " ++ benchfile
+  , e$ "# Benchmarks_Variant: " ++ if shortrun then "SHORTRUN" else whichVariant benchfile
+  , e$ "# Benchmarks_Version: " ++ show ver
+  , e$ "# Using the following settings from environment variables:" 
+  , e$ "#   BENCHLIST=$BENCHLIST THREADS=$THREADS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN SCHEDS=$SCHEDS"
+  , e$ "#   KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
   ]
  where 
     e s = ("echo \""++s++"\"") -|- tee ["/dev/stdout", logFile] -|- appendTo resultsFile

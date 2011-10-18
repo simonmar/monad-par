@@ -2,8 +2,9 @@
 
 module Main where
 
-import Control.Monad.Par
-import Control.Monad.Par.Internal
+import Control.Monad.Par.Combinator 
+import Control.Monad.Par.Scheds.Trace
+import Control.Monad.Par.Scheds.TraceInternal
 import Control.Exception
 import System.IO.Unsafe
 import Test.HUnit

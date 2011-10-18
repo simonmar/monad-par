@@ -5,6 +5,9 @@
 # Running each test for 3 trials.
 #  ... with default compiler options:  -O2 -rtsopts
 #  ... with default runtime options:  -qa
+# Benchmarks_File: benchlist.txt
+# Benchmarks_Variant: desktop
+# Benchmarks_Version: 1.0
 # *** Config [0 ..], testing with command/args: parfib.exe monad 36 
 parfib.exe monad 1 8.83 8.85 8.86
 

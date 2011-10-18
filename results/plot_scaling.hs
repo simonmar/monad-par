@@ -130,56 +130,21 @@ newtype Mystr = Mystr String
 instance Show Mystr where
   show (Mystr s) = s
 
-{-
--- I ended up giving up on using the gnuplot package on hackage:
--- mypath :: Graph2D.T 
---Plot2D.T
---plot_benchmark :: [[[Entry]]] -> IO ()
---plot_benchmark :: [[[Entry]]] -> Plot2D.T
-plot_benchmark [io, pure] = 
-    --Plot.plot (X11.title "foobar" X11.cons) $
-    Plot.plot X11.cons $
-    Frame.cons (Opts.title ("Benchmark: " ++ benchname ++ " normalized to time " ++ show basetime) $ Opts.deflt) plots
- where 
-  benchname = name $ head $ head io 
-  plots = foldl1 mappend (map persched io ++ map persched pure)
-  basetime = foldl1 min $ map tmed $
-	     filter ((== 0) . threads) $
-	     (concat io ++ concat pure)
-  persched :: [Entry] -> Plot2D.T
-  persched dat = 
-    let 
-	schd = sched$   head dat
-	var  = variant$ head dat
-        mins = map tmin dat
-        meds = map tmed dat
-        maxs = map tmax dat
-	--zip4 = map$ \ a b c d -> (a,b,c,d)
-	zip4 s1 s2 s3 s4 = map (\ ((a,b), (c,d)) -> (a,b,c,d))
-	                   (zip (zip s1 s2) (zip s3 s4))
-        pairs = zip4 (map (fromIntegral . threads) dat) 
-		     (map (basetime / ) meds)
-		     (map (basetime / ) mins)
-		     (map (basetime / ) maxs)
-	quads = map (\ (a,b,c,d) -> Mystr (show a ++" "++ show b ++" "++ show d ++" "++ show c))
-		pairs 
-    in 
-      fmap (Graph2D.lineSpec $ 
-	    LineSpec.title (var ++"/"++ show schd) $ 
-	    LineSpec.lineWidth 3.0 $ 
-	    LineSpec.pointSize 3.0 $ 
-	    LineSpec.deflt) $ 
-      fmap (Graph2D.typ Graph2D.linesPoints) $
-      --Plot2D.path pairs
-      --Plot2D.path (map ( \ (a,b,c,d) -> (a,b)) pairs)
-      --fmap (Graph2D.typ Graph2D.errorBars) $
-      Plot2D.list quads
--}
-
 -- Name, Scheduler, Threads, BestTime, Speedup
 data Best = Best (String, String, String, Int, Double, Double)
 
--- Plot a single benchmark as a gnuplot script:
+
+{-
+   I ended up giving up on using the gnuplot package on hackage.
+
+   The below script turns a single benchmark into a gnuplot script
+   (produced as a string).
+
+   plot_benchmark2 expects
+
+-}
+plot_benchmark2 :: String -> [[[Entry]]] -> IO Best
+
 plot_benchmark2 root [io, pure] = 
     do action $ filter goodSched (io ++ pure)
        return$ Best (benchname, bestvariant, 
@@ -288,6 +253,10 @@ plot_benchmark2 root [io, pure] =
 
 --plot_benchmark2 root ls = putStrLn$ "plot_benchmark2: Unexpected input, list len: "++ show (length ls)
 plot_benchmark2 root [io] = plot_benchmark2 root [io,[]]
+
+plot_benchmark2 root ls = error$ "plot_benchmark2: wrong number of arguments: " ++ 
+                                  show (map (map (map variant)) ls)
+--                                  show (map (map (map variant)) ls)
 
 
 

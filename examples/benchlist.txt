@@ -3,7 +3,7 @@
 # This is a default set of benchmarks reasonable for a powerful four core desktop.
 # For example on my machine this takes 15.5 minutes to do 3 trials from 1-8 threads.
 #
-# Version: desktop v1.0
+# Version: desktop 1.0
 # 
 # I'm attempting to keep track of changes to this config with the above.
 # Note that changes to the benchmarks themselves also require changing
