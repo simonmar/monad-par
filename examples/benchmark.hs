@@ -260,6 +260,12 @@ isNumber s =
     [(n,"")] -> True
     _        -> False
 
+runIgnoreErr :: String -> IO String
+runIgnoreErr cm = 
+  do (str,force) <- run cm
+     (err::String, code::ExitCode) <- force
+     return str
+
 --------------------------------------------------------------------------------
 -- Error handling
 --------------------------------------------------------------------------------
@@ -424,28 +430,37 @@ whichVariant "benchlist_laptop.txt" = "laptop"
 whichVariant _                      = "unknown"
 
 resultsHeader :: Config -> IO ()
-resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, logFile, benchversion, shortrun } = 
-  let (benchfile, ver) = benchversion in
+resultsHeader Config{ghc, trials, ghc_flags, ghc_RTS, maxthreads, resultsFile, logFile, benchversion, shortrun } = do
+  let (benchfile, ver) = benchversion
+  -- There has got to be a simpler way!
+  -- branch   <- runIgnoreErr "git branch 2> /dev/null | sed -e '/^[^*]/d' -e 's/* \(.*\)/\1/'"
+  -- branch <- "git symbolic-ref HEAD"
+  branch   <- runIgnoreErr "git name-rev --name-only HEAD"
+  revision <- runIgnoreErr "git rev-parse HEAD"
+  -- Note that this will NOT be newline-terminated:
+  hashes   <- runIgnoreErr "git log --pretty=format:'%H'"
   mapM_ runIO $ 
---  map (-|- appendTo results) $
-  [
-    e$ "# TestName Variant NumThreads   MinTime MedianTime MaxTime"        
-  , e$ "#    "        
-  , e$ "# `date`"
-  , e$ "# `uname -a`" 
-  , e$ "# Determined machine to have "++show maxthreads++" hardware threads."
-  , e$ "# `ghc -V`" 
-  , e$ "# "                                                                
-  , e$ "# Running each test for "++show trials++" trial(s)."
-  , e$ "#  ... with compiler options: " ++ ghc_flags
-  , e$ "#  ... with runtime options: " ++ ghc_RTS
-  , e$ "# Benchmarks_File: " ++ benchfile
-  , e$ "# Benchmarks_Variant: " ++ if shortrun then "SHORTRUN" else whichVariant benchfile
-  , e$ "# Benchmarks_Version: " ++ show ver
-  , e$ "# Using the following settings from environment variables:" 
-  , e$ "#   BENCHLIST=$BENCHLIST THREADS=$THREADS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN SCHEDS=$SCHEDS"
-  , e$ "#   KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
-  ]
+   [
+     e$ "# TestName Variant NumThreads   MinTime MedianTime MaxTime"        
+   , e$ "#    "        
+   , e$ "# `date`"
+   , e$ "# `uname -a`" 
+   , e$ "# Determined machine to have "++show maxthreads++" hardware threads."
+   , e$ "# `ghc -V`" 
+   , e$ "# "                                                                
+   , e$ "# Running each test for "++show trials++" trial(s)."
+   , e$ "#  ... with compiler options: " ++ ghc_flags
+   , e$ "#  ... with runtime options: " ++ ghc_RTS
+   , e$ "# Benchmarks_File: " ++ benchfile
+   , e$ "# Benchmarks_Variant: " ++ if shortrun then "SHORTRUN" else whichVariant benchfile
+   , e$ "# Benchmarks_Version: " ++ show ver
+   , e$ "# Git_Branch: " ++ trim branch
+   , e$ "# Git_Hash: "   ++ trim revision
+   , e$ "# Git_Depth: "  ++ show (length (lines hashes))
+   , e$ "# Using the following settings from environment variables:" 
+   , e$ "#   BENCHLIST=$BENCHLIST THREADS=$THREADS  TRIALS=$TRIALS  SHORTRUN=$SHORTRUN SCHEDS=$SCHEDS"
+   , e$ "#   KEEPGOING=$KEEPGOING  GHC=$GHC  GHC_FLAGS=$GHC_FLAGS  GHC_RTS=$GHC_RTS"
+   ]
  where 
     e s = ("echo \""++s++"\"") -|- tee ["/dev/stdout", logFile] -|- appendTo resultsFile
 
