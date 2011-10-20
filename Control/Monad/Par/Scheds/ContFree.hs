@@ -368,6 +368,20 @@ new :: Par (IVar a)
 new  = liftIO $ do r <- newIORef Empty
                    return (IVar r)
 
+-- This makes debugging somewhat easier:
+spinReadMVar Sched{..} mv = do
+  sn <- makeStableName mv
+  let loop = do v <- tryTakeMVar mv
+		case v of 
+		  Nothing -> do printf "                 [%d] thread spinning to try to read MVar %d\n" no (hashStableName sn) 
+				threadDelay (100 * 1000) -- 1/10 a second
+				loop 
+		  Just x -> do printf "[%d] SUCCESSFULLY read MVar %d\n" no (hashStableName sn) 
+			       putMVar mv x
+			       return x
+  loop
+		  
+
 {-# INLINE get  #-}
 -- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
@@ -384,24 +398,30 @@ get (IVar v) = do
             mv <- liftIO$ newEmptyMVar
 	    sn <- liftIO$ makeStableName mv
             let rd mv x = 
-                   let act = readMVar mv
+                   let -- act = readMVar mv
+		       act = spinReadMVar sch mv
 		       act' = -- do regulatePopulation sch; act
 		              do makeMortal sch; replaceWorker sch; act
 		       val = unsafePerformIO act' -- dupable?
-		   in trace (" !! performing unsafeIO read of MVar "++ show (hashStableName sn) ++"... thread "++ show (no sch)) $
-                      val `pseq` 
-                      trace (" !! COMPLETED read of MVar "++ show (hashStableName sn) ++" on thread "++ show (no sch)) $
-                      (x, val)
+		   in (x, val)
 
             when dbg$ liftIO$ printf "  It looks like we may go down to block MVar %d for a get.  Thread %d\n" (hashStableName sn) (no sch)
 
 	    -- The thread modifying the IO ref will block until the MVar is filled in:
-	    liftIO$ atomicModifyIORef v $ \e -> 
+	    val <- liftIO$ atomicModifyIORef v $ \e -> 
 	     case e of
 	       Empty         -> rd mv (Blocked mv)
 	       x@(Full a)    -> (x, a)
---	       Future a     -> (Full a, a)
 	       x@(Blocked mv) -> rd mv x 
+            -- Make sure that we have the actual value (not just a thunk) before proceding:
+            trace (" !! performing unsafeIO read of MVar "++ show (hashStableName sn) ++"... thread "++ show (no sch)) $
+             val `pseq` 
+              trace (" !! COMPLETED read of MVar "++ show (hashStableName sn) ++" on thread "++ show (no sch) 
+#ifdef DEBUGGING
+		     ++ " value " ++ show val
+#endif
+		    ) $
+              (return val)
 
 
 
@@ -422,7 +442,8 @@ put_ (IVar v) !content = do
       putStrLn ">>>>>>>>>>>>>>>>>>> MARKER2"
       case mmv of 
         Just mv -> do putStrLn ">>>>>>>>>>>>>>>>>>> MARKER3"
-		      when dbg$ printf "    !! [thread %d] Putting MVar, unblocking thread(s).\n" (no sched)
+		      sn <- makeStableName mv
+		      when dbg$ printf "    !! [thread %d] Putting MVar %d, unblocking thread(s).\n"  (hashStableName sn) (no sched)
 		      putMVar mv content
         Nothing -> 
                    putStrLn ">>>>>>>>>>>>>>>>>>> MARKER4"
