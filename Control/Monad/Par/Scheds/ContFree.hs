@@ -44,8 +44,12 @@ import System.Mem.StableName
 import Text.Printf
 
 
-#define DEBUG
+-- #define DEBUG
+#ifdef DEBUG
 dbg = True
+#else
+dbg = False
+#endif
 -- define FORKPARENT
 -- define WAKEIDLE
 
@@ -398,8 +402,12 @@ get (IVar v) = do
             mv <- liftIO$ newEmptyMVar
 	    sn <- liftIO$ makeStableName mv
             let rd mv x = 
-                   let -- act = readMVar mv
+                   let 
+#ifdef DEBUG
 		       act = spinReadMVar sch mv
+#else
+		       act = readMVar mv
+#endif
 		       act' = -- do regulatePopulation sch; act
 		              do makeMortal sch; replaceWorker sch; act
 		       val = unsafePerformIO act' -- dupable?
@@ -414,14 +422,14 @@ get (IVar v) = do
 	       x@(Full a)    -> (x, a)
 	       x@(Blocked mv) -> rd mv x 
             -- Make sure that we have the actual value (not just a thunk) before proceding:
+#ifdef DEBUG
             trace (" !! performing unsafeIO read of MVar "++ show (hashStableName sn) ++"... thread "++ show (no sch)) $
              val `pseq` 
-              trace (" !! COMPLETED read of MVar "++ show (hashStableName sn) ++" on thread "++ show (no sch) 
-#ifdef DEBUGGING
-		     ++ " value " ++ show val
-#endif
-		    ) $
+              trace (" !! COMPLETED read of MVar "++ show (hashStableName sn) ++" on thread "++ show (no sch) ++ " value " ++ show val) $
               (return val)
+#else
+            val `pseq` return val
+#endif
 
 
 
@@ -434,20 +442,16 @@ put_ (IVar v) !content = do
    when dbg$ liftIO$ printf "    !! [%d] PUTTING value %s to ivar %d\n" (no sched) (show content) (hashStableName sn)
 #endif
    liftIO$ do 
-      putStrLn ">>>>>>>>>>>>>>>>>>> MARKER1"
       mmv <- atomicModifyIORef v $ \e -> case e of
                Empty      -> (Full content, Nothing)
                Blocked mv -> (Full content, Just mv)
                Full _     -> error "multiple put"
-      putStrLn ">>>>>>>>>>>>>>>>>>> MARKER2"
       case mmv of 
-        Just mv -> do putStrLn ">>>>>>>>>>>>>>>>>>> MARKER3"
-		      sn <- makeStableName mv
-		      when dbg$ printf "    !! [thread %d] Putting MVar %d, unblocking thread(s).\n"  (hashStableName sn) (no sched)
+        Just mv -> do 
+		      when dbg$ do sn <- makeStableName mv
+				   printf "    !! [thread %d] Putting MVar %d, unblocking thread(s).\n"  (hashStableName sn) (no sched)
 		      putMVar mv content
-        Nothing -> 
-                   putStrLn ">>>>>>>>>>>>>>>>>>> MARKER4"
---		   return () 
+        Nothing -> return () 
 
 {-# INLINE fork #-}
 -- TODO: Continuation (parent) stealing version.
@@ -541,7 +545,7 @@ trivialCont _ = trace "trivialCont evaluated!"
 		return ()
 
 {-# INLINE spawn1_ #-}
--- Spawn a one argument function instead of a thunk:
+-- Spawn a one argument function instead of a thunk.  This is good for debugging if the value supports "Show".
 spawn1_ f x = 
 #ifdef DEBUG
  do sch <- R.ask; when dbg$ liftIO$ printf " [%d] spawning fn with arg %s\n" (no sch) (show x)
