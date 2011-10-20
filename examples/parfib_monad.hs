@@ -6,7 +6,8 @@ import GHC.Conc
 #ifdef PARSCHED 
 import PARSCHED
 #else
-import Control.Monad.Par
+-- import Control.Monad.Par
+import Control.Monad.Par.Scheds.ContFree
 #endif
 
 type FibType = Int64
@@ -15,7 +16,7 @@ parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1 
 parfib1 n = 
   do 
-     xf <- spawn_$ parfib1 (n-1)
+     xf <- spawn1_ parfib1 (n-1)
      y  <-         parfib1 (n-2)  
      x  <- get xf
      return (x+y)
