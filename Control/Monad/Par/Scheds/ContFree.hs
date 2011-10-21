@@ -280,7 +280,7 @@ runPar userComp = unsafePerformIO $ do
    sn <- makeStableName mv
 
    forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-        forkOn cpu $
+        forkOnIO cpu $
           if (cpu /= main_cpu)
              then do when dbg$ printf "CPU %d entering scheduling loop.\n" cpu
 		     R.runReaderT enterScheduler sched 
