@@ -25,7 +25,10 @@
      BENCHLIST=foo.txt to select the benchmarks and their arguments
 		       (uses benchlist.txt by default)
 
-     SCHEDS="Trace Direct Sparks" -- Restricts to a subset of schedulers.
+     SCHEDS="Trace Direct Sparks ContFree" -- Restricts to a subset of schedulers.
+
+     GENERIC=1 to go through the generic (type class) monad par
+               interface instead of using each scheduler directly
 
    Additionally, this script will propagate any flags placed in the
    environment variables $GHC_FLAGS and $GHC_RTS.  It will also use
@@ -42,6 +45,8 @@
        without GHC (as with Haskell Cnc)
    * Replace environment variable argument passing with proper flags/getopt.
 
+   * Handle testing with multiple GHC versions and multiple flag-configs.
+
 -}
 
 import System.Environment
@@ -56,6 +61,7 @@ import Control.Monad.Reader
 import Text.Printf
 import Debug.Trace
 import Data.Char (isSpace)
+import qualified Data.Set as S
 import Data.List (isPrefixOf, tails, isInfixOf)
 
 -- The global configuration for benchmarking:
@@ -70,7 +76,7 @@ data Config = Config
  , ghc            :: String -- ghc compiler path
  , ghc_flags      :: String
  , ghc_RTS        :: String -- +RTS flags
-
+ , scheds         :: S.Set Sched -- subset of schedulers to test.
  , hostname       :: String 
  , resultsFile    :: String -- Where to put timing results.
  , logFile        :: String -- Where to put more verbose testing output.
@@ -86,8 +92,12 @@ data BenchRun = BenchRun
  , bench   :: Benchmark
  } deriving (Eq, Show)
 
-data Sched = Trace | Direct | Sparks | None
- deriving (Eq,Show)
+data Sched 
+   = Trace | Direct | Sparks | ContFree
+   | None
+ deriving (Eq, Show, Read, Ord)
+
+allScheds = S.fromList [Trace, Direct, Sparks, ContFree, None]
 
 data Benchmark = Benchmark
  { name :: String
@@ -120,9 +130,13 @@ getConfig = do
   -- We can't use numCapabilities as the number of hardware threads
   -- because this script may not be running in threaded mode.
 
-  case get "SCHEDS" "" of 
+  let scheds = case get "SCHEDS" "" of 
+		"" -> allScheds
+		s  -> S.fromList (map read (words s))
+
+  case get "GENERIC" "" of 
     "" -> return ()
-    s  -> error$ "SCHEDS env variable not handled yet.  Set to: " ++ show s
+    s  -> error$ "GENERIC env variable not handled yet.  Set to: " ++ show s
 
   ----------------------------------------
   -- Determine the number of cores.
@@ -146,20 +160,18 @@ getConfig = do
 
   -- Here are the DEFAULT VALUES:
   return$ 
-    Config { hostname
-	   , logFile  
+    Config { hostname, logFile, scheds, shortrun    
 	   , ghc        =       get "GHC"       "ghc"
 	   , ghc_RTS    =       get "GHC_RTS" (if shortrun then "" else "-qa -s")
   	   , ghc_flags  = (get "GHC_FLAGS" (if shortrun then "" else "-O2")) 
 	                  ++ " -rtsopts" -- Always turn on rts opts.
-	   , trials     = read$ get "TRIALS"    "1"
-	   , benchlist  = parseBenchList benchstr
-	   , benchversion = (bench, ver)
-	   , maxthreads = read maxthreads
-	   , threadsettings = parseIntList$ get "THREADS" maxthreads
-	   , shortrun    
-	   , keepgoing   = strBool (get "KEEPGOING" "0")
-	   , resultsFile = "results_" ++ hostname ++ ".dat"
+	   , trials         = read$ get "TRIALS"    "1"
+	   , benchlist      = parseBenchList benchstr
+	   , benchversion   = (bench, ver)
+	   , maxthreads     = read maxthreads
+	   , threadsettings = parseIntList$ get "THREADS" maxthreads	   
+	   , keepgoing      = strBool (get "KEEPGOING" "0")
+	   , resultsFile    = "results_" ++ hostname ++ ".dat"
 	   }
 
 pruneThreadedOpts :: [String] -> [String]
@@ -181,16 +193,20 @@ benchChanged (BenchRun _ _ b1) (BenchRun _ _ b2) = b1 /= b2
 expandMode "default" = [Trace]
 expandMode "none"    = [None]
 -- TODO: Add RNG:
-expandMode "futures" = [Trace, Direct, Sparks]
-expandMode "ivars"   = [Trace, Direct]
+expandMode "futures" = [Sparks] ++ ivarScheds
+expandMode "ivars"   = ivarScheds 
 expandMode "chans"   = [] -- Not working yet!
+
+-- Omitting Direct until its bugs are fixed:
+ivarScheds = [Trace, ContFree] -- Direct?
 
 schedToModule s = 
   case s of 
-   Trace  -> "Control.Monad.Par"
-   Direct -> "Control.Monad.Par.Scheds.Direct"
-   Sparks -> "Control.Monad.Par.Scheds.Sparks"
-   None   -> "qualified Control.Monad.Par as NotUsed"
+   Trace    -> "Control.Monad.Par"
+   Direct   -> "Control.Monad.Par.Scheds.Direct"
+   ContFree -> "Control.Monad.Par.Scheds.ContFree"
+   Sparks   -> "Control.Monad.Par.Scheds.Sparks"
+   None     -> "qualified Control.Monad.Par as NotUsed"
   
 
 --------------------------------------------------------------------------------
@@ -500,7 +516,7 @@ main = do
 
         let allruns = [ BenchRun t s b | 
 			b@(Benchmark _ mode _) <- benchlist, 
-			s <- expandMode mode,
+			s <- S.toList (S.intersection scheds (S.fromList (expandMode mode))),
 			t <- threadsettings ]
             total = length allruns
         log$ "\n--------------------------------------------------------------------------------"

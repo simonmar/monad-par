@@ -31,7 +31,7 @@ threshold = 1
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (AList [Int])
 runMandel minX minY maxX maxY winX winY max_depth = do
 
-  parBuildThreshM threshold (C.InclusiveRange 0 (winY-1)) $ \y -> 
+  A.parBuildThreshM threshold (C.InclusiveRange 0 (winY-1)) $ \y -> 
        do
           let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)

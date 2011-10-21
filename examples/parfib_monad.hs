@@ -8,6 +8,7 @@ import PARSCHED
 #else
 -- import Control.Monad.Par
 import Control.Monad.Par.Scheds.ContFree
+--import Control.Monad.Par.Scheds.Trace
 #endif
 
 type FibType = Int64
@@ -16,7 +17,7 @@ parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1 
 parfib1 n = 
   do 
-     xf <- spawn1_ parfib1 (n-1)
+     xf <- spawn_$ parfib1 (n-1)
      y  <-         parfib1 (n-2)  
      x  <- get xf
      return (x+y)
@@ -75,6 +76,14 @@ class) interface.  Starting with Scheds.Sparks:
 
   fib(42) 4 threads: 4.56  17.83   -- Sparks
   fib(42) 4 threads: 50.0  191.6   -- Trace 
+
+
+[2011.10.20] {ContFree approach}
+
+Initial version forks a new thread on every get, which does terribly of course.
+
+-N1
+  fib(24) 2.3s vs. 0.086
 
 
 -}

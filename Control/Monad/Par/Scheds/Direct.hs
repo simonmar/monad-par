@@ -67,12 +67,15 @@ type ROnly = R.ReaderT Sched IO
 
 data Sched = Sched 
     { 
+      ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
       workpool :: HotVar (Deque (Par ())),
+      rng      :: HotVar StdGen, -- Random number gen for work stealing.
+
+      ---- Global data: ----
       killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
-      rng      :: HotVar StdGen, -- Random number gen for work stealing.
-      scheds   :: [Sched] -- A global list of schedulers.
+      scheds   :: [Sched]        -- A global list of schedulers.
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))

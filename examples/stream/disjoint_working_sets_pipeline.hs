@@ -15,26 +15,16 @@
 module Main where
 
 import Control.Monad as C
-import Control.Monad.Par.Stream as S
-import Control.Monad.Par.OpenList
 import Control.DeepSeq
 import Control.Exception
-import Control.Parallel.Strategies as Strat
-
+import qualified Control.Parallel.Strategies as Strat
 -- import Data.Array.Unboxed as U
-import Data.Complex
 import Data.Int
-import Data.Word
-import Data.List  (intersperse) 
-import Data.List.Split (chunk)
-
 import Prelude as P
 import System.Environment
 import System.Exit
-import System.CPUTime
-import System.CPUTime.Rdtsc
 import GHC.Conc as Conc
-import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
+-- import GHC.IO (unsafePerformIO, unsafeDupablePerformIO, unsafeInterleaveIO)
 
 import Debug.Trace
 import Control.Monad.Par.Logging
@@ -42,11 +32,17 @@ import Control.Monad.Par.Logging
 import qualified Data.Vector.Unboxed as UV
 import           Data.Vector.Unboxed hiding ((++))
 
-#ifdef PARSCHED 
-import PARSCHED
-#else
-import Control.Monad.Par
-#endif
+-- TEMP: Currently [2011.10.20] the Stream module hasn't been
+-- generalized over the ParIVar type class and thus this example
+-- currently works only with the Trace scheduler:
+import Control.Monad.Par.Stream as S
+import Control.Monad.Par.Scheds.Trace
+
+-- #ifdef PARSCHED 
+-- import PARSCHED
+-- #else
+-- import Control.Monad.Par
+-- #endif
 
 
 
@@ -124,7 +120,7 @@ sparks_version (_,numfilters, bufsize, statecoef, numwins) = do
       sums = P.map UV.sum pipe_end
 -- #define SERIAL
 #ifndef SERIAL
-	     `using` (Strat.parBuffer numCapabilities rwhnf) 
+	     `Strat.using` (Strat.parBuffer numCapabilities Strat.rseq) 
 #endif
 
   putStrLn$ "Sum of first window: "++ show (P.head sums)
@@ -182,7 +178,7 @@ composeStatefulKernels f1 f2 (s1,s2) x =
 
 parRepeatFun n f = 
 --  P.foldr (.) id (P.replicate n f)
-  P.foldr (.|| rdeepseq) id (P.replicate n f)
+  P.foldr (Strat..|| Strat.rdeepseq) id (P.replicate n f)
 
 
 --------------------------------------------------------------------------------

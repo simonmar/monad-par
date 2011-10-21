@@ -36,7 +36,7 @@ queens        futures 14
 
 # binomial lattice?
 
-stream/disjoint_working_sets_pipeline ivars  monad  4 256 10 10000
+stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000
 stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
 
 partree/partree futures 600 20

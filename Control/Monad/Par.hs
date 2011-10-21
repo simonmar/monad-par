@@ -33,9 +33,9 @@
   require the value of @a@, and @d@ requires the value of @b@ and @c@:
 
   >                       a
-  >                      / \  
-  >                     b   c
-  >                      \ /
+  >                      / \               
+  >                     b   c             
+  >                      \ /  
   >                       d
 
   Then you could express this in the @Par@ monad like this:

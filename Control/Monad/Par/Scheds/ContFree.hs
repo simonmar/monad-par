@@ -34,7 +34,6 @@ import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R
 import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
-import qualified Data.Sequence as Seq
 import Data.IORef
 import qualified Data.Set as Set
 import Debug.Trace
@@ -76,7 +75,7 @@ data Sched = Sched
       workpool :: HotVar (Deque (Par ())),
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
       -- Mortal set: currently distinct set per processor:
-      mortal :: HotVar (Set.Set Int), -- Could possibly use a vector....
+      mortal   :: HotVar (Set.Set Int), -- Could possibly use a vector....
 
       ---- Global data: ----
       killflag :: HotVar Bool,
@@ -130,6 +129,7 @@ takeback  (DQ ls)     = -- trace (" * takeback popped one, remaining: " ++ show 
   (final,rest) = loop ls []
   loop [x]    acc = (x, reverse acc)
   loop (h:tl) acc = loop tl (h:acc)
+  loop []     _   = error "this shouldn't happen"
  
 dqlen (DQ l) = length l
 #endif
@@ -280,10 +280,10 @@ runPar userComp = unsafePerformIO $ do
    sn <- makeStableName mv
 
    forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-        forkOnIO cpu $
+        forkOn cpu $
           if (cpu /= main_cpu)
              then do when dbg$ printf "CPU %d entering scheduling loop.\n" cpu
-		     runReaderWith sched $ enterScheduler 
+		     R.runReaderT enterScheduler sched 
 		     when dbg$ printf "    CPU %d exited scheduling loop.  FINISHED.\n" cpu
              else do
                   rref <- newIORef Empty
@@ -341,6 +341,7 @@ regulatePopulation Sched{..} =
   do 
      return ()
 
+replaceWorker :: Sched -> IO ThreadId
 replaceWorker sch@Sched{no} = do 
   -- EXPERIMENTAL: Because our deques are threadsafe on both ends we
   -- can try just reusing the same Sched structure.  
@@ -356,7 +357,7 @@ replaceWorker sch@Sched{no} = do
   -- allocating a completely fresh one. 
   -- 
   when dbg $ liftIO$ printf " [%d] Replacing with worker %d\n" no (no+numCapabilities)
-  forkOnIO no (runReaderWith sch{no= no + numCapabilities} enterScheduler)
+  forkOnIO no (R.runReaderT enterScheduler sch{no= no + numCapabilities})
 
 -- Register the current thread as being already replaced.
 makeMortal sch@Sched{no, mortal} = 
@@ -374,6 +375,7 @@ new  = liftIO $ do r <- newIORef Empty
                    return (IVar r)
 
 -- This makes debugging somewhat easier:
+spinReadMVar :: Sched -> MVar b -> IO b
 spinReadMVar Sched{..} mv = do
   sn <- makeStableName mv
   let loop = do v <- tryTakeMVar mv
@@ -420,7 +422,7 @@ get (IVar v) = do
 	    val <- liftIO$ atomicModifyIORef v $ \e -> 
 	     case e of
 	       Empty         -> rd mv (Blocked mv)
-	       x@(Full a)    -> (x, a)
+	       x@(Full a)    -> (x, a) -- This happened 1114 times on fib(24)
 	       x@(Blocked mv) -> rd mv x 
             -- Make sure that we have the actual value (not just a thunk) before proceding:
 #ifdef DEBUG
@@ -455,7 +457,6 @@ put_ (IVar v) !content = do
         Nothing -> return () 
 
 {-# INLINE fork #-}
--- TODO: Continuation (parent) stealing version.
 fork :: Par () -> Par ()
 fork task = do
    sch <- R.ask
@@ -475,19 +476,13 @@ enterScheduler = do
        when dbg $ liftIO$ printf "  popped work from own queue (cpu %d)\n" (no mysched)
        -- Run the stolen tasK:
        unPar task 
-       when dbg$ do 
-          sch <- R.ask
-          liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
+       when dbg$ do sch <- R.ask; liftIO$ printf "  + task finished successfully on cpu %d\n" (no sch)
        -- Before going around again, we check if we have become "mortal": 
        mortset <- liftIO$ readHotVar (mortal mysched)
        if Set.member (no mysched) mortset then
           when dbg$ liftIO$ printf " [%d] Thread is mortal, shutting down.\n" (no mysched)
         else enterScheduler 
    
-{-# INLINE runReaderWith #-}
-runReaderWith state m = R.runReaderT m state
-
-
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do 
@@ -541,10 +536,6 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
            Nothing -> do i' <- rand rng 
 			 go (tries-1) i'
 
-unused = error "this closure shouldn't be used"
-trivialCont _ = trace "trivialCont evaluated!"
-		return ()
-
 {-# INLINE spawn1_ #-}
 -- Spawn a one argument function instead of a thunk.  This is good for debugging if the value supports "Show".
 spawn1_ f x = 
@@ -568,8 +559,12 @@ newFull a = deepseq a (newFull a)
 {-# INLINE put #-}
 put v a = deepseq a (put_ v a)
 
--- pval :: NFData a => a -> Par (IVar a)
--- pval a = spawn (return a)
+-- Here we use the same mechanism an in Spark.hs:
+spawnP :: NFData a => a -> Par (IVar a)
+spawnP a = do ref <- liftIO$ newIORef (Full (rnf a `pseq` a))
+	      a `par` return (IVar ref)
+
+
 
 --------------------------------------------------------------------------------
 -- MonadPar instance for IO; TEMPORARY
@@ -601,6 +596,7 @@ instance PC.ParFuture Par IVar where
   get    = get
   spawn  = spawn
   spawn_ = spawn_
+  spawnP = spawnP
 
 instance PC.ParIVar Par IVar where
   fork = fork
