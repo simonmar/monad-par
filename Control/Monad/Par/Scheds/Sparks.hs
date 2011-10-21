@@ -11,6 +11,8 @@ module Control.Monad.Par.Scheds.Sparks
  ) 
 where 
 
+import Control.Applicative
+import Control.Monad
 import Control.DeepSeq
 import Control.Parallel
 import qualified Control.Monad.Par.Class as PC
@@ -51,3 +53,10 @@ instance PC.ParFuture Par Future where
   spawn  = spawn
   spawn_ = spawn_
   spawnP = spawnP
+
+instance Functor Par where
+   fmap f xs = xs >>= return . f
+
+instance Applicative Par where
+   (<*>) = ap
+   pure  = return

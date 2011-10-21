@@ -28,6 +28,7 @@ module Control.Monad.Par.Scheds.ContFree (
  ) where
 
 
+import Control.Applicative 
 import Control.Concurrent hiding (yield)
 import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R
@@ -608,3 +609,10 @@ instance PC.ParIVar Par IVar where
   newFull = newFull
   newFull_ = newFull_
 #endif
+
+instance Functor Par where
+   fmap f xs = xs >>= return . f
+
+instance Applicative Par where
+   (<*>) = ap
+   pure  = return

@@ -21,7 +21,7 @@ where
 import Control.DeepSeq
 import Prelude hiding (length,head,tail,null)
 import qualified Prelude as P
-import Control.Monad.Par
+import Control.Monad.Par.Class
 import qualified Control.Monad.Par.Combinator as C
 
 -- | List that support constant-time append (sometimes called
@@ -34,34 +34,10 @@ instance NFData a => NFData (AList a) where
  rnf (Append l r) = rnf l `seq` rnf r
  rnf (AList  l)   = rnf l
 
-#if 0
- data Tree a = Empty | Leaf a | Node (Tree a) a (Tree a)
- instance Traversable Tree
-	traverse f Empty = pure Empty
-	traverse f (Leaf x) = Leaf <$> f x
-	traverse f (Node l k r) = Node <$> traverse f l <*> f k <*> traverse f r
-#endif
-
-
--- TODO: Finish me:
--- instance F.Foldable AList where
---  foldr fn init al = 
---   case al of 
---    ANil    -> 
-
--- instance Functor AList where
---  fmap = undefined
-
--- -- Walk the data structure without introducing any additional data-parallelism.
--- instance Traversable AList where 
---   traverse f al = 
---     case al of 
---       ANil    -> pure ANil
---       ASing x -> ASing <$> f x
-
 instance Show a => Show (AList a) where 
   show al = "fromList "++ show (toList al)
 
+{-# INLINE append #-}
 -- | /O(1)/ Append two 'AList's
 append :: AList a -> AList a -> AList a
 append ANil r = r
@@ -69,21 +45,21 @@ append l ANil = l
 append l r    = Append l r
 
 {-# INLINE empty #-}
-{-# INLINE singleton #-}
-{-# INLINE fromList #-}
-
 -- | /O(1)/ an empty 'AList'
 empty :: AList a
 empty = ANil
 
+{-# INLINE singleton #-}
 -- | /O(1)/ a singleton 'AList'
 singleton :: a -> AList a
 singleton = ASing
 
+{-# INLINE fromList #-}
 -- | /O(1)/ convert an ordinary list to an 'AList'
 fromList :: [a] -> AList a
 fromList  = AList
 
+{-# INLINE cons #-}
 -- | /O(1)/ prepend an element
 cons :: a -> AList a -> AList a
 cons x ANil = ASing x
@@ -138,7 +114,7 @@ length (ASing _)    = 1
 length (Append l r) = length l + length r
 length (AList  l)   = P.length l 
 
-
+{-# INLINE null #-}
 -- | /O(n)/ returns 'True' if the 'AList' is empty
 null :: AList a -> Bool
 null = (==0) . length 
@@ -154,38 +130,71 @@ toList a = go a []
 -- TODO: Provide a strategy for @par@-based maps:
 
 
-appendM :: AList a -> AList a -> Par (AList a)
-appendM x y = return (append x y)
+--------------------------------------------------------------------------------
+-- * Combinators built on top of a Par monad.
+
+-- | A parMap over an AList can result in more balanced parallelism than
+--   the default parMap over Traversable data types.
+-- parMap :: NFData b => (a -> b) -> AList a -> Par (AList b)
 
 -- | Build a balanced 'AList' in parallel, constructing each element as a
 --   function of its index.  The threshold argument provides control
 --   over the degree of parallelism.  It indicates under what number
 --   of elements the build process should switch from parallel to
 --   serial.
-parBuildThresh :: NFData a => Int -> C.InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuildThresh :: (NFData a, ParFuture p f) => Int -> C.InclusiveRange -> (Int -> a) -> p (AList a)
 parBuildThresh threshold range fn =
   C.parMapReduceRangeThresh threshold range
 			  (return . singleton . fn) appendM empty
 
 -- | Variant of 'parBuildThresh' in which the element-construction function is itself a 'Par' computation.
-parBuildThreshM :: NFData a => Int -> C.InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildThreshM :: (NFData a, ParFuture p f) => Int -> C.InclusiveRange -> (Int -> p a) -> p (AList a)
 parBuildThreshM threshold range fn =
   C.parMapReduceRangeThresh threshold range 
-			  ((fmap singleton) . fn) appendM empty
+			  (\x -> fn x >>= return . singleton) appendM empty
 
 -- | \"Auto-partitioning\" version of 'parBuildThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parBuild :: NFData a => C.InclusiveRange -> (Int -> a) -> Par (AList a)
+parBuild :: (NFData a, ParFuture p f) => C.InclusiveRange -> (Int -> a) -> p (AList a)
 parBuild range fn =
   C.parMapReduceRange range (return . singleton . fn) appendM empty
 
 -- | like 'parBuild', but the construction function is monadic
-parBuildM :: NFData a => C.InclusiveRange -> (Int -> Par a) -> Par (AList a)
+parBuildM :: (NFData a, ParFuture p f) => C.InclusiveRange -> (Int -> p a) -> p (AList a)
 parBuildM range fn =
-  C.parMapReduceRange range ((fmap singleton) . fn) appendM empty
+  C.parMapReduceRange range (\x -> fn x >>= return . singleton) appendM empty
 
 
--- | A parMap over an AList can result in more balanced parallelism than
---   the default parMap over Traversable data types.
--- parMap :: NFData b => (a -> b) -> AList a -> Par (AList b)
+--------------------------------------------------------------------------------
+-- Internal helpers:
+
+appendM :: ParFuture p f => AList a -> AList a -> p (AList a)
+appendM x y = return (append x y)
+
+--------------------------------------------------------------------------------
+
+
+-- TODO: Finish me:
+-- instance F.Foldable AList where
+--  foldr fn init al = 
+--   case al of 
+--    ANil    -> 
+
+-- instance Functor AList where
+--  fmap = undefined
+
+-- -- Walk the data structure without introducing any additional data-parallelism.
+-- instance Traversable AList where 
+--   traverse f al = 
+--     case al of 
+--       ANil    -> pure ANil
+--       ASing x -> ASing <$> f x
+
+#if 0
+ data Tree a = Empty | Leaf a | Node (Tree a) a (Tree a)
+ instance Traversable Tree
+	traverse f Empty = pure Empty
+	traverse f (Leaf x) = Leaf <$> f x
+	traverse f (Node l k r) = Node <$> traverse f l <*> f k <*> traverse f r
+#endif
 

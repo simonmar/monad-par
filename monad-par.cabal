@@ -123,6 +123,8 @@ Library
   Other-modules:
                  Control.Monad.Par.Stream
                , Control.Monad.Par.Scheds.Direct
+               , Control.Monad.Par.Scheds.ContFree
+               , Control.Monad.Par.Scheds.Sparks
                , Control.Monad.Par.Logging
                , Control.Monad.Par.IList
 -- RRN: Not exposing OpenList yet.  Need to improve performance.

@@ -21,17 +21,11 @@ module Control.Monad.Par.Scheds.Direct (
 --   pollIVar, yield,
  ) where
 
-import Debug.Trace
--- import Control.Monad as M hiding (mapM, sequence, join)
--- import Prelude hiding (mapM, sequence, head,tail)
-import Data.IORef
--- import System.IO.Unsafe
+import Control.Applicative
 import Control.Concurrent hiding (yield)
--- import GHC.Conc hiding (yield)
--- import Control.DeepSeq
--- import Control.Applicative
+import Debug.Trace
+import Data.IORef
 import Text.Printf
-
 import GHC.Conc
 import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R
@@ -40,7 +34,6 @@ import qualified Control.Monad.Reader as R
 import qualified Data.Sequence as Seq
 import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
-
 import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 
@@ -79,7 +72,7 @@ data Sched = Sched
       killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
-      scheds   :: [Sched], -- A global list of schedulers.
+      scheds   :: [Sched] -- A global list of schedulers.
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))
@@ -545,5 +538,12 @@ instance PC.ParIVar Par IVar where
   put_ = put_
   newFull = newFull
   newFull_ = newFull_
+
+instance Functor Par where
+   fmap f xs = xs >>= return . f
+
+instance Applicative Par where
+   (<*>) = ap
+   pure  = return
 -- </boilerplate>
 --------------------------------------------------------------------------------
