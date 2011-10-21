@@ -11,6 +11,10 @@ module Control.Monad.Par.AList
   AList(..),
   empty, singleton, cons, head, tail, length, null, append,
   toList, fromList,
+
+  -- * Regular (non-parallel) Combinators
+  filter,
+
   -- * Operations to build 'AList's in the 'Par' monad
   parBuildThresh, parBuildThreshM,
   parBuild, parBuildM,
@@ -19,7 +23,7 @@ where
 
 
 import Control.DeepSeq
-import Prelude hiding (length,head,tail,null)
+import Prelude hiding (length,head,tail,null,filter)
 import qualified Prelude as P
 import Control.Monad.Par.Class
 import qualified Control.Monad.Par.Combinator as C
@@ -88,6 +92,9 @@ head al =
      AList (h:_) -> Just h
      AList []    -> Nothing
      ANil        -> Nothing
+
+
+-- tryHead 
 
 -- | /O(n)/ take the tail element of an 'AList'
 tail :: AList a -> AList a
@@ -164,6 +171,20 @@ parBuildM :: (NFData a, ParFuture p f) => C.InclusiveRange -> (Int -> p a) -> p 
 parBuildM range fn =
   C.parMapReduceRange range (\x -> fn x >>= return . singleton) appendM empty
 
+filter :: (a -> Bool) -> AList a -> AList a
+filter p l = loop l 
+ where 
+  loop ANil         = ANil
+  loop o@(ASing x)  = if p x then o else ANil
+  loop   (AList ls) = AList$ P.filter p ls
+  loop (Append x y) = 
+     let l = loop x
+	 r = loop y in
+     case (l,r) of 
+       (ANil,ANil) -> ANil
+       (ANil,y)    -> y
+       (x,ANil)    -> x
+       (x,y)       -> Append x y
 
 --------------------------------------------------------------------------------
 -- Internal helpers:
