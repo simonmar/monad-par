@@ -1,10 +1,18 @@
 
 
+
+
 all: plot_scaling.exe
 
 plot_scaling.exe: plot_scaling.hs
 	ghc --make plot_scaling.hs -o plot_scaling.exe
 
+# Download the (bulkier) full run logs from the web:
+getlogs: 
+	wget ???
+
+plot:
+	./plot_ALL.hs
 
 wipeplots:
 #	ls "*/*/*.summary" 
