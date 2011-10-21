@@ -197,12 +197,19 @@ expandMode "futures" = [Sparks] ++ ivarScheds
 expandMode "ivars"   = ivarScheds 
 expandMode "chans"   = [] -- Not working yet!
 
+-- Also allowing the specification of a specific scheduler:
+expandMode "Trace"    = [Trace]
+expandMode "Sparks"   = [Sparks]
+expandMode "Direct"   = [Direct]
+expandMode "ContFree" = [ContFree]
+
 -- Omitting Direct until its bugs are fixed:
 ivarScheds = [Trace, ContFree] -- Direct?
 
 schedToModule s = 
   case s of 
-   Trace    -> "Control.Monad.Par"
+--   Trace    -> "Control.Monad.Par"
+   Trace    -> "Control.Monad.Par.Scheds.Trace"
    Direct   -> "Control.Monad.Par.Scheds.Direct"
    ContFree -> "Control.Monad.Par.Scheds.ContFree"
    Sparks   -> "Control.Monad.Par.Scheds.Sparks"
@@ -396,10 +403,6 @@ runOne doCompile (BenchRun numthreads sched (Benchmark test _ args_)) (iterNum,t
 	log " ** Benchmark appears in a subdirectory with Makefile.  Using it."
 	log " ** WARNING: Can't currently control compiler options for this benchmark!"
 	inDirectory containingdir $ do
-
---        lift$ runIO$ setenv [("GHC_FLAGS",flags)]
---	   code <- lift$ system "make"
-           error$ "SETENV "++flags
 	   code <- lift$ run$ setenv [("GHC_FLAGS",flags)] "make"
 	   check code "ERROR, benchmark.hs: Compilation via benchmark Makefile failed:"
 

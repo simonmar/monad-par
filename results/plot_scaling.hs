@@ -45,8 +45,8 @@ round_2digits n = (fromIntegral $round (n * 100)) / 100
 -- Split 
 parse [a,b,c,d,e,f] = Just $
   Entry { name     = a, 
-	  variant  = b,
-	  sched    = "trace",
+	  variant  = "_", -- TODO - phase out
+	  sched    = b,
 	  threads  = read c,
 	  tmin     = read d,
 	  tmed     = read e,
@@ -130,8 +130,8 @@ newtype Mystr = Mystr String
 instance Show Mystr where
   show (Mystr s) = s
 
--- Name, Scheduler, Threads, BestTime, Speedup
-data Best = Best (String, String, String, Int, Double, Double)
+--               Name, Variant, Scheduler,        Threads, BestTime, Speedup
+data Best = Best (String, String, String,   Int, Double, Double)
 
 
 {-
@@ -140,23 +140,29 @@ data Best = Best (String, String, String, Int, Double, Double)
    The below script turns a single benchmark into a gnuplot script
    (produced as a string).
 
-   plot_benchmark2 expects
+   plot_benchmark2 expects entries with three levels of grouping, from
+   outside to in:
+     * Name 
+     * Variant (e.g. variant of the benchmark)
+     * Sched
 
 -}
 plot_benchmark2 :: String -> [[[Entry]]] -> IO Best
 
-plot_benchmark2 root [io, pure] = 
-    do action $ filter goodSched (io ++ pure)
+plot_benchmark2 root entries = 
+    do action $ filter goodSched (concat entries)
        return$ Best (benchname, bestvariant, 
 		     bestsched, bestthreads, best, basetime / best)
  where 
-  benchname = name $ head $ head io 
+  benchname = name $ head $ head $ head entries
   -- What was the best single-threaded execution time across variants/schedulers:
 
   goodSched [] = error "Empty block of data entries..."
   goodSched (h:t) = not $ (sched h) `elem` scheduler_MASK
+  
+  -- Knock down two levels of grouping leaving only Scheduler:
+  cat = concat $ map concat entries
 
-  cat = concat io ++ concat pure
   threads0 = filter ((== 0) . threads) cat
   threads1 = filter ((== 1) . threads) cat
 
@@ -183,7 +189,7 @@ plot_benchmark2 root [io, pure] =
 
   -- If all normfactors are the default 1.0 we print a different message:
   --let is_norm = not$ all (== 1.0) $ map normfactor ponits
-  norms = map normfactor (concat io ++ concat pure)
+  norms = map normfactor cat
   default_norms = all (== 1.0) $ norms
   max_norm = foldl1 max norms
 
@@ -251,14 +257,6 @@ plot_benchmark2 root [io, pure] =
       --runIO$ "(cd "++root++"; ps2pdf "++ filebase ++".eps )"
 
 
---plot_benchmark2 root ls = putStrLn$ "plot_benchmark2: Unexpected input, list len: "++ show (length ls)
-plot_benchmark2 root [io] = plot_benchmark2 root [io,[]]
-
-plot_benchmark2 root ls = error$ "plot_benchmark2: wrong number of arguments: " ++ 
-                                  show (map (map (map variant)) ls)
---                                  show (map (map (map variant)) ls)
-
-
 
 isMatch rg str = case matchRegex rg str of { Nothing -> False; _ -> True }
 
@@ -274,9 +272,7 @@ main = do
 	          (filter (not . isMatch (mkRegex "ERR")) $
 		   filter (not . isMatch (mkRegex "TIMEOUT")) $
 		   filter (not . null) dat)
- let organized = organize_data$ 
-		  -- filter ((`elem` ["io","pure"]) . variant) parsed
-                  parsed
+ let organized = organize_data parsed
 
  putStrLn$ "Parsed "++show (length parsed)++" lines containing data."
 -- This can get big, I was just printing it for debugging:
@@ -304,7 +300,7 @@ main = do
  putStrLn$ "Now generating final plot files...\n\n"
 
  let summarize hnd = do 
-       hPutStrLn hnd $ "# Benchmark, variant, best #threads, best median time, max parallel speedup: "
+       hPutStrLn hnd $ "# Benchmark, Variant, Scheduler, best #threads, best median time, max parallel speedup: "
        hPutStrLn hnd $ "# Summary for " ++ file
 
        let pads n s = take (n - length s) $ repeat ' '
@@ -312,8 +308,8 @@ main = do
 
        forM_ bests $ \ (Best(name, variant, sched, threads, best, speed)) ->
 	 hPutStrLn hnd$ "    "++ name++  (pad 25 name) ++
-			  show variant++ (pad 10 variant)++
-			  show sched++   (pad 5 sched) ++
+			  variant++ (pad 10 variant)++
+			  sched++   (pad 5 sched) ++
 			  show threads++ (pad 5 threads)++ 
 			  show best ++   (pad 15 best) ++
 			  show speed 
