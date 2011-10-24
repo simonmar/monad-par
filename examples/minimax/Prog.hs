@@ -1,7 +1,7 @@
 -- Time-stamp: <2009-05-06 13:55:20 simonmar>
 -----------------------------------------------------------------------------
 
-module Prog(prog,randomBoard,solve) where
+module Prog(prog,randomBoard,solve,solveNested) where
 
 import Board
 import Wins
@@ -27,6 +27,13 @@ solve depth board
   . map showMove
   . take 1
   . alternate depth X maxE minE $ board
+
+solveNested :: Int -> Board -> String
+solveNested depth board
+  = unlines
+  . map showMove
+  . take 1
+  . alternateNested depth X maxE minE $ board
 
 testBoard = [[Empty,O,Empty,Empty],[Empty,X,Empty,Empty],[Empty,Empty,Empty,Empty],[Empty,Empty,Empty,Empty]]
 

@@ -19,8 +19,10 @@
 quicksort/parquicksort_monad futures 1500000
 quicksort/parquicksort_pseq  none    1500000
 
-parfib_monad  futures 36
-parfib_pseq   none 36
+# Problems with this:
+# parfib_monad  futures nested 36
+parfib_monad  futures monad  36
+parfib_pseq   none    36
 
 blackscholes  futures 10000 15000000
 
@@ -42,7 +44,8 @@ stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
 partree/partree futures 600 20
 
 # What should the arguments be here:
-# minimax/minimax ? ? 
+# minimax/minimax futures nested ? ? 
+# minimax/minimax futures monad  ? ? 
 
 # These don't match the naming convention at the moment.
 matmult/matmult   futures 768 0 64

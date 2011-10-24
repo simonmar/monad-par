@@ -28,8 +28,38 @@ nqueens nq = step 0 []
     gen :: [[Int]] -> [[Int]]
     gen bs = [ (q:b) | b <- bs, q <- [1..nq], safe q 1 b ]
 
+nqueensNested :: Int -> [[Int]]
+nqueensNested nq = step 0 []
+  where
+    threshold = 5
+
+    step :: Int -> [Int] -> [[Int]]
+    step !n b
+       | n >= threshold = iterate gen [b] !! (nq - n)
+       | otherwise = 
+          let rs = runPar $ C.parMap (step (n+1)) (gen [b])
+          in concat rs
+
+    safe :: Int -> Int -> [Int] -> Bool
+    safe x d []    = True
+    safe x d (q:l) = x /= q && x /= q+d && x /= q-d && safe x (d+1) l
+
+    gen :: [[Int]] -> [[Int]]
+    gen bs = [ (q:b) | b <- bs, q <- [1..nq], safe q 1 b ]
+
 
 main = do
-  args <- fmap (fmap read) getArgs
-  let n = case args of [] -> 8; [n] -> n
-  print (length (runPar (nqueens n)))
+    args <- getArgs	  
+    let (version,n) = case args of 
+            []    -> ("monad",8)
+            [v,n] -> (v,read n)
+
+    case version of 
+        "nested" -> do 
+                putStrLn "Monad-par nested version:"
+                print (length (nqueensNested n))
+        "monad"  -> do 
+                putStrLn "Monad-par based version:"
+                print (length (runPar (nqueens n)))
+        _        -> error$ "unknown version: "++version
+

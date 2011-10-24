@@ -86,3 +86,8 @@ clean:
 	(cd minimax;  $(MAKE) clean)
 	(cd stream;   $(MAKE) clean)
 	(cd partree;  $(MAKE) clean)
+
+
+# ================================================================================
+
+fib: parfib_monad.exe parfib_pseq.exe

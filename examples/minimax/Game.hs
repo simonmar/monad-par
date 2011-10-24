@@ -24,11 +24,22 @@ alternate _ _ _ _ b | fullBoard b = []
 alternate _ _ _ _ b | static b == XWin = []
 alternate _ _ _ _ b | static b == OWin = []
 alternate depth player f g board = move : alternate depth opponent g f board'
-	where
-	move@(board',eval) = best f possibles scores
-        scores = runPar $ C.parMapM (bestMove depth opponent g f) possibles
-	possibles = newPositions player board
-        opponent = opposite player
+  where
+    move@(board',eval) = best f possibles scores
+    scores = runPar $ parMapM (bestMove depth opponent g f) possibles
+    possibles = newPositions player board
+    opponent = opposite player
+
+alternateNested :: Int -> Piece -> Player -> Player -> Board -> [Move]
+alternateNested _ _ _ _ b | fullBoard b = []
+alternateNested _ _ _ _ b | static b == XWin = []
+alternateNested _ _ _ _ b | static b == OWin = []
+alternateNested depth player f g board = move : alternateNested depth opponent g f board'
+  where
+    move@(board',eval) = best f possibles scores
+    scores = runPar $ parMap (bestMoveNested depth opponent g f) possibles
+    possibles = newPositions player board
+    opponent = opposite player
 
 opposite :: Piece -> Piece
 opposite X = O
@@ -50,6 +61,11 @@ bestMove depth p f g board
   = do
     let tree = cropTree $ mapTree static $ prune depth $ searchTree p $ board
     parMise 2 f g tree
+
+bestMoveNested :: Int -> Piece -> Player -> Player -> Board -> Evaluation
+bestMoveNested depth p f g board
+  = let tree = cropTree $ mapTree static $ prune depth $ searchTree p $ board
+    in runPar $ parMise 2 f g tree
 
 cropTree :: (Tree Evaluation) -> (Tree Evaluation)
 cropTree (Branch a []) = (Branch a [])
