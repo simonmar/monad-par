@@ -37,7 +37,7 @@ nqueensNested nq = step 0 []
     step !n b
        | n >= threshold = iterate gen [b] !! (nq - n)
        | otherwise = 
-          let rs = runPar $ parMap (step (n+1)) (gen [b])
+          let rs = runPar $ C.parMap (step (n+1)) (gen [b])
           in concat rs
 
     safe :: Int -> Int -> [Int] -> Bool

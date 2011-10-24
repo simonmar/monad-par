@@ -19,7 +19,8 @@
 quicksort/parquicksort_monad futures 1500000
 quicksort/parquicksort_pseq  none    1500000
 
-parfib_monad  futures nested 36
+# Problems with this:
+# parfib_monad  futures nested 36
 parfib_monad  futures monad  36
 parfib_pseq   none    36
 

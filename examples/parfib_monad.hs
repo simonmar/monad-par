@@ -20,21 +20,21 @@ fib 1 = 1
 fib x = fib (x-2) + fib (x-1)
 
 
--- Basic, non-monadic parallel-fib with threshold:
-parfib0 :: FibType -> FibType -> FibType
-parfib0 n c | n < c = fib n
-parfib0 n c = x `par` y `pseq` (x+y)
-  where 
-    x = parfib0 (n-1) c
-    y = parfib0 (n-2) c
-
-
 -- Par monad version:
-parfib1 :: FibType -> FibType -> Par FibType
-parfib1 n c | n < c = return $ fib n
-parfib1 n c = do 
-    xf <- spawn_$ parfib1 (n-1) c
-    y  <-         parfib1 (n-2) c
+parfib1 :: FibType -> Par FibType
+parfib1 n | n < 2 = return 1
+parfib1 n = do 
+    xf <- spawn_$ parfib1 (n-1)
+    y  <-         parfib1 (n-2)
+    x  <- get xf
+    return (x+y)
+
+-- Par monad version, with threshold:
+parfib1B :: FibType -> FibType -> Par FibType
+parfib1B n c | n < c = return $ fib n
+parfib1B n c = do 
+    xf <- spawn_$ parfib1B (n-1) c
+    y  <-         parfib1B (n-2) c
     x  <- get xf
     return (x+y)
 
@@ -42,32 +42,38 @@ parfib1 n c = do
 parfib2 :: FibType -> FibType -> Par FibType
 parfib2 n c | n < c = return $ fib n
 parfib2 n c = do 
-    xf <- spawnP $ runPar $ parfib3 (n-1) c
-    yf <- spawnP $ runPar $ parfib3 (n-2) c
+    xf <- spawnP $ runPar $ helper (n-1) c
+    yf <- spawnP $ runPar $ helper (n-2) c
     x  <- get xf
     y  <- get yf
     return (x+y)
  where 
   -- Alternate between nesting and regular spawning:
-  parfib3 :: FibType -> FibType -> Par FibType
-  parfib3 n c | n < c = return $ fib n
-  parfib3 n c = do 
+  helper :: FibType -> FibType -> Par FibType
+  helper n c | n < c = return $ fib n
+  helper n c = do 
     xf <- spawn_$ parfib2 (n-1) c
     y  <-         parfib2 (n-2) c
     x  <- get xf
     return (x+y)
 
+
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 
-            []      -> ("monad", 20, 4)
+            []      -> ("monad", 20, 1)
+            [v]     -> (v,       20, 1)
+            [v,n]   -> (v, read n,   1)
             [v,n,c] -> (v, read n, read c)
 
     case version of 
         "nested" -> do 
                 print$ runPar$ parfib2 size cutoff
         "monad"  -> do 
-                print$ runPar$ parfib1 size cutoff
+                print$ runPar$ 
+		  if cutoff == 1 
+		  then parfib1  size 
+		  else parfib1B size cutoff
         _        -> error$ "unknown version: "++version
 
 
