@@ -1,15 +1,18 @@
-
-
+{-# LANGUAGE CPP  #-}
 
 -- This is a simplistic benchmark but is included just for comparison with Haskell CnC
 
 -- Author: Ryan Newton 
 
 import System.Environment
-import Control.Monad.Par
 import Control.Monad.Par.AList as A
+import qualified Control.Monad.Par.Combinator as C
 import Debug.Trace
-
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 -- First a naive serial test for primality:
 isPrime :: Int -> Bool
@@ -26,7 +29,7 @@ isPrime n = (prmlp 3 == n)
 primes :: Int -> Int -> Par (AList Int)
 primes start end = 
 -- parMapReduceRange (InclusiveRange start end)
- parMapReduceRangeThresh 100 (InclusiveRange start end)
+ C.parMapReduceRangeThresh 100 (C.InclusiveRange start end)
 		   (\n -> if 
 		            -- TEMP: Need a strided range here:
                             (rem n 2 /= 0) && isPrime n 

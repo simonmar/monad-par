@@ -1,11 +1,15 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 
 import Data.List
 import System.Environment
 import Control.Parallel
 import Control.Parallel.Strategies
 import Control.Applicative
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 -- Rough results, GHC 6.13: (val=777)
 --   V1 (SDM):             2.2s

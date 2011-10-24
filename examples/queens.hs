@@ -1,10 +1,13 @@
-{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE BangPatterns, CPP #-}
 import System.Environment
 import Control.Monad
 import Control.Seq
-
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED
+import PARSCHED
+#else
 import Control.Monad.Par
--- import Control.Monad.Par_Strawman
+#endif
 
 nqueens :: Int -> Par [[Int]]
 nqueens nq = step 0 []
@@ -15,7 +18,7 @@ nqueens nq = step 0 []
     step !n b
        | n >= threshold = return (iterate gen [b] !! (nq - n))
        | otherwise = do
-          rs <- parMapM (step (n+1)) (gen [b])
+          rs <- C.parMapM (step (n+1)) (gen [b])
           return (concat rs)
 
     safe :: Int -> Int -> [Int] -> Bool

@@ -1,24 +1,10 @@
+
+-- Ported from Haskell CnC version (BSD license)
+--   by Chih-Ping Chen
+
 -- NOTE: This is a contributed program that uses unsafePerformIO and
 -- thus is not a representative Par program.
 
-{-
- - Intel Concurrent Collections for Haskell
- - Copyright (c) 2010, Intel Corporation.
- -
- - This program is free software; you can redistribute it and/or modify it
- - under the terms and conditions of the GNU Lesser General Public License,
- - version 2.1, as published by the Free Software Foundation.
- -
- - This program is distributed in the hope it will be useful, but WITHOUT
- - ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
- - FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
- - more details.
- -
- - You should have received a copy of the GNU Lesser General Public License along with
- - this program; if not, write to the Free Software Foundation, Inc., 
- - 51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
- -
- -}
 {-# LANGUAGE ExistentialQuantification
    , ScopedTypeVariables
    , BangPatterns
@@ -80,7 +66,11 @@ import Control.Exception
 import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 timeit io = 
     do strt <- getCurrentTime
@@ -102,6 +92,10 @@ type Tile = IOUArray  (Int, Int) Float
 -- The last dimension is the "generation" dimension. I.e., a (IVar Tile) mapped
 -- by (i, j, k+1) is the next generation of the (IVar Tile) mapped by (i, j, k).
 type Tiles3D = Map (Int, Int, Int) (IVar Tile)
+
+#if __GLASGOW_HASKELL__ < 721 
+instance NFData Tiles3D where
+#endif
 
 instance NFData Tile where
 -- SDM: use the default.  All we require is that the IOUArray is evaluated,
@@ -187,7 +181,7 @@ s3Compute lkji b (k,j,i) | i == j =
        aBlock <- get $ getTileV (j,i,k) lkji
        l2Block <- get $ getTileV (j,k,k+1) lkji
        put (getTileV (j,i,k+1) lkji) (s3Core aBlock l2Block b)
---       pval lkji
+--       spawnP lkji
        return ()
     where s3Core aBlock l2Block b = unsafePerformIO $
                                     do forM_ [0..b-1] (outer aBlock l2Block b)
@@ -224,14 +218,14 @@ initLkji arrA n p b =
         fn c (i, j, k) | k == 0 = 
             do mv <- c
                m <- get mv
-               tv <- pval $ tile i j
-               pval $ insert (i, j, k) tv m
+               tv <- spawnP $ tile i j
+               spawnP $ insert (i, j, k) tv m
         fn c (i, j, k) | otherwise = 
             do mv <- c
                m <- get mv
                tv <- new
-               pval $ insert (i, j, k) tv m
-    in foldl fn (pval empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
+               spawnP $ insert (i, j, k) tv m
+    in foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
      
 
 -- composeResult collect the tiles with the final results back into one single matrix.    

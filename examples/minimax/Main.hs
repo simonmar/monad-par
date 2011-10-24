@@ -10,12 +10,13 @@ import System.Random
 
 main = do
     args <- getArgs
-    let (version, n, depth) = case args of 
-            [v, n, d] -> (v,read n, read d)
+    let (version, n, depth, seed) = case args of 
+            [v, n, d, s] -> (v,read n, read d, read s)
+            [v, n, d]    -> (v,read n, read d, 99999)
             -- Provide a default behavior if run with no arguments (for testing):
-            []        -> ("monad", 15, 15)
+            []        -> ("monad", 15, 15, 99999)
             _         -> error $ "Usage: main {nested, depth} n depth"
-    setStdGen (mkStdGen 99999)
+    setStdGen (mkStdGen seed)
     b <- randomBoard n
     putStrLn $ showBoard b
     case version of 

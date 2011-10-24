@@ -8,13 +8,10 @@ EXES= $(SRC:.hs=.exe)
 
 NOTHREAD= $(SRC:.hs=.nothread.exe)
 
-# Par source code with relative paths updated for this deeper directory:
-RELPARSRC= $(subst ../,../../,$(ALLPARSRC))
-
 all: $(EXES)
 
-%.exe : %.hs $(RELPARSRC)
-	$(GHC) -O2 --make -i../../ $< -o $@ -threaded -rtsopts
+%.exe : %.hs $(DPRPARSRC)
+	$(GHC) $(GHC_FLAGS)  --make -i../../ $< -o $@  -rtsopts
 
 
 #------------------------------------------------------------
@@ -22,10 +19,11 @@ all: $(EXES)
 
 nothread: $(NOTHREAD)
 
-%.nothread.exe: %.hs $(RELPARSRC)
-	$(GHC) -O2 --make -i../../ $< -o $@ -rtsopts
+%.nothread.exe: %.hs $(DPRPARSRC)
+	$(GHC) $(GHC_FLAGS) --make -i../../ $< -o $@ -rtsopts
 
 #------------------------------------------------------------
 runtests: 
 	../run_tests.sh $(EXES) 
 
+clean: defaultclean

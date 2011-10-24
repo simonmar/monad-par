@@ -1,0 +1,302 @@
+# TestName Variant NumThreads   MinTime MedianTime MaxTime
+# Mon Oct 3 00:06:13 EDT 2011
+# Linux wasp 2.6.38-10-generic #46-Ubuntu SMP Tue Jun 28 15:07:17 UTC 2011 x86_64 x86_64 x86_64 GNU/Linux
+# The Glorious Glasgow Haskell Compilation System, version 7.2.1
+# Running each test for 3 trials.
+#  ... with default compiler options:  -O2 -rtsopts
+#  ... with default runtime options:  -qa
+# Benchmarks_File: benchlist.txt
+# Benchmarks_Variant: desktop
+# Benchmarks_Version: 1.0
+# *** Config [0 ..], testing with command/args: parfib.exe monad 36 
+parfib.exe monad 1 8.83 8.85 8.86
+
+parfib.exe monad 2 5.31 5.45 5.54
+
+parfib.exe monad 3 3.83 3.92 4.23
+
+parfib.exe monad 4 2.89 3.01 3.09
+
+parfib.exe monad 5 2.70 2.82 2.88
+
+parfib.exe monad 6 2.56 2.58 2.61
+
+parfib.exe monad 7 2.46 2.47 2.47
+
+parfib.exe monad 8 2.23 2.27 2.30
+
+
+
+# *** Config [8 ..], testing with command/args: parfib.exe sparks 36 
+parfib.exe sparks 1 0.54 0.54 0.54
+
+parfib.exe sparks 2 0.32 0.33 0.42
+
+parfib.exe sparks 3 0.28 0.28 0.29
+
+parfib.exe sparks 4 0.20 0.20 0.20
+
+parfib.exe sparks 5 0.19 0.23 0.24
+
+parfib.exe sparks 6 0.17 0.26 0.29
+
+parfib.exe sparks 7 0.17 0.22 0.25
+
+parfib.exe sparks 8 0.16 0.18 0.19
+
+
+
+# *** Config [16 ..], testing with command/args: blackscholes.exe 10000 15000000 
+blackscholes.exe 10000 1 10.78 10.78 10.87
+
+blackscholes.exe 10000 2 5.42 5.42 5.43
+
+blackscholes.exe 10000 3 3.61 3.62 3.63
+
+blackscholes.exe 10000 4 2.73 2.73 2.74
+
+blackscholes.exe 10000 5 2.33 2.34 2.34
+
+blackscholes.exe 10000 6 2.03 2.04 2.04
+
+blackscholes.exe 10000 7 1.82 1.82 1.84
+
+blackscholes.exe 10000 8 1.63 1.66 1.66
+
+
+
+# *** Config [24 ..], testing with command/args: cholesky.exe 1000 50 cholesky_matrix1000.dat 
+cholesky.exe 1000 1 1.9e-5 3.870238 3.872464
+
+cholesky.exe 1000 2 2.0e-5 2.131076 2.143832
+
+cholesky.exe 1000 3 1.3e-5 1.560171 1.600492
+
+cholesky.exe 1000 4 1.3e-5 1.326417 2.0e-5
+
+cholesky.exe 1000 5 1.2e-5 1.390531 2.0e-5
+
+cholesky.exe 1000 6 1.3e-5 1.328985 1.357249
+
+cholesky.exe 1000 7 1.9e-5 1.391141 1.9e-5
+
+cholesky.exe 1000 8 1.9e-5 1.441114 1.9e-5
+
+
+
+# *** Config [32 ..], testing with command/args: nbody.exe 13000 
+nbody.exe 13000 1 3.81 3.81 3.81
+
+nbody.exe 13000 2 1.99 2.00 2.01
+
+nbody.exe 13000 3 1.35 1.35 1.37
+
+nbody.exe 13000 4 1.02 1.03 1.03
+
+nbody.exe 13000 5 0.97 1.00 1.00
+
+nbody.exe 13000 6 0.95 0.97 0.97
+
+nbody.exe 13000 7 0.93 0.96 0.96
+
+nbody.exe 13000 8 0.92 0.94 0.96
+
+
+
+# *** Config [40 ..], testing with command/args: mandel.exe 2000 2000 3000000 
+mandel.exe 2000 1 2.21 2.22 2.23
+
+mandel.exe 2000 2 1.34 1.35 1.35
+
+mandel.exe 2000 3 1.09 1.10 1.10
+
+mandel.exe 2000 4 1.07 1.08 1.10
+
+mandel.exe 2000 5 1.11 1.12 1.27
+
+mandel.exe 2000 6 1.17 1.18 1.19
+
+mandel.exe 2000 7 1.17 1.26 1.29
+
+mandel.exe 2000 8 1.26 1.27 1.31
+
+
+
+# *** Config [48 ..], testing with command/args: coins.exe 8 1250 
+coins.exe 8 1 3.86 3.86 3.87
+
+coins.exe 8 2 2.03 2.04 2.13
+
+coins.exe 8 3 1.39 1.39 1.95
+
+coins.exe 8 4 1.13 1.13 1.14
+
+coins.exe 8 5 1.11 1.14 1.21
+
+coins.exe 8 6 1.10 1.15 1.16
+
+coins.exe 8 7 1.11 1.14 1.17
+
+coins.exe 8 8 1.09 1.10 1.14
+
+
+
+# *** Config [56 ..], testing with command/args: stream/disjoint_working_sets_pipeline.exe monad 4 256 10 10000 
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 1 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 2 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 3 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 4 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 5 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 6 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 7 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe monad 8 ERR ERR ERR
+
+
+
+# *** Config [64 ..], testing with command/args: stream/disjoint_working_sets_pipeline.exe sparks 4 256 10 10000 
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 1 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 2 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 3 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 4 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 5 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 6 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 7 ERR ERR ERR
+
+ # ERROR: compilation failed.
+ #      Error code 1 Params:  -O2 -rtsopts, RTS  -qa 
+ # ERROR: run_all_tests this test failed completely: stream/disjoint_working_sets_pipeline.exe
+ #      Error code 127 Params:  -O2 -rtsopts, RTS  -qa 
+stream/disjoint_working_sets_pipeline.exe sparks 8 ERR ERR ERR
+
+
+
+# *** Config [72 ..], testing with command/args: partree/partree.exe 600 20 
+partree/partree.exe 600 1 2.67 2.68 2.68
+
+partree/partree.exe 600 2 3.04 3.28 3.36
+
+partree/partree.exe 600 3 3.19 3.23 3.53
+
+partree/partree.exe 600 4 3.43 3.48 4.04
+
+partree/partree.exe 600 5 3.35 3.90 3.91
+
+partree/partree.exe 600 6 3.42 3.45 4.30
+
+partree/partree.exe 600 7 5.12 6.06 7.18
+
+partree/partree.exe 600 8 4.24 4.34 4.44
+
+
+
+# *** Config [80 ..], testing with command/args: matmult/matmult.exe 768 0 64 
+matmult/matmult.exe 768 1 10.49 10.51 10.53
+
+matmult/matmult.exe 768 2 5.14 5.57 5.92
+
+matmult/matmult.exe 768 3 3.48 3.77 3.86
+
+matmult/matmult.exe 768 4 2.48 2.85 2.85
+
+matmult/matmult.exe 768 5 1.93 2.00 2.14
+
+matmult/matmult.exe 768 6 1.46 1.52 1.72
+
+matmult/matmult.exe 768 7 1.29 1.40 1.56
+
+matmult/matmult.exe 768 8 1.31 1.46 1.55
+
+
+
+# *** Config [88 ..], testing with command/args: sumeuler/sumeuler.exe 38 8000 100 
+sumeuler/sumeuler.exe 38 1 3.63 3.63 3.63
+
+sumeuler/sumeuler.exe 38 2 1.84 1.84 1.85
+
+sumeuler/sumeuler.exe 38 3 1.24 1.24 1.24
+
+sumeuler/sumeuler.exe 38 4 0.93 0.94 0.94
+
+sumeuler/sumeuler.exe 38 5 0.83 0.83 0.83
+
+sumeuler/sumeuler.exe 38 6 0.75 0.75 0.75
+
+sumeuler/sumeuler.exe 38 7 0.68 0.68 0.68
+
+sumeuler/sumeuler.exe 38 8 0.63 0.63 0.64
+
+
+

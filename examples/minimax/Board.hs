@@ -5,7 +5,7 @@ import Wins
 
 import Data.List
 import Control.Parallel
-import Control.Parallel.Strategies
+-- import Control.Parallel.Strategies
 import Control.DeepSeq
 
 boardDim = 4

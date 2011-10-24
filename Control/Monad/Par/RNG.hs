@@ -1,17 +1,17 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification,
+             ExistentialQuantification, CPP,
              PackageImports, ScopedTypeVariables, MultiParamTypeClasses
 	     #-}
 
--- This provides an alternative to Control.Monad.Par which
--- deterministic parallel random number generation as an additional capability.
+-- | This module provides adds deterministic parallel random number
+--   generation as an additional capability for a 'PC.ParIVar' monad.
 
-module Control.Monad.ParRNG
+module Control.Monad.Par.RNG
   ( 
      rand, 
      Par, runParRNG, fork,
      IVar, new, newFull, newFull_, get, put, put_,
-     pval, spawn, spawn_
+     spawn, spawn_, spawnP
   )
 where
 
@@ -20,7 +20,7 @@ import qualified "transformers" Control.Monad.Trans.State.Strict as S
 import qualified "transformers" Control.Monad.Trans.Class as S
 
 import qualified Control.Monad.Par as P
-import qualified Control.Monad.ParClass as PC
+import qualified Control.Monad.Par.Class as PC
 
 -- These are reexported without modification:
 import Control.Monad.Par (IVar)
@@ -32,6 +32,8 @@ import System.IO.Unsafe (unsafePerformIO)
 
 --------------------------------------------------------------------------------
 -- Type Definitions
+
+-- TODO: Generalize over Par monads.
 
 -- The idea here is to simple route the state of the RNG through the
 -- control flow in the Par monad, splitting the RNG where fork is
@@ -46,17 +48,6 @@ unPRNG (PRNG x) = x
 instance Monad Par where 
   (PRNG sm) >>= f =  PRNG (sm >>= unPRNG . f)
   return x = PRNG (return x)
-
-instance PC.ParClass Par P.IVar where 
-  fork = fork 
-  new  = new
-  get  = get
-  put  = put
-  put_ = put_
-  newFull  = newFull
-  newFull_ = newFull_
---  yield = yield
-
 
 --------------------------------------------------------------------------------
 -- Par API + rand
@@ -76,7 +67,7 @@ fork (PRNG sm) = PRNG$
      S.put g1
      return ()
 
--- | `rand` is the only new method added by ParRNG over Par.
+-- | `rand` is the only new method added by ParRNG over 'PC.ParIVar'.
 -- 
 --    It produce a randomized value and advances the RNG on the current
 --    thread of the parallel computation.  
@@ -108,17 +99,28 @@ put  v x   = PRNG$ S.lift$ P.put  v x
 put_ v x   = PRNG$ S.lift$ P.put_ v x
 
 
---------------------------------------------------------------------------------
--- TEMP: These should be subsumed by the default definitions in the ParClass monad:
-pval :: NFData a => a -> Par (IVar a)
-pval a = spawn (return a)
-
-spawn :: NFData a => Par a -> Par (IVar a)
-spawn p = do r <- new
-	     fork (p >>= put r)
-	     return r
-
+----------------------------------------------------------------------------------------------------
+-- TEMP: Factor out this boilerplate somehow.
+-- <boilerplate>
+spawn  :: NFData a => Par a -> Par (IVar a)
 spawn_ :: Par a -> Par (IVar a)
-spawn_ p = do r <- new
-	      fork (p >>= put_ r)
-	      return r
+spawnP :: NFData a => a -> Par (IVar a)
+
+spawn p  = do r <- new;  fork (p >>= put r);   return r
+spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
+spawnP a = spawn (return a)
+
+instance PC.ParFuture Par IVar where
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+
+instance PC.ParIVar Par IVar where
+  fork = fork
+  new  = new
+  put_ = put_
+  newFull = newFull
+  newFull_ = newFull_
+-- </boilerplate>
+--------------------------------------------------------------------------------

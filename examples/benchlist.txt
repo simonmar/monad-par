@@ -1,27 +1,51 @@
-# This is a default set of benchmarks reasonable for a powerful four core machine.
+# See README.md for format description.
+#
+# This is a default set of benchmarks reasonable for a powerful four core desktop.
+# For example on my machine this takes 15.5 minutes to do 3 trials from 1-8 threads.
+#
+# Version: desktop 1.0
+# 
+# I'm attempting to keep track of changes to this config with the above.
+# Note that changes to the benchmarks themselves also require changing
+# this version number.  However, ADDING new benchmarks does not require 
+# a version bump. 
+# 
+# CHANGELOG:
+# 
 
-parfib monad  36
-parfib sparks 36
+# quicksort/parquicksort_monad futures 250000
+# quicksort/parquicksort_pseq  none    250000
 
-blackscholes 10000 15000000
+quicksort/parquicksort_monad futures 1500000
+quicksort/parquicksort_pseq  none    1500000
 
-cholesky 1000 50 cholesky_matrix1000.dat
+parfib_monad  futures nested 36
+parfib_monad  futures monad  36
+parfib_pseq   none    36
 
-nbody  13000
+blackscholes  futures 10000 15000000
+
+# cholesky      default 1000 50 cholesky_matrix1000.dat
+
+nbody         ivars  13000
 
 # mandel 300 300 4000
-mandel 2000 2000 3000000
+mandel        futures 2000 2000 3000000
 
-coins 8 1250
+coins         futures 8 1250
+queens        futures 14
 
-stream/disjoint_working_sets_pipeline monad  4 256 10 10000
-stream/disjoint_working_sets_pipeline sparks 4 256 10 10000
+# binomial lattice?
 
-partree/partree 600 20
+stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000
+stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
+
+partree/partree futures 600 20
 
 # What should the arguments be here:
-# minimax/minimax ? ? 
+# minimax/minimax futures nested ? ? 
+# minimax/minimax futures monad  ? ? 
 
 # These don't match the naming convention at the moment.
-matmult/matmult 768 0 64
-sumeuler/sumeuler 38 8000 100
+matmult/matmult   futures 768 0 64
+sumeuler/sumeuler futures 38 8000 100

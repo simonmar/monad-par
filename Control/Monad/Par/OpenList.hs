@@ -23,9 +23,11 @@ where
 import Control.Monad hiding (join)
 import Control.DeepSeq
 import Control.Concurrent.MVar
-import Control.Monad.Par hiding (parMapM)
+-- import Control.Monad.Par hiding (parMapM)
 import Control.Monad.Par.IList
-import Control.Monad.Par.Internal
+import Control.Monad.Par.Scheds.Trace 
+import Control.Monad.Par.Scheds.TraceInternal
+import qualified Control.Monad.Par.Combinator as C
 
 import Prelude hiding (length,head,tail,drop,take,null)
 import qualified Prelude as P
@@ -191,15 +193,15 @@ parMapM fn ls =
 -- parMapM_ :: (a -> Par ()) -> OpenList a -> Par () 
 
 -- | Build an OpenList with a divide-and-conquer parallel strategy.
-parBuild :: NFData a => InclusiveRange -> (Int -> a) -> Par (OpenList a)
+parBuild :: NFData a => C.InclusiveRange -> (Int -> a) -> Par (OpenList a)
 parBuild range fn =
-  parMapReduceRange range (singleton . fn) join empty
+  C.parMapReduceRange range (singleton . fn) join empty
 
 -- | Build an OpenList with a divide-and-conquer parallel strategy,
 --   allowing nested parallelism in the per-element computation.
-parBuildM :: NFData a => InclusiveRange -> (Int -> Par a) -> Par (OpenList a)
+parBuildM :: NFData a => C.InclusiveRange -> (Int -> Par a) -> Par (OpenList a)
 parBuildM range fn =
-  parMapReduceRange range ((>>= singleton) . fn) join empty
+  C.parMapReduceRange range ((>>= singleton) . fn) join empty
 
 
 -- | OpenLists can only be printed properly in the Par monad.  @show@

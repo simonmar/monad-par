@@ -1,16 +1,20 @@
 {-# LANGUAGE BangPatterns, CPP #-}
-import System.Environment
+
 import Control.Monad
 import Control.Seq
-import Data.Complex
-import System.IO
-import Debug.Trace
 import Control.DeepSeq
-import Control.Monad.Par
 import Control.Exception
-
 import PortablePixmap
+import Data.Complex
+import System.Environment
+import System.IO
 import Control.Monad.Par.AList as A
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0
@@ -27,7 +31,7 @@ threshold = 1
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (AList [Int])
 runMandel minX minY maxX maxY winX winY max_depth = do
 
-  parBuildThreshM threshold (InclusiveRange 0 (winY-1)) $ \y -> 
+  A.parBuildThreshM threshold (C.InclusiveRange 0 (winY-1)) $ \y -> 
        do
           let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)

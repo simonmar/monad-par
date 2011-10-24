@@ -24,11 +24,14 @@ module Main(main) where
 
 import System.Environment
 import Data.List hiding (foldl', foldl1')
-
 import ListAux
 import Control.DeepSeq
-
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 -------------------------------------
 
@@ -120,7 +123,7 @@ addMatrices m1 m2 = zipWith addVectors m1 m2
 -- Assumes the second matrix has already been transposed        
 multMatricesTr :: Matrix -> Matrix -> Matrix
 multMatricesTr m1 m2 =
-  runPar $ parMap (\row -> [prodEscalar2 row col | col <- m2]) m1
+  runPar $ C.parMap (\row -> [prodEscalar2 row col | col <- m2]) m1
 
 -- JB 2008: a lot faster, directly consuming lists, and tail-recursive (optimised with -O2)
 prodEscalar2JB :: Vector -> Vector -> Int

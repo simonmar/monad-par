@@ -5,13 +5,15 @@
 -- This script generates gnuplot plots.
 -- Give it a .dat file as input... (or it will try to open results.dat)
 
+module Main where
 
 import Text.PrettyPrint.HughesPJClass
 import Text.Regex
 import Data.List
+import Data.Maybe (mapMaybe)
 import Data.Function
 import Control.Monad
-import System
+import System.Process (system)
 import System.IO
 import System.FilePath 
 import System.Environment
@@ -29,7 +31,7 @@ linewidth = "5.0"
 --scheduler_MASK = [5,6,99,10]
 scheduler_MASK = []
 
--- Ok, gunplot line type 6 is YELLOW... that's not to smart:
+-- Ok, gunplot line type 6 is YELLOW... that's not too smart:
 line_types = [0..5] ++ [7..]
 
 round_2digits :: Double -> Double
@@ -41,10 +43,10 @@ round_2digits n = (fromIntegral $round (n * 100)) / 100
 --x11 = terminal X11.cons
 
 -- Split 
-parse [a,b,c,d,e,f] =
+parse [a,b,c,d,e,f] = Just $
   Entry { name     = a, 
-	  variant  = b,
-	  sched    = "trace",
+	  variant  = "_", -- TODO - phase out
+	  sched    = b,
 	  threads  = read c,
 	  tmin     = read d,
 	  tmed     = read e,
@@ -52,13 +54,10 @@ parse [a,b,c,d,e,f] =
 	  normfactor = 1.0
 	}
 
---parse [a,b,c,d,e,f,g,h,i] = 
---   trace ("Got line with norm factor: "++ show [a,b,c,d,e,f,g,h,i])
---   (parse [a,b,c,d,e,f,g,h]) { normfactor = read i }
-
-parse other = error$ "Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8 or 9: "++ show other
-
-
+parse other = 
+   trace ("WARNING: Cannot parse, wrong number of fields, "++ show (length other) ++" expected 8 or 9: "++ show other) $ 
+   Nothing
+   
 --------------------------------------------------------------------------------
 -- Let's take a particular interpretation of Enum for pairs:
 instance (Enum t1, Enum t2) => Enum (t1,t2) where 
@@ -131,68 +130,39 @@ newtype Mystr = Mystr String
 instance Show Mystr where
   show (Mystr s) = s
 
+--               Name, Variant, Scheduler,        Threads, BestTime, Speedup
+data Best = Best (String, String, String,   Int, Double, Double)
+
+
 {-
--- I ended up giving up on using the gnuplot package on hackage:
--- mypath :: Graph2D.T 
---Plot2D.T
---plot_benchmark :: [[[Entry]]] -> IO ()
---plot_benchmark :: [[[Entry]]] -> Plot2D.T
-plot_benchmark [io, pure] = 
-    --Plot.plot (X11.title "foobar" X11.cons) $
-    Plot.plot X11.cons $
-    Frame.cons (Opts.title ("Benchmark: " ++ benchname ++ " normalized to time " ++ show basetime) $ Opts.deflt) plots
- where 
-  benchname = name $ head $ head io 
-  plots = foldl1 mappend (map persched io ++ map persched pure)
-  basetime = foldl1 min $ map tmed $
-	     filter ((== 0) . threads) $
-	     (concat io ++ concat pure)
-  persched :: [Entry] -> Plot2D.T
-  persched dat = 
-    let 
-	schd = sched$   head dat
-	var  = variant$ head dat
-        mins = map tmin dat
-        meds = map tmed dat
-        maxs = map tmax dat
-	--zip4 = map$ \ a b c d -> (a,b,c,d)
-	zip4 s1 s2 s3 s4 = map (\ ((a,b), (c,d)) -> (a,b,c,d))
-	                   (zip (zip s1 s2) (zip s3 s4))
-        pairs = zip4 (map (fromIntegral . threads) dat) 
-		     (map (basetime / ) meds)
-		     (map (basetime / ) mins)
-		     (map (basetime / ) maxs)
-	quads = map (\ (a,b,c,d) -> Mystr (show a ++" "++ show b ++" "++ show d ++" "++ show c))
-		pairs 
-    in 
-      fmap (Graph2D.lineSpec $ 
-	    LineSpec.title (var ++"/"++ show schd) $ 
-	    LineSpec.lineWidth 3.0 $ 
-	    LineSpec.pointSize 3.0 $ 
-	    LineSpec.deflt) $ 
-      fmap (Graph2D.typ Graph2D.linesPoints) $
-      --Plot2D.path pairs
-      --Plot2D.path (map ( \ (a,b,c,d) -> (a,b)) pairs)
-      --fmap (Graph2D.typ Graph2D.errorBars) $
-      Plot2D.list quads
+   I ended up giving up on using the gnuplot package on hackage.
+
+   The below script turns a single benchmark into a gnuplot script
+   (produced as a string).
+
+   plot_benchmark2 expects entries with three levels of grouping, from
+   outside to in:
+     * Name 
+     * Variant (e.g. variant of the benchmark)
+     * Sched
+
 -}
+plot_benchmark2 :: String -> [[[Entry]]] -> IO Best
 
--- Name, Scheduler, Threads, BestTime, Speedup
-data Best = Best (String, String, String, Int, Double, Double)
-
--- Plot a single benchmark as a gnuplot script:
-plot_benchmark2 root [io, pure] = 
-    do action $ filter goodSched (io ++ pure)
+plot_benchmark2 root entries = 
+    do action $ filter goodSched (concat entries)
        return$ Best (benchname, bestvariant, 
 		     bestsched, bestthreads, best, basetime / best)
  where 
-  benchname = name $ head $ head io 
+  benchname = name $ head $ head $ head entries
   -- What was the best single-threaded execution time across variants/schedulers:
 
   goodSched [] = error "Empty block of data entries..."
   goodSched (h:t) = not $ (sched h) `elem` scheduler_MASK
+  
+  -- Knock down two levels of grouping leaving only Scheduler:
+  cat = concat $ map concat entries
 
-  cat = concat io ++ concat pure
   threads0 = filter ((== 0) . threads) cat
   threads1 = filter ((== 1) . threads) cat
 
@@ -219,7 +189,7 @@ plot_benchmark2 root [io, pure] =
 
   -- If all normfactors are the default 1.0 we print a different message:
   --let is_norm = not$ all (== 1.0) $ map normfactor ponits
-  norms = map normfactor (concat io ++ concat pure)
+  norms = map normfactor cat
   default_norms = all (== 1.0) $ norms
   max_norm = foldl1 max norms
 
@@ -287,10 +257,6 @@ plot_benchmark2 root [io, pure] =
       --runIO$ "(cd "++root++"; ps2pdf "++ filebase ++".eps )"
 
 
---plot_benchmark2 root ls = putStrLn$ "plot_benchmark2: Unexpected input, list len: "++ show (length ls)
-plot_benchmark2 root [io] = plot_benchmark2 root [io,[]]
-
-
 
 isMatch rg str = case matchRegex rg str of { Nothing -> False; _ -> True }
 
@@ -301,16 +267,16 @@ main = do
 	      []     -> "results.dat"
  dat <- run$ catFrom [file] -|- remComments "#" 
 
- let parsed = map (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
+ -- Here we remove
+ let parsed = mapMaybe (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
 	          (filter (not . isMatch (mkRegex "ERR")) $
 		   filter (not . isMatch (mkRegex "TIMEOUT")) $
 		   filter (not . null) dat)
- let organized = organize_data$ 
-		  -- filter ((`elem` ["io","pure"]) . variant) parsed
-                  parsed
+ let organized = organize_data parsed
 
  putStrLn$ "Parsed "++show (length parsed)++" lines containing data."
- print organized
+-- This can get big, I was just printing it for debugging:
+-- print organized
 
  let root = "./" ++ dropExtension file ++ "_graphs/"
  -- For hygiene, completely anhilate output directory:
@@ -334,7 +300,7 @@ main = do
  putStrLn$ "Now generating final plot files...\n\n"
 
  let summarize hnd = do 
-       hPutStrLn hnd $ "# Benchmark, scheduler, best #threads, best median time, max parallel speedup: "
+       hPutStrLn hnd $ "# Benchmark, Variant, Scheduler, best #threads, best median time, max parallel speedup: "
        hPutStrLn hnd $ "# Summary for " ++ file
 
        let pads n s = take (n - length s) $ repeat ' '
@@ -342,8 +308,8 @@ main = do
 
        forM_ bests $ \ (Best(name, variant, sched, threads, best, speed)) ->
 	 hPutStrLn hnd$ "    "++ name++  (pad 25 name) ++
-			  show variant++ (pad 10 variant)++
-			  show sched++   (pad 5 sched) ++
+			  variant++ (pad 10 variant)++
+			  sched++   (pad 5 sched) ++
 			  show threads++ (pad 5 threads)++ 
 			  show best ++   (pad 15 best) ++
 			  show speed 

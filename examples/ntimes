@@ -1,37 +1,24 @@
 #!/bin/bash
-# ---------------------------------------------------------------------------
-#  Intel Concurrent Collections for Haskell
-#  Copyright (c) 2010, Intel Corporation.
-# 
-#  This program is free software; you can redistribute it and/or modify it
-#  under the terms and conditions of the GNU Lesser General Public License,
-#  version 2.1, as published by the Free Software Foundation.
-# 
-#  This program is distributed in the hope it will be useful, but WITHOUT
-#  ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
-#  FITNESS FOR A PARTICULAR PURPOSE.  See the GNU Lesser General Public License for
-#  more details.
-# 
-#  You should have received a copy of the GNU Lesser General Public License along with
-#  this program; if not, write to the Free Software Foundation, Inc., 
-#  51 Franklin St - Fifth Floor, Boston, MA 02110-1301 USA.
-# ---------------------------------------------------------------------------
 
+# Ported from Haskell CnC script (BSD license)
 
 # Usage: ntimes <N> cmd args ...
-
-# Takes the best time out of N.
+# ========================================
+# Takes the best time out of N runs.
 # Returns that best time in seconds to stdout.
 
-# This script writes a bunch of stuff to stderr, but only one thing to
-# stdout.  The one thing, the "return value" of this process is the
-# best time in seconds.
+# This script writes a bunch of stuff to stderr, but only timings to
+# stdout.  The one thing, the "return value" of this process is 
+# a series of times in seconds (each on a line).
 
 # Responds to the environment variable HIDEOUTPUT, which, if non-empty
 # suppresses echoing of the child command's output.
 
 # Also responds to NOTIME which turns off the timing.
 
+# Take a look at how SELFTIMED is used below as well.
+
+# ================================================================================
 
 # Time out processes after three minutes.
 TIMEOUT=1000
@@ -42,7 +29,7 @@ function mytempfile {
   secs=`date +"%s"`
   #index=$(($index+1))
   index=$1
-  file=./runs/"$date"_"$base"_"$CNC_VARIANT"_"$CNC_SCHEDULER"_"$NUMTHREADS"_"$secs"_"$index".log
+  file=./runs/"$date"_"$base"_"$NUMTHREADS"_"$secs"_"$index".log
   touch $file
   echo $file
 }
@@ -64,7 +51,7 @@ CAT=/bin/cat
   # This serves as the log
   TMP1=`mytempfile 1`
   echo "Execution log file: " >> /dev/stderr
-  echo "   $TMP1" >> /dev/stderr
+  echo "   $TMP1"             >> /dev/stderr
 
   #echo "=================== ASYNCHRONOUS TEST OUTPUT TO FOLLOW ======================" > $TMP1
 
@@ -118,7 +105,7 @@ EXITCODE=0
 	if [ "$selftime" != "" ]; then 
 	  echo "  +++ Executable appears self-timed!!:"  >> $MYOUT
 	  echo "$selftime"                               >> $MYOUT
-	  cat $TMP2 | grep -v "real" | sed 's/SELFTIMED/real/' >> $TMP1
+	  cat $TMP2 | grep -v "real" | sed 's/SELFTIMED/real /' >> $TMP1
 	else
           cat $TMP2 >> $TMP1
 	fi
@@ -142,8 +129,7 @@ done;
   grep real $TMP1 | awk '{ print $1" "$2 }' | sort -n > $TMP3
 
   # Echo the final output to stdout:
-
-  echo "Final Timings: " > /dev/stderr
+  echo "Final Timings: " >> /dev/stderr
 
   cat $TMP3 | sed 's/real //' | sed 's/ real//' 
 

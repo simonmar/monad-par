@@ -1,4 +1,7 @@
 *.o
 *.hi
 *~
+*#
+.#*
 dist/
+.DS_Store

@@ -2,5 +2,8 @@ include ../common.mk
 
 all: minimax.exe
 
-minimax.exe : $(wildcard *.hs) ../../Control/Monad/Par.hs
-	$(GHC) -O2 -cpp --make -i../.. Main.hs -o $@ -threaded -rtsopts
+minimax.exe : $(wildcard *.hs) $(DPRPARSRC)
+	$(GHC) $(GHC_FLAGS) --make -i../.. Main.hs -o $@ -rtsopts
+
+
+clean: defaultclean

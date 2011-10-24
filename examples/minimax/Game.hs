@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- Time-stamp: <2011-02-12 21:11:31 simonmar>
 -----------------------------------------------------------------------------
 
@@ -7,10 +8,13 @@ import Board
 import Tree
 
 import Control.Parallel
-import Control.Parallel.Strategies hiding (parMap)
 import Debug.Trace
-
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED
+import PARSCHED
+#else
 import Control.Monad.Par
+#endif
 
 type Player = Evaluation -> Evaluation -> Evaluation
 type Move = (Board,Evaluation)
@@ -79,5 +83,5 @@ parMise :: Int -> Player -> Player -> (Tree Evaluation) -> Par Evaluation
 parMise 0 f g t = return (mise f g t)
 parMise n f g (Branch a []) = return a
 parMise n f g (Branch _ l) = do
-  es <- parMapM (parMise (n-1) g f) l
+  es <- C.parMapM (parMise (n-1) g f) l
   return (foldr f (g OWin XWin) es)

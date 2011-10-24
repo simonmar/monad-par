@@ -1,9 +1,15 @@
+{-# LANGUAGE CPP #-}
+{-# OPTIONS_GHC -O2 #-}
 import Data.Int
 import System.Environment
-import Control.Monad.Par
--- Testing:
--- import Control.Monad.ParElision
 import GHC.Conc
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+-- import Control.Monad.Par.Scheds.ContFree
+--import Control.Monad.Par.Scheds.Trace
+#endif
 
 type FibType = Int64
 
@@ -36,8 +42,8 @@ parfib1 n c = do
 parfib2 :: FibType -> FibType -> Par FibType
 parfib2 n c | n < c = return $ fib n
 parfib2 n c = do 
-    xf <- pval $ runPar $ parfib3 (n-1) c
-    yf <- pval $ runPar $ parfib3 (n-2) c
+    xf <- spawnP $ runPar $ parfib3 (n-1) c
+    yf <- spawnP $ runPar $ parfib3 (n-2) c
     x  <- get xf
     y  <- get yf
     return (x+y)
@@ -51,8 +57,6 @@ parfib2 n c = do
     x  <- get xf
     return (x+y)
 
-
-
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 
@@ -64,9 +68,6 @@ main = do
                 print$ runPar$ parfib2 size cutoff
         "monad"  -> do 
                 print$ runPar$ parfib1 size cutoff
-        "sparks" -> do 
-                putStrLn "Sparks-based, Non-monadic version:"
-                print$ parfib0 size cutoff
         _        -> error$ "unknown version: "++version
 
 
@@ -108,5 +109,22 @@ number of resident items), then I get these numbers:
   fib(34) 4 thread: 13.96 -- 1.63X 
 
 ESTIMATED 3573.76 seconds for fib(42).
+
+[2011.10.11] {Westmere 4-core testing}
+
+Testing schedulers directly, without going through the generic (type
+class) interface.  Starting with Scheds.Sparks:
+
+  fib(42) 4 threads: 4.56  17.83   -- Sparks
+  fib(42) 4 threads: 50.0  191.6   -- Trace 
+
+
+[2011.10.20] {ContFree approach}
+
+Initial version forks a new thread on every get, which does terribly of course.
+
+-N1
+  fib(24) 2.3s vs. 0.086
+
 
 -}

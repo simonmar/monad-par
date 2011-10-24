@@ -1,0 +1,78 @@
+{-# LANGUAGE CPP #-}
+
+-- A quicksort benchmark for monad-par
+
+import System.Random
+import System.Environment
+import Control.Monad.Par.AList as A
+import Control.Exception
+import Control.DeepSeq
+import Data.Int
+-- import Prelude (($), print, read)
+-- import qualified Prelude as P
+
+#ifdef PARSCHED 
+import PARSCHED
+#else
+-- import Control.Monad.Par
+-- import Control.Monad.Par.Scheds.Trace
+import Control.Monad.Par.Scheds.Sparks
+#endif
+
+-- TODO: Rewrite with AList.. lists are not good for this.
+
+quicksortP :: A.AList Int -> Par (A.AList Int)
+quicksortP A.ANil       = return empty
+quicksortP (A.ASing x)  = return (singleton x)
+quicksortP (A.AList ls) = error "implement me"
+-- quicksortP (A.Append ANil x) = quicksortP x 
+-- quicksortP (A.Append x ANil) = quicksortP x 
+
+-- quicksortP xs | A.length xs == 0 = return A.empty
+-- quicksortP xs | A.length xs == 1 = return xs
+
+-- This quicksort always choses the pivot to be the first element:
+quicksortP xs = 
+-- quicksortP (A.Append hd tl) = 
+  let pivot = A.head xs 
+      rest  = A.tail xs in
+  do
+     let low  =  A.filter (<  pivot) rest
+         high =  A.filter (>= pivot) rest
+
+     lf <- spawn$ quicksortP low
+     h  <-        quicksortP high
+     l  <- get lf
+
+     return (l `append` singleton pivot `append` h)
+    
+
+-- | 'genRandoms' creates 2^N random numbers.
+genRandoms :: Int -> StdGen -> AList Int
+--genRandoms n = loop (mkStdGen 120) n 
+genRandoms n g = loop g n 
+ where
+  loop rng 0 = ASing$ fst$ next rng
+  loop rng n = let (r1,r2) = split rng in
+               A.Append (loop r1 (n-1)) 
+		        (loop r2 (n-1))
+
+main = do args <- getArgs
+          let size =
+                case args of
+                  []  -> 18
+                  [n] -> (read n)
+
+          g <- getStdGen          
+          let rands = genRandoms size g
+--          let rands = genRandoms size (mkStdGen 120)
+
+          putStrLn "First deepseq the rands:"
+--	  evaluate (deepseq rands rands)
+	  deepseq rands $ return ()
+
+          putStrLn$ "Length of rands: "++ show (A.length rands)
+          putStrLn$ "Length of filtered: "++ show (A.length (A.filter (>=0) rands))
+
+          putStrLn "Monad-par based version:"
+          print$ take 8 $ A.toList $ runPar$ quicksortP rands

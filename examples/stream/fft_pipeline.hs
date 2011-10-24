@@ -2,8 +2,9 @@
 
 module Main(main) where
 
-import Control.Monad.Par 
-import Control.Monad.Par.Internal (runParAsync)
+-- TEMP: Fixing the trace scheduler because of its runParAsync support:
+import Control.Monad.Par.Scheds.Trace
+import Control.Monad.Par.Scheds.TraceInternal (runParAsync)
 import Control.Monad.Par.Stream as S
 import Control.Monad.Par.Logging
 import Control.Exception

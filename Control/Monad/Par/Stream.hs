@@ -20,8 +20,9 @@ module Control.Monad.Par.Stream
  )
 where
 import Control.Monad
-import Control.Monad.Par as P
-import Control.Monad.Par.Internal as PI
+-- import Control.Monad.Par as P
+import Control.Monad.Par.Scheds.Trace 
+import qualified Control.Monad.Par.Scheds.TraceInternal as PI
 import Control.Monad.Par.IList
 import Control.DeepSeq
 
@@ -75,8 +76,7 @@ streamMapDP fn instrm =
 	Null -> put outstrm Null -- End of stream.
 	Cons h t -> 
 	  do newtl <- new
-	     h' <- pval (fn h)	     
-
+	     h' <- spawn (return$ fn h)
 -- WARNING: This only makes sense with continuation-stealing..  With child stealing this will go crazy.
 	     fork$ loop t newtl
 	     h'' <- get h'

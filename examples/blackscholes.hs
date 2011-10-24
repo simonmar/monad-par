@@ -34,8 +34,13 @@ import Control.Monad
 import Control.DeepSeq
 import Control.Exception
 
+#ifdef PARSCHED 
+import PARSCHED
+#else
 import Control.Monad.Par
-import Control.Monad.Par.AList
+#endif
+import qualified Control.Monad.Par.Combinator as C
+-- import Control.Monad.Par.AList
 
 import Data.Array
 import Data.List
@@ -141,7 +146,7 @@ main = do args <- getArgs
 --	      results = runPar$ parMap (computeSegment granularity . (* granularity)) [0..numChunks-1]
 
 #if 1
-	      results = runPar$ parMap (computeSegment granularity) [0, granularity .. numOptions-1]
+	      results = runPar$ C.parMap (computeSegment granularity) [0, granularity .. numOptions-1]
 #else
 -- Not working right yet [2011.02.18]
               results = toList$ runPar$ 

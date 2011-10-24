@@ -18,15 +18,17 @@
 ---------------------------------------------------------------------------
 
 module Main where
-
 import System.Environment (getArgs)
-
-import Control.Monad.Par
-
 import Control.Monad (when)
-
 import ListAux -- split/join functions, put in new module
 import SumEulerPrimes
+import qualified Control.Monad.Par.Combinator as C
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par
+#endif
+
 
 ---------------------------------------------------------------------------
 -- Generic clustering routines
@@ -78,8 +80,8 @@ main = do args <- getArgs
                             | otherwise   = defVal
             x, n, c :: Int
             x = argDef 0 38   -- which sumEuler to use
-            n = argDef 1 5000 -- size of the interval
-            c = argDef 2 100  -- chunksize
+            n = argDef 1 500  -- size of the interval
+            c = argDef 2 20   -- chunksize
             -- parallel computation
             (res, _str) = case x of
 
@@ -133,7 +135,7 @@ sumEulerJFP_Final c n = sum ([(sum . map euler) x | x <- splitAtN c [n,n-1..0]]
 sumEuler_monadpar :: Int -> Int -> Int
 sumEuler_monadpar c n = runPar $
 --   sum `fmap` parMap (sum . map euler) (splitAtN c [n,n-1..0])
-   sum `fmap` parMap euler [n,n-1..0]
+   sum `fmap` C.parMap euler [n,n-1..0]
 
 
 -- -- using a fold-of-map strategy w/ folding inside a chunk
