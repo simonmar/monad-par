@@ -7,7 +7,7 @@ module Control.Monad.Par.Scheds.Sparks
  (
    Par(..), Future(..),
    runPar, 
-   get, spawn, spawn_
+   get, spawn, spawn_, spawnP
  ) 
 where 
 

@@ -24,7 +24,7 @@ module Control.Monad.Par.Scheds.ContFree (
     runPar, 
     new, get, put_, fork,
     newFull, newFull_, put,
-    spawn, spawn_, spawn1_
+    spawn, spawn_, spawn1_, spawnP
  ) where
 
 
