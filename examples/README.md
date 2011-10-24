@@ -17,13 +17,17 @@ installed by monad-par itself.
 
 Also, this directory provides benchmarking.  Ranging from the simple:
 
-    SHORTRUN=1 THREADSETTINGS="1" ./benchmark.hs
+    SHORTRUN=1 THREADS="1" ./benchmark.hs
 
 To the involved:
 
-    KEEPGOING=1 TRIALS=3 THREADSETTINGS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.hs
+    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.hs
 
-Both of which will populate a file named results_$HOSTNAME.dat.  
+Both of which will populate a file named results_$HOSTNAME.dat.
+Typically that will be followed by the following call to file the
+results:
+
+    ./file_away HOST ../results/MyMachineDescr_X.YGHz_Ncore
 
 
 NOTES ON BENCHLIST TEXT FILES
