@@ -21,6 +21,13 @@ module Control.Monad.Par.AList
  )
 where 
 
+-- TODO: Provide a strategy for @par@-based maps:
+
+-- TODO: tryHead -- returns Maybe
+
+-- TODO: headTail -- returns head and tail, 
+--    i.e. if we're doing O(N) work, don't do it twice.
+
 
 import Control.DeepSeq
 import Prelude hiding (length,head,tail,null,filter)
@@ -94,20 +101,22 @@ head al =
      ANil        -> Nothing
 
 
--- tryHead 
 
 -- | /O(n)/ take the tail element of an 'AList'
 tail :: AList a -> AList a
 tail al = 
-  case loop al of
+  case tryTail al of
     Just x -> x 
     Nothing -> error "cannot take tail of an empty AList"
- where 
-  loop al =
+
+tryTail al =
    case al of 
-     Append l r -> case loop l of 
-		     (Just x) -> Just (Append x r)
-		     Nothing  -> loop r
+     Append l r -> case tryTail l of 
+                     -- We avoid constructing (Append ANil _)
+		     (Just x) -> case x of 
+				   ANil -> Just r 
+				   _    -> Just (Append x r)
+		     Nothing  -> tryTail r
 
      ASing _     -> Just ANil
      AList (_:t) -> Just (AList t)
@@ -134,7 +143,6 @@ toList a = go a []
        go (Append l r) rest = go l $! go r rest
        go (AList xs)   rest = xs ++ rest
 
--- TODO: Provide a strategy for @par@-based maps:
 
 
 --------------------------------------------------------------------------------
@@ -193,7 +201,10 @@ appendM :: ParFuture p f => AList a -> AList a -> p (AList a)
 appendM x y = return (append x y)
 
 --------------------------------------------------------------------------------
+-- Instances
 
+instance Eq a => Eq (AList a) where
+ a == b = toList a == toList b
 
 -- TODO: Finish me:
 -- instance F.Foldable AList where
@@ -210,12 +221,4 @@ appendM x y = return (append x y)
 --     case al of 
 --       ANil    -> pure ANil
 --       ASing x -> ASing <$> f x
-
-#if 0
- data Tree a = Empty | Leaf a | Node (Tree a) a (Tree a)
- instance Traversable Tree
-	traverse f Empty = pure Empty
-	traverse f (Leaf x) = Leaf <$> f x
-	traverse f (Node l k r) = Node <$> traverse f l <*> f k <*> traverse f r
-#endif
 

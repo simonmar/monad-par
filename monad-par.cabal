@@ -104,6 +104,7 @@ Library
                , deepseq >= 1.1 && < 1.2
 --               , deepseq >= 1.2
                , HUnit >= 1.2 
+               , QuickCheck
                , rdtsc >= 1.1.3.1
                , split >= 0.1.2.3
                , carray >= 0.1.5

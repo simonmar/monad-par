@@ -13,6 +13,8 @@ import Data.Bits
 import Prelude as P hiding (head,tail,drop,length)
 import qualified Data.List as L
 import Test.HUnit
+import Test.QuickCheck
+import Test.QuickCheck.Gen
 
 data BitList = One  {-# UNPACK #-} !Int {-# UNPACK #-} !Int64
              | More {-# UNPACK #-} !Int {-# UNPACK #-} !Int64 BitList
@@ -59,14 +61,22 @@ unpack (One i bv)    = (bv `testBit` (i-1)) : unpack (One (i-1) bv)
 unpack (More 0 _ r)  =  unpack r
 unpack (More i bv r) = (bv `testBit` (i-1)) : unpack (More (i-1) bv r)
 
+-- drop :: Int -> BitList -> BitList
+-- drop 0 bl           = bl
+-- drop n bl | n >= 64 = case bl of 
+-- 		        One _ _    -> error "drop: not enough elements in BitList"
+-- 			More i _ r -> drop (n-i) r
+-- drop n bl = case bl of 
+-- 	      One i  bv   -> One  (i-n) bv
+-- 	      More i bv r -> More (i-n) bv r
+
 drop :: Int -> BitList -> BitList
-drop 0 bl           = bl
-drop n bl | n >= 64 = case bl of 
-		        One _ _    -> error "drop: not enough elements in BitList"
-			More i _ r -> drop (n-i) r
-drop n bl = case bl of 
-	      One i  bv   -> One  (i-n) bv
-	      More i bv r -> More (i-n) bv r
+drop n (One i bv)
+   | n >= i    = empty
+   | otherwise = One (i - n) bv
+drop n (More i bv r)
+   | n >= i    = drop (n - i) r
+   | otherwise = More (i - n) bv r
 
 length :: BitList -> Int
 length (One  i _)   = i
@@ -77,6 +87,11 @@ length (More i _ r) = i + length r
 
 -- TODO: functor instance, etc.
 
+instance Eq BitList where
+ One i1 bv1 == One i2 bv2 
+    | i1 == i2 && mask bv1 == mask bv2  = True
+
+mask x = x
 
 --------------------------------------------------------------------------------
 -- Testing:
@@ -94,6 +109,9 @@ t5 = iterate tail t4 !! 250
 t5a = length t5
 t5b = L.length (unpack t5)
 
+t6 = drop 5 (More 1 0 (One 64 0)) 
+-- More (-4) 0 (One 64 0)
+
 tests :: Test
 tests = 
   TestList 
@@ -104,6 +122,19 @@ tests =
     , t5b ~=? 250
     , p3  ~=? True
     , p4  ~=? True
+    , length t6 ~=? 60
     ]
 
 -- TODO: QuickCheck
+
+-- \s -> length (take 5 s) == 5
+
+-- This won't work at tail []:
+prop_droptail xs =   drop 1 xs == tail xs
+
+q1 = quickCheck (prop_droptail :: BitList -> Bool)
+
+instance Arbitrary BitList where
+  arbitrary = MkGen $ \ rng n -> 
+	        let ls = (unGen arbitrary) rng n
+		in pack ls
