@@ -133,14 +133,20 @@ module Control.Monad.Par
   spawn_,
   -- | Like 'spawn', but the result is only head-strict, not fully-strict.
 
-  spawnP
+  spawnP,
   -- | Spawn a pure (rather than monadic) computation.  Fully-strict.
   -- 
   -- >  spawnP = spawn . return
 
+
+  module Control.Monad.Par.Combinator
+  -- | This module also reexports the Combinator library for backwards
+  --   compatibility with version 0.1.
  )
 where 
 
 -- import Control.Monad.Par.Class
 import Control.Monad.Par.Scheds.Trace -- hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
 -- import Control.Monad.Par.Scheds.Direct 
+
+import Control.Monad.Par.Combinator
