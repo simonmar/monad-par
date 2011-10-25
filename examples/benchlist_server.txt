@@ -1,0 +1,46 @@
+# See README.md for format description.
+#
+# Version: server 1.0
+# 
+# I'm attempting to keep track of changes to this config with the above.
+# Note that changes to the benchmarks themselves also require changing
+# this version number.  However, ADDING new benchmarks does not require 
+# a version bump. 
+# 
+# CHANGELOG:
+# 
+
+# # Problems with this:
+parfib_pseq   none           42
+parfib_monad  futures monad  38
+parfib_monad  futures nested 30
+
+blackscholes  futures 10000 30000000
+
+cholesky      ivars   1000 50 cholesky_matrix1000.dat
+
+nbody         ivars  25000
+
+mandel        futures 3000 3000 3000000
+
+coins         futures 8 1600
+queens        futures monad 14
+
+# quicksort/parquicksort_monad futures 1500000
+# quicksort/parquicksort_pseq  none    1500000
+
+# # binomial lattice?
+
+# stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000
+# stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
+
+# # What should the arguments be here:
+# # minimax/minimax futures nested ? ? 
+# # minimax/minimax futures monad  ? ? 
+
+# # These don't match the naming convention at the moment.
+sumeuler/sumeuler futures 38 16000 100
+matmult/matmult   futures 1024 0 64
+
+# Getting a drastic parallel slowdown currently! [2011.10.25]
+# partree/partree futures 600 20

@@ -73,7 +73,7 @@ main = do args <- getArgs
           let 
             lenArgs = length args
           when (lenArgs < 3) 
-                   (putStrLn (usage ++ "\n(using defaults: 38,5000,100)"))
+                   (putStrLn (usage ++ "\n(using defaults: 38,500,20)"))
           let 
             argDef :: Read a => Int -> a -> a
             argDef m defVal | m < lenArgs = read (args!!m)
