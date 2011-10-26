@@ -14,6 +14,8 @@ import System.Directory
 import System.FilePath 
 import Text.Printf
 
+import ScriptHelpers
+
 main = do 
   files <- run "ls */*/results_*.dat"
   printf "Found %d results files:\n"  (length files)
@@ -80,23 +82,4 @@ whenNewer f1 f2 action = do
      then action
      else printf "    %s is up-to-date...\n" (takeFileName f2)
 
-
-runEcho cmd = do putStrLn$ "  Running: "++ cmd
-		 runIO $ cmd -|- indent
-
-unlessM m1 m2 = do x <- m1; unless x m2
-
-indent = ("   "++)
-
-inDirectory dir action = do
-  d1 <- getCurrentDirectory
-  setCurrentDirectory dir
-  x <- action
-  setCurrentDirectory d1
-  return x
-
-
-trim :: String -> String
-trim = f . f
-   where f = reverse . dropWhile isSpace
 

@@ -22,12 +22,9 @@ import Control.DeepSeq
 import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 
--- {- SPECIALIZE PC.fork :: Par () -> Par () #-}
-
-{-# INLINABLE fork #-}
-
 -- -----------------------------------------------------------------------------
 
+{-# INLINABLE fork #-}
 fork :: Par () -> Par ()
 fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 

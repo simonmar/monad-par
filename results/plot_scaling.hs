@@ -23,6 +23,10 @@ import Data.Array (listArray, )
 import Data.Monoid (mappend, )
 import Debug.Trace
 
+import ScriptHelpers
+
+--------------------------------------------------------------------------------
+-- Settings
 
 linewidth = "5.0"
 
@@ -42,7 +46,31 @@ round_2digits n = (fromIntegral $round (n * 100)) / 100
 --x11 = terminal Graphics.Gnuplot.Terminal.X11.cons
 --x11 = terminal X11.cons
 
--- Split 
+--------------------------------------------------------------------------------
+-- Data Types:
+
+-- Here's the schema for the data from my timing tests:
+data Entry = Entry { 
+  name     :: String,
+  variant  :: String,
+  sched    :: String,
+  threads  :: Int, 
+  tmin     :: Double,
+  tmed     :: Double,
+  tmax     :: Double,
+  normfactor :: Double
+}
+  deriving Show
+
+instance Pretty Entry where
+  --pPrint x = pPrint$ show x
+  pPrint Entry { name, sched, variant, threads, tmin, tmed, tmax, normfactor } = 
+       pPrint ("ENTRY", name, sched, variant, threads, (tmin, tmed, tmax), normfactor )
+--       pPrint ("ENTRY", name, variant, sched, threads, tmin, tmed, tmax, normfactor)
+
+--------------------------------------------------------------------------------
+-- Sloppy parsing of lines-of-words:
+
 parse [a,b,c,d,e,f] = Just $
   Entry { name     = a, 
 	  variant  = "_", -- TODO - phase out
@@ -82,35 +110,7 @@ sepDoubleBlanks ls = loop [] ls
   stripLeadingBlanks ls     = ls
 
 
-remComments :: String -> [String] -> [String]
-remComments commentchars ls = filter (pred . stripLeadingWhitespace) ls
- where 
-  pred str = not (take (length commentchars) str == commentchars) 
-  stripLeadingWhitespace []      = [] 
-  stripLeadingWhitespace (' ':t) = stripLeadingWhitespace t
-  stripLeadingWhitespace ls      = ls
-
 --------------------------------------------------------------------------------
-
--- Here's the schema for the data from my timing tests:
-data Entry = Entry { 
-  name     :: String,
-  variant  :: String,
-  sched    :: String,
-  threads  :: Int, 
-  tmin     :: Double,
-  tmed     :: Double,
-  tmax     :: Double,
-  normfactor :: Double
-}
-  deriving Show
-
-instance Pretty Entry where
-  --pPrint x = pPrint$ show x
-  pPrint Entry { name, sched, variant, threads, tmin, tmed, tmax, normfactor } = 
-       pPrint ("ENTRY", name, sched, variant, threads, (tmin, tmed, tmax), normfactor )
---       pPrint ("ENTRY", name, variant, sched, threads, tmin, tmed, tmax, normfactor)
-
 
 groupSort fn = 
    (groupBy ((==) `on` fn)) . 
@@ -265,7 +265,7 @@ main = do
  let file = case args of 
 	      [f] -> f 
 	      []     -> "results.dat"
- dat <- run$ catFrom [file] -|- remComments "#" 
+ dat <- run$ catFrom [file] -|- remComments 
 
  -- Here we remove
  let parsed = mapMaybe (parse . filter (not . (== "")) . splitRegex (mkRegex "[ \t]+")) 
