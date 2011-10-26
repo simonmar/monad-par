@@ -10,30 +10,26 @@ module Control.Monad.Par.AList
   -- * The 'AList' type and operations
   AList(..),
   empty, singleton, cons, head, tail, length, null, append,
-  toList, fromList,
+  toList, fromList, fromListBalanced, 
 
   -- * Regular (non-parallel) Combinators
-  filter,
+  filter, map, partition,
 
   -- * Operations to build 'AList's in the 'Par' monad
   parBuildThresh, parBuildThreshM,
   parBuild, parBuildM,
+
+  -- * Inspect and modify the internal structure of an AList tree 
+  depth, balance
  )
 where 
 
--- TODO: Provide a strategy for @par@-based maps:
-
--- TODO: tryHead -- returns Maybe
-
--- TODO: headTail -- returns head and tail, 
---    i.e. if we're doing O(N) work, don't do it twice.
-
-
 import Control.DeepSeq
-import Prelude hiding (length,head,tail,null,filter)
+import Prelude hiding (length,head,tail,null,map,filter)
 import qualified Prelude as P
-import Control.Monad.Par.Class
+import qualified Data.List as L
 import qualified Control.Monad.Par.Combinator as C
+import Control.Monad.Par.Class
 
 -- | List that support constant-time append (sometimes called
 -- join-lists).
@@ -70,6 +66,26 @@ singleton = ASing
 fromList :: [a] -> AList a
 fromList  = AList
 
+-- | Convert an ordinary list, but do so using 'Append' and
+-- 'ASing' rather than 'AList'
+fromListBalanced :: [a] -> AList a
+fromListBalanced xs = go xs (P.length xs)
+  where 
+   go _  0 = ANil
+   go ls 1 = case ls of 
+	       (h:_) -> ASing h
+	       []    -> error "the impossible happened"
+   go ls n = 
+     let (q,r) = quotRem n 2 in
+     Append (go ls q)
+            (go (drop q ls) (q+r))
+
+
+-- | Balance the tree representation of an AList.  
+balance :: AList a -> AList a
+balance = fromListBalanced . toList
+-- This would be much better if ALists tracked their size.
+
 {-# INLINE cons #-}
 -- | /O(1)/ prepend an element
 cons :: a -> AList a -> AList a
@@ -100,23 +116,18 @@ head al =
      AList []    -> Nothing
      ANil        -> Nothing
 
-
-
 -- | /O(n)/ take the tail element of an 'AList'
 tail :: AList a -> AList a
 tail al = 
-  case tryTail al of
+  case loop al of
     Just x -> x 
     Nothing -> error "cannot take tail of an empty AList"
-
-tryTail al =
+ where 
+  loop al =
    case al of 
-     Append l r -> case tryTail l of 
-                     -- We avoid constructing (Append ANil _)
-		     (Just x) -> case x of 
-				   ANil -> Just r 
-				   _    -> Just (Append x r)
-		     Nothing  -> tryTail r
+     Append l r -> case loop l of 
+		     (Just x) -> Just (Append x r)
+		     Nothing  -> loop r
 
      ASing _     -> Just ANil
      AList (_:t) -> Just (AList t)
@@ -143,6 +154,46 @@ toList a = go a []
        go (Append l r) rest = go l $! go r rest
        go (AList xs)   rest = xs ++ rest
 
+partition :: (a -> Bool) -> AList a -> (AList a, AList a)
+partition p a = go a (ANil, ANil)
+  where go ANil      acc = acc
+        go (ASing a) (ys, ns) | p a = (a `cons` ys, ns)
+        go (ASing a) (ys, ns) | otherwise = (ys, a `cons` ns)
+        go (Append l r) acc = go l $! go r acc
+        go (AList xs) (ys, ns) = (AList ys' `append` ys, AList ns' `append` ns)
+          where
+            (ys', ns') = L.partition p xs
+
+depth :: AList a -> Int
+depth ANil      = 0
+depth (ASing _) = 1
+depth (AList _) = 1
+depth (Append l r) = 1 + max (depth l) (depth r)
+
+
+-- The filter operation compacts dead space in the tree that would be
+-- left by ANil nodes.
+filter :: (a -> Bool) -> AList a -> AList a
+filter p l = loop l 
+ where 
+  loop ANil         = ANil
+  loop o@(ASing x)  = if p x then o else ANil
+  loop   (AList ls) = AList$ P.filter p ls
+  loop (Append x y) = 
+     let l = loop x
+	 r = loop y in
+     case (l,r) of 
+       (ANil,ANil) -> ANil
+       (ANil,y)    -> y
+       (x,ANil)    -> x
+       (x,y)       -> Append x y
+
+-- | The usual `map` operation.
+map :: (a -> b) -> AList a -> AList b
+map _  ANil = ANil 
+map f (ASing x) = ASing (f x)
+map f (AList l) = AList (P.map f l)
+map f (Append x y) = Append (map f x) (map f y)
 
 
 --------------------------------------------------------------------------------
@@ -179,32 +230,18 @@ parBuildM :: (NFData a, ParFuture p f) => C.InclusiveRange -> (Int -> p a) -> p 
 parBuildM range fn =
   C.parMapReduceRange range (\x -> fn x >>= return . singleton) appendM empty
 
-filter :: (a -> Bool) -> AList a -> AList a
-filter p l = loop l 
- where 
-  loop ANil         = ANil
-  loop o@(ASing x)  = if p x then o else ANil
-  loop   (AList ls) = AList$ P.filter p ls
-  loop (Append x y) = 
-     let l = loop x
-	 r = loop y in
-     case (l,r) of 
-       (ANil,ANil) -> ANil
-       (ANil,y)    -> y
-       (x,ANil)    -> x
-       (x,y)       -> Append x y
-
 --------------------------------------------------------------------------------
--- Internal helpers:
 
-appendM :: ParFuture p f => AList a -> AList a -> p (AList a)
-appendM x y = return (append x y)
+-- TODO: Provide a strategy for @par@-based maps:
 
---------------------------------------------------------------------------------
--- Instances
+-- TODO: tryHead -- returns Maybe
 
+-- TODO: headTail -- returns head and tail, 
+--    i.e. if we're doing O(N) work, don't do it twice.
+
+-- FIXME: Could be more efficient:
 instance Eq a => Eq (AList a) where
- a == b = toList a == toList b
+ a == b = toList a == toList b 
 
 -- TODO: Finish me:
 -- instance F.Foldable AList where
@@ -222,3 +259,9 @@ instance Eq a => Eq (AList a) where
 --       ANil    -> pure ANil
 --       ASing x -> ASing <$> f x
 
+
+--------------------------------------------------------------------------------
+-- Internal helpers:
+
+appendM :: ParFuture p f => AList a -> AList a -> p (AList a)
+appendM x y = return (append x y)

@@ -74,9 +74,7 @@ wiperesults:
 # increase the dependencies for the monad-par package as a whole.
 install-deps: deps
 deps:
-	cabal install parallel
-	cabal install fft
-	cabal install carray
+	cabal install parallel fft carray
 
 # Redifen clean from common.mk
 clean:

@@ -8,15 +8,15 @@ import Control.Monad.Par.AList as A
 import Control.Exception
 import Control.DeepSeq
 import Data.Int
+import Data.List as L
 -- import Prelude (($), print, read)
 -- import qualified Prelude as P
 
 #ifdef PARSCHED 
 import PARSCHED
 #else
--- import Control.Monad.Par
+import Control.Monad.Par
 -- import Control.Monad.Par.Scheds.Trace
-import Control.Monad.Par.Scheds.Sparks
 #endif
 
 -- TODO: Rewrite with AList.. lists are not good for this.
@@ -25,11 +25,6 @@ quicksortP :: A.AList Int -> Par (A.AList Int)
 quicksortP A.ANil       = return empty
 quicksortP (A.ASing x)  = return (singleton x)
 quicksortP (A.AList ls) = error "implement me"
--- quicksortP (A.Append ANil x) = quicksortP x 
--- quicksortP (A.Append x ANil) = quicksortP x 
-
--- quicksortP xs | A.length xs == 0 = return A.empty
--- quicksortP xs | A.length xs == 1 = return xs
 
 -- This quicksort always choses the pivot to be the first element:
 quicksortP xs = 
@@ -47,6 +42,22 @@ quicksortP xs =
      return (l `append` singleton pivot `append` h)
     
 
+-- Another version.  TODO: Switch to this one:
+-- | AList version of quicksort
+aqs :: A.AList Int -> A.AList Int
+aqs A.ANil = A.ANil
+aqs (A.ASing x) = A.ASing x
+aqs (A.AList xs) = undefined
+aqs (A.Append xs ys) = low' `A.append` (pivot `A.cons` high')
+  where pivot = A.head xs
+        (low, high) = A.partition (< pivot) (A.Append (A.tail xs) ys)
+        low' = aqs low
+        high' = aqs high
+
+prop_aqs :: [Int] -> Bool
+prop_aqs xs = L.sort xs == (A.toList $ aqs (A.fromListBalanced xs))
+
+-- TODO: replace with fromListBalanced:
 -- | 'genRandoms' creates 2^N random numbers.
 genRandoms :: Int -> StdGen -> AList Int
 --genRandoms n = loop (mkStdGen 120) n 
@@ -67,12 +78,13 @@ main = do args <- getArgs
           let rands = genRandoms size g
 --          let rands = genRandoms size (mkStdGen 120)
 
-          putStrLn "First deepseq the rands:"
---	  evaluate (deepseq rands rands)
-	  deepseq rands $ return ()
+          putStrLn$ "Quicksorting "++show size++" elements. First deepseq the rands:"
+	  evaluate (deepseq rands ())
+--          nfIO rands
+-- 	  deepseq rands $ return ()
 
-          putStrLn$ "Length of rands: "++ show (A.length rands)
-          putStrLn$ "Length of filtered: "++ show (A.length (A.filter (>=0) rands))
+--           putStrLn$ "Length of rands: "++ show (A.length rands)
+--           putStrLn$ "Length of filtered: "++ show (A.length (A.filter (>=0) rands))
 
           putStrLn "Monad-par based version:"
           print$ take 8 $ A.toList $ runPar$ quicksortP rands

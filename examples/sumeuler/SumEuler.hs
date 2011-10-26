@@ -133,7 +133,7 @@ sumEulerJFP_Final c n = sum ([(sum . map euler) x | x <- splitAtN c [n,n-1..0]]
 #endif
 
 sumEuler_monadpar :: Int -> Int -> Int
-sumEuler_monadpar c n = runPar $
+sumEuler_monadpar _ n = runPar $
 --   sum `fmap` parMap (sum . map euler) (splitAtN c [n,n-1..0])
    sum `fmap` C.parMap euler [n,n-1..0]
 

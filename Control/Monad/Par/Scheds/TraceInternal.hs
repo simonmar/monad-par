@@ -129,7 +129,7 @@ sched _doSync wl q@Sched{status, workpool} queueref uid t = loop t
          then go
                 -- We could fork an extra thread here to keep numCapabilities workers
                 -- even when the main thread returns to the runPar caller...
-         else do putStrLn " [par] Forking replacement thread..\n"
+         else do -- putStrLn " [par] Forking replacement thread..\n"
                  forkIO go; return ()
                 -- But even if we don't we are not orphaning any work in this
                 -- thread's work-queue because it can be stolen by other threads.
@@ -508,7 +508,7 @@ runPar_internal _doSync x = unsafePerformIO $ do
         -- doing it this way.  At the least, we should put this in steal where the 
         -- shutdown occurs.
         b <- globalThreadShutdown
-        putStrLn $ "Global thread shutdown: " ++ show b
+--         putStrLn $ "Global thread shutdown: " ++ show b
         case r of
             Full a -> return a
             _ -> error "no result"

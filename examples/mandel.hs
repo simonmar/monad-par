@@ -48,7 +48,7 @@ runMandel minX minY maxX maxY winX winY max_depth = do
 makeImage :: Integer -> Integer -> Int -> AList [Int] -> PixMap
 makeImage x y depth ls =
   createPixmap x y depth 
-   (map prettyRGB (concat (toList ls)))
+   (Prelude.map prettyRGB (concat (toList ls)))
  where 
    prettyRGB :: Int -> (Int,Int,Int)
    prettyRGB s = let t = (depth - s) in (s,t,t)

@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.2
+Version:             0.2.1
 Synopsis:            A library for parallel programming based on a monad
 
 -- Version history:
@@ -9,6 +9,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.1.1.0  : module reorganization, moving ParClass
 
 --  0.2      : Bumped for new class-based API
+--  0.2.1    : Bumped for change AList
 
 
 Description:         This library offers an alternative parallel programming
@@ -94,17 +95,21 @@ Library
                  , Control.Monad.Par.Class
                  , Control.Monad.Par.Combinator
                  , Control.Monad.Par.RNG
-                 , Control.Monad.Par.AList
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
                  , Control.Monad.Par.Scheds.SerialElision
+                 , Control.Monad.Par.AList 
+                 -- AList is really internal.  Needs more testing and tuning:
+
+
 
   Build-depends: base >= 4 && < 5
 -- The parallel package currently requires deepseq 1.1:
                , deepseq >= 1.1 && < 1.2
 --               , deepseq >= 1.2
                , HUnit >= 1.2 
-               , QuickCheck
+--               , QuickCheck <= 2
+               , QuickCheck 
                , rdtsc >= 1.1.3.1
                , split >= 0.1.2.3
                , carray >= 0.1.5
@@ -115,10 +120,9 @@ Library
                , containers
                , mtl >= 2.0.1.0
                , parallel >= 3.1
-
--- NOTE!  These dependencies DO NOT include all dependencies required
--- by the examples/benchmarks.  Run "make deps" in the examples
--- directory.
+  -- NOTE!  These dependencies DO NOT include all dependencies required
+  -- by the examples/benchmarks.  Run "make deps" in the examples
+  -- directory.
 
   ghc-options: -O2
   Other-modules:
@@ -133,6 +137,11 @@ Library
                , Control.Monad.Par.Chan
                , Data.BitList
 
--- IList is internal:
---                 , Control.Monad.Par.IList
+
+
+Test-Suite test-monad-par
+    type:       exitcode-stdio-1.0
+    main-is:    tests/AListTest.hs
+    build-depends: QuickCheck, HUnit
+                 , test-framework, test-framework-hunit, test-framework-quickcheck2
 
