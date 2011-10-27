@@ -309,7 +309,7 @@ main = do
        forM_ bests $ \ (Best(name, variant, sched, threads, best, speed)) ->
 	 hPutStrLn hnd$ "    "++ name++  (pad 25 name) ++
 			  variant++ (pad 10 variant)++
-			  sched++   (pad 5 sched) ++
+			  sched++   (pad 10 sched) ++
 			  show threads++ (pad 5 threads)++ 
 			  show best ++   (pad 15 best) ++
 			  show speed 

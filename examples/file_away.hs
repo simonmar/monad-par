@@ -70,8 +70,8 @@ main = do
       -- Here we have some strong expectations about the textual format of the file:
       [_,variant] = words$ strip variantL
       [_,version] = words$ strip versionL 
-      rdname::String = printf "results_%s_%d_%d_%d_%s_v%s_.dat" host y m d variant version
-      bdname::String = printf "bench_%s_%d_%d_%d_%s_v%s_.log"   host y m d variant version
+      rdname::String = printf "results_%s_%d_%d_%d_%s_v%s.dat" host y m d variant version
+      bdname::String = printf "bench_%s_%d_%d_%d_%s_v%s.log"   host y m d variant version
       
       ghcVer = head $ reverse $ words ghcVerL
       ghcDir = "ghc-"++ghcVer
