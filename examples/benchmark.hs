@@ -204,7 +204,7 @@ expandMode "Direct"   = [Direct]
 expandMode "ContFree" = [ContFree]
 
 -- Omitting Direct until its bugs are fixed:
-ivarScheds = [Trace, ContFree] -- Direct?
+ivarScheds = [Trace, ContFree, Direct] 
 
 schedToModule s = 
   case s of 

@@ -24,7 +24,8 @@ fib x = fib (x-2) + fib (x-1)
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
-    xf <- spawn1_ parfib1 (n-1)
+--    xf <- spawn1_ parfib1 (n-1)
+    xf <- spawn_$ parfib1 (n-1)
     y  <-         parfib1 (n-2)
     x  <- get xf
     return (x+y)

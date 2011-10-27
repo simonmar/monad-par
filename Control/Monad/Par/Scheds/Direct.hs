@@ -79,6 +79,7 @@ data Sched = Sched
       no       :: {-# UNPACK #-} !Int,
       workpool :: HotVar (Deque (Par ())),
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
+      isMain :: Bool, -- Are we the main/master thread? 
 
       ---- Global data: ----
       killflag :: HotVar Bool,
@@ -245,17 +246,18 @@ popWork Sched{ workpool, no } = do
 
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
-pushWork Sched { workpool, idle, no } task = do
+pushWork Sched { workpool, idle, no, isMain } task = do
   modifyHotVar_ workpool (addfront task)
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
-
+#ifdef WAKEIDLE
+  --when isMain$ 
   tryWakeIdle idle
+#endif
 
 
 tryWakeIdle idle = do
 -- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
-#ifdef WAKEIDLE
   -- If any worker is idle, wake one up and give it work to do.
   idles <- readHotVar idle -- Optimistically do a normal read first.
   when (not (null idles)) $ do
@@ -264,9 +266,6 @@ tryWakeIdle idle = do
                              []     -> ([], return ())
                              (i:is) -> (is, putMVar i False))
     r -- wake an idle worker up by putting an MVar.
-#else
-  return ()
-#endif
 
 rand :: HotVar StdGen -> IO Int
 rand ref = 
@@ -285,7 +284,6 @@ rand ref =
 --   rnf _ = ()
 
 runPar userComp = unsafePerformIO $ do
-   allscheds <- makeScheds
   
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
@@ -306,6 +304,7 @@ runPar userComp = unsafePerformIO $ do
     --
    let main_cpu = 0
 #endif
+   allscheds <- makeScheds main_cpu
 
    m <- newEmptyMVar
    forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
@@ -345,13 +344,13 @@ sanityCheck allscheds = liftIO$ do
 
 
 -- Create the default scheduler(s) state:
-makeScheds = do
+makeScheds main = do
    workpools <- replicateM numCapabilities $ newHotVar emptydeque
    rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
    idle <- newHotVar []   
    killflag <- newHotVar False
-   let allscheds = [ Sched { no=x, idle, killflag, 
-			  workpool=wp, scheds=allscheds, rng=rng
+   let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
+			     workpool=wp, scheds=allscheds, rng=rng
 			}
                 | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -457,6 +456,9 @@ rescheduleR k = do
     Nothing -> do k <- liftIO$ readIORef (killflag mysched) 
 		  unless k $ do		    
 		     liftIO (steal mysched)
+#ifdef WAKEIDLE
+--                     liftIO$ tryWakeIdle (idle mysched)
+#endif
 		     rescheduleR errK
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
@@ -480,11 +482,8 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
   i <- getnext (-1 :: Int)
   go maxtries i
  where
-#ifdef WAKEIDLE
-    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
-#else
-    maxtries = 20 * numCapabilities -- More if they don't wake up after.
-#endif
+--    maxtries = numCapabilities -- How many times should we attempt theft before going idle?
+    maxtries = 20 * numCapabilities -- How many times should we attempt theft before going idle?
 
     getnext _ = rand rng
 
