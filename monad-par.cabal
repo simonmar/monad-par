@@ -105,8 +105,8 @@ Library
 
   Build-depends: base >= 4 && < 5
 -- The parallel package currently requires deepseq 1.1:
-               , deepseq >= 1.1 && < 1.2
---               , deepseq >= 1.2
+--               , deepseq >= 1.1 && < 1.2
+               , deepseq >= 1.2
                , HUnit >= 1.2 
 --               , QuickCheck <= 2
                , QuickCheck 

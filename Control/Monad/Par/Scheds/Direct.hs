@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ScopedTypeVariables,
              TypeSynonymInstances, MultiParamTypeClasses,
-             GeneralizedNewtypeDeriving
+             GeneralizedNewtypeDeriving, PackageImports
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
@@ -28,8 +28,8 @@ import Debug.Trace
 import Data.IORef
 import Text.Printf
 import GHC.Conc
-import Control.Monad.Cont as C
-import qualified Control.Monad.Reader as R
+import "mtl" Control.Monad.Cont as C
+import qualified "mtl" Control.Monad.Reader as R
 -- import qualified Data.Array as A
 -- import qualified Data.Vector as A
 import qualified Data.Sequence as Seq

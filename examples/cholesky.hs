@@ -13,6 +13,7 @@
    , FlexibleInstances
    , DeriveDataTypeable
    , TypeSynonymInstances
+   , PackageImports
    , CPP
   #-}
 
@@ -61,7 +62,10 @@ import Data.Map
 import Data.IORef
 import qualified Data.ByteString.Char8 as B
 
-import Control.DeepSeq
+-- Fix the old deepseq version for the NFData Map instance.
+-- A seriously annoying portability problem.
+-- import "deepseq-1.1.0.2" Control.DeepSeq
+import "deepseq" Control.DeepSeq
 import Control.Exception
 import Data.Time.Clock -- Not in 6.10
 
@@ -81,8 +85,6 @@ timeit io =
 -- The type of the input/output array.
 type Matrix = Array.UArray (Int, Int) Float
 
-instance NFData Matrix
-
 -- A matrix is divided into "Tile"s, and carries intermediate results
 -- of the computation.
 type Tile = IOUArray  (Int, Int) Float
@@ -93,18 +95,13 @@ type Tile = IOUArray  (Int, Int) Float
 -- by (i, j, k+1) is the next generation of the (IVar Tile) mapped by (i, j, k).
 type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 
-#if __GLASGOW_HASKELL__ < 721 
-instance NFData Tiles3D where
-#endif
-
+-- NFData is needed for spawnP.  Use default instances.
+instance NFData Matrix
 instance NFData Tile where
--- SDM: use the default.  All we require is that the IOUArray is evaluated,
--- since all its contents are unboxed.
---    rnf x = unsafePerformIO $
---                do bounds <- getBounds x
---                   elems  <- getElems x
---                   _ <- return $ rnf (bounds, elems)
---                   return ()
+instance NFData Tiles3D where
+-- ^^ The automatic instance for Maps was REMOVED in Deepseq 1.2
+-- But as long as we allow overlapping instances we are fine here:
+
 
 parMap_ :: (a -> Par ()) -> [a] -> Par ()
 parMap_ f xs = mapM (spawn . f) xs >> return ()
