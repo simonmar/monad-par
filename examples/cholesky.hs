@@ -100,7 +100,7 @@ instance NFData Matrix
 instance NFData Tile where
 instance NFData Tiles3D where
 -- ^^ The automatic instance for Maps was REMOVED in Deepseq 1.2
--- But as long as we allow overlapping instances we are fine here:
+--    Deepseq 1.1 will cause a problem here.  We force 1.2 in the monad-par.cabal file.
 
 
 parMap_ :: (a -> Par ()) -> [a] -> Par ()
