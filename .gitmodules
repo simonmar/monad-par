@@ -1,0 +1,3 @@
+[submodule "HSBenchScaling"]
+	path = HSBenchScaling
+	url = git@github.com:rrnewton/HSBenchScaling.git

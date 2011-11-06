@@ -1,0 +1,1 @@
+../HSBenchScaling/ntimes_binsearch.sh
