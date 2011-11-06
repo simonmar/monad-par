@@ -1,1 +1,1 @@
-../HSBenchScaling/benchmark.hs
+../HSBenchScaling/bench/benchmark.hs

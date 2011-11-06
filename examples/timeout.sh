@@ -1,1 +1,1 @@
-../HSBenchScaling/timeout.sh
+../HSBenchScaling/bench/timeout.sh

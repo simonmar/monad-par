@@ -1,1 +1,1 @@
-../HSBenchScaling/file_away.hs
+../HSBenchScaling/bench/file_away.hs
