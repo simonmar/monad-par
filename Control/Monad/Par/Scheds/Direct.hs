@@ -39,6 +39,13 @@ import System.Mem.StableName
 import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 
+-- import Data.Concurrent.Deque.Class as DQ
+import Data.Concurrent.Deque.Class (WSDeque)
+import Data.Concurrent.Deque.Class.Reference as DQ
+
+import Prelude hiding (null)
+import qualified Prelude
+
 --------------------------------------------------------------------------------
 -- Configuration Toggles
 --------------------------------------------------------------------------------
@@ -77,7 +84,7 @@ data Sched = Sched
     { 
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
-      workpool :: HotVar (Deque (Par ())),
+      workpool :: SimpleDeque (Par ()),
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
@@ -91,64 +98,11 @@ newtype IVar a = IVar (IORef (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> Par ()]
 
+-- This is not part of the Deque interface:
+null x = return False  -- TEMP
 
 --------------------------------------------------------------------------------
--- Helpers #1:  Simple Deques
---------------------------------------------------------------------------------
-
---atomicModifyIORef :: IORef a -> (a -> (a,b)) -> IO b
---atomicModifyIORef (IORef (STRef r#)) f = IO $ \s -> atomicModifyMutVar# r# f s
-
-casIORef = undefined
-
-emptydeque :: Deque a 
-addfront  :: a -> Deque a -> Deque a
-addback   :: a -> Deque a -> Deque a
-
--- takefront :: Deque a -> Maybe (Deque a, a)
-takefront :: Deque a -> (Deque a, Maybe a)
-takeback  :: Deque a -> (Deque a, Maybe a)
-
-dqlen :: Deque a -> Int
-
--- [2011.03.21] Presently lists are out-performing Seqs:
-#if 1
-newtype Deque a = DQ [a]
-emptydeque = DQ []
-
-addfront x (DQ l)    = 
-#ifdef DEBUG
-                       trace ("                                        * addfront |Q| = " ++ show (length (x:l))) $ 
-#endif
-		       DQ (x:l)
-addback x (DQ [])    = DQ [x]
-addback x (DQ (h:t)) = DQ (h : rest)
- where DQ rest = addback x (DQ t)
-
-takefront (DQ [])     = (emptydeque, Nothing)
-takefront (DQ (x:xs)) = 
-#ifdef DEBUG
-                        trace ("                                        * takefront |Q| = " ++ show (length xs)) $ 
-#endif
-			(DQ xs, Just x)
-
--- EXPENSIVE:
-takeback  (DQ [])     = (emptydeque, Nothing)
-takeback  (DQ ls)     = 
-#ifdef DEBUG
-                        trace ("                                        * takeback |Q| = " ++ show (length rest)) $ 
-#endif
-			(DQ rest, Just final)
- where 
-  (final,rest) = loop ls []
-  loop [x]    acc = (x, reverse acc)
-  loop (h:tl) acc = loop tl (h:acc)
- 
-dqlen (DQ l) = length l
-#endif
-
---------------------------------------------------------------------------------
--- Helpers #2:  Atomic Variables
+-- Helpers #1:  Atomic Variables
 --------------------------------------------------------------------------------
 -- TEMP: Experimental
 
@@ -229,13 +183,13 @@ writeHotVarRaw = writeTVar
 
 
 -----------------------------------------------------------------------------
--- Helpers #3:  Pushing and popping work.
+-- Helpers #2:  Pushing and popping work.
 -----------------------------------------------------------------------------
 
 {-# INLINE popWork  #-}
 popWork :: Sched -> IO (Maybe (Par ()))
 popWork Sched{ workpool, no } = do 
-  mb <- modifyHotVar  workpool  takefront
+  mb <- tryPopL workpool 
   if dbg 
    then case mb of 
          Nothing -> return Nothing
@@ -247,7 +201,8 @@ popWork Sched{ workpool, no } = do
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched { workpool, idle, no, isMain } task = do
-  modifyHotVar_ workpool (addfront task)
+--  modifyHotVar_ workpool (`pushL` task)
+  pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
 #ifdef WAKEIDLE
@@ -260,7 +215,7 @@ tryWakeIdle idle = do
 -- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
   -- If any worker is idle, wake one up and give it work to do.
   idles <- readHotVar idle -- Optimistically do a normal read first.
-  when (not (null idles)) $ do
+  when (not (Prelude.null idles)) $ do
     when dbg$ printf "Waking %d idle thread(s).\n" (length idles)
     r <- modifyHotVar idle (\is -> case is of
                              []     -> ([], return ())
@@ -337,15 +292,15 @@ runPar userComp = unsafePerformIO $ do
 -- Make sure there is no work left in any deque after exiting.
 sanityCheck allscheds = liftIO$ do
   forM_ allscheds $ \ Sched{no, workpool} -> do
-     dq <- readHotVar workpool
-     when (dqlen dq > 0) $ do 
+     b <- null workpool
+     when (not b) $ do 
          printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
   liftIO$ putStrLn "Sanity check complete."
 
 
 -- Create the default scheduler(s) state:
 makeScheds main = do
-   workpools <- replicateM numCapabilities $ newHotVar emptydeque
+   workpools <- replicateM numCapabilities $ newQ
    rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
    idle <- newHotVar []   
    killflag <- newHotVar False
@@ -515,7 +470,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
          let schd = scheds!!i
          when dbg$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
 
-         r <- modifyHotVar (workpool schd) takeback
+         r <- tryPopR (workpool schd)
 
          case r of
            Just task  -> do
