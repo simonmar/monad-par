@@ -41,3 +41,27 @@ What about mandel?
   It's getting <2X speedup for me on four threads on this machine atm.
   It's about the same with the factored AList/parBuild as opposed to
   the original.
+
+
+[2011.11.09] {Timing parfib/Direct with new Deques}
+
+This is on a 3.10 ghz 4 core Westmere workstation.
+With -A1M -qa:
+
+First, using SimpleDeque type from Reference.hs:
+
+    fib(38) 1 thread :   14.2  14.0 96%  61GB
+    fib(38) 4 threads:   4.2   16   48%  61GB
+
+Then, as a sanity check, using the Class interface.
+
+    fib(38) 1 thread :   15.2  14.9 96%    61GB
+    fib(38) 4 threads:   4.4   17.3 50.7%  61GB
+
+Finally, trying ChaseLev deques, Reactor implementation:
+
+    fib(38) 4 threads:   23s   90   59.3%  205G
+
+!! Terrible !!
+
+

@@ -40,8 +40,15 @@ import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 
 -- import Data.Concurrent.Deque.Class as DQ
-import Data.Concurrent.Deque.Class (WSDeque)
-import Data.Concurrent.Deque.Class.Reference as DQ
+-- import Data.Concurrent.Deque.Class (WSDeque)
+-- import Data.Concurrent.Deque.Class.Reference as DQ
+
+import Data.Concurrent.Deque.Class as DQ
+-- import Data.Concurrent.Deque.Class.Reference.DequeInstance
+import Data.Concurrent.Deque.ChaseLev
+import Data.Concurrent.Deque.ChaseLev.Instances
+import qualified Data.Concurrent.Deque.ReactorDeque as R
+import Data.Array.IO
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -84,7 +91,9 @@ data Sched = Sched
     { 
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
-      workpool :: SimpleDeque (Par ()),
+--      workpool :: WSDeque (Par ()),
+--type instance Deque NT T D S Grow Safe elt = R.Deque IOArray elt
+      workpool :: R.Deque IOArray (Par ()),
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
@@ -470,7 +479,9 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
          let schd = scheds!!i
          when dbg$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
 
-         r <- tryPopR (workpool schd)
+--         let dq = workpool schd :: WSDeque (Par ())
+         let dq = workpool schd 
+         r <- tryPopR dq
 
          case r of
            Just task  -> do
