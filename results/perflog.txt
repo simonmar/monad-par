@@ -48,7 +48,14 @@ What about mandel?
 This is on a 3.10 ghz 4 core Westmere workstation.
 With -A1M -qa:
 
-First, using SimpleDeque type from Reference.hs:
+First, the status-quo performance of Direct scheduler on the master
+branch (with list-in-a-)
+
+    fib(38) 4 threads:   3.46   13.5   48%   45GB
+
+Second, using SimpleDeque type from Reference.hs.  This is a Sequence
+in an IORef wih some extra overhead due to dealing with bounded-queue
+semantics:
 
     fib(38) 1 thread :   14.2  14.0 96%  61GB
     fib(38) 4 threads:   4.2   16   48%  61GB
