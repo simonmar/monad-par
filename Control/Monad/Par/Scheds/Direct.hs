@@ -5,6 +5,10 @@
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
+-- {- LANGUAGE Trustworthy -}
+-- TODO: Before declaring this module TRUSTWORTHY/SAFE, we need to
+-- make the IVar type abstract.
+
 -- | A scheduler for the Par monad based on directly performing IO
 -- actions when Par methods are called (i.e. without using a lazy
 -- trace data structure).
@@ -36,7 +40,8 @@ import qualified Data.Sequence as Seq
 import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName
-import qualified Control.Monad.Par.Class as PC
+import qualified Control.Monad.Par.Class  as PC
+import qualified Control.Monad.Par.Unsafe as UN
 import Control.DeepSeq
 
 --------------------------------------------------------------------------------
@@ -394,14 +399,24 @@ get iv@(IVar v) =  do
 		      Blocked cs -> (Blocked (cont:cs), resched)
 	    r
 
+-- | NOTE unsafePeek is NOT exposed directly through this module.  (So
+-- this module remains SAFE in the Safe Haskell sense.)  It can only
+-- be accessed by importing Control.Monad.Par.Unsafe.
+{-# INLINE unsafePeek #-}
+unsafePeek iv@(IVar v) = do 
+  e  <- liftIO$ readIORef v
+  case e of 
+    Full a -> return (Just a)
+    _      -> return Nothing
+
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 put_ iv@(IVar v) !content = do
    sched <- R.ask 
    liftIO$ do 
       cs <- atomicModifyIORef v $ \e -> case e of
-               Empty    -> (Full content, [])
-               Full _   -> error "multiple put"
+               Empty      -> (Full content, [])
+               Full _     -> error "multiple put"
                Blocked cs -> (Full content, cs)
 
 #ifdef DEBUG
@@ -411,6 +426,28 @@ put_ iv@(IVar v) !content = do
 #endif
       mapM_ (pushWork sched . ($content)) cs
       return ()
+
+
+-- | NOTE unsafeTryPut is NOT exposed directly through this module.  (So
+-- this module remains SAFE in the Safe Haskell sense.)  It can only
+-- be accessed by importing Control.Monad.Par.Unsafe.
+{-# INLINE unsafeTryPut #-}
+unsafeTryPut iv@(IVar v) !content = do
+   -- Head strict rather than fully strict.
+   sched <- R.ask 
+   liftIO$ do 
+      (cs,res) <- atomicModifyIORef v $ \e -> case e of
+		   Empty      -> (Full content, ([], content))
+		   Full x     -> (Full x, ([], x))
+		   Blocked cs -> (Full content, (cs, content))
+#ifdef DEBUG
+      sn <- liftIO$ makeStableName iv
+      printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
+	     (no sched) (show content) (hashStableName sn) (length cs)
+#endif
+      mapM_ (pushWork sched . ($content)) cs
+      return res
+
 
 -- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
@@ -605,6 +642,10 @@ instance PC.ParIVar Par IVar where
   newFull = newFull
   newFull_ = newFull_
 #endif
+
+instance UN.ParUnsafe Par IVar where
+  unsafePeek   = unsafePeek
+  unsafeTryPut = unsafeTryPut
 
 instance Functor Par where
    fmap f xs = xs >>= return . f
