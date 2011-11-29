@@ -6,7 +6,9 @@
 
 module Control.Monad.Par.Pedigree
  (
- ) where 
+   pedigree
+ ) 
+ where 
 
 import Data.BitList
 -- import Control.Exception
