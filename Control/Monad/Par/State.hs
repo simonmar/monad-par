@@ -8,7 +8,7 @@
 
 module Control.Monad.Par.State 
   (
-   SplittableState
+   SplittableState(..)
   )
   where
 
