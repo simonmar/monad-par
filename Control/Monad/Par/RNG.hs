@@ -22,7 +22,7 @@ import qualified Control.Monad.Par as Default
 import Control.Monad.Par.Class
 import Control.Monad.Par.State
 import Control.Monad.Trans
-import Control.Monad.Trans.State as S 
+import Control.Monad.Trans.State.Strict as S 
 
 -- | A `ParRand` monad is a Par monad with support for random number generation..
 class ParRand p where 

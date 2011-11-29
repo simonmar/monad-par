@@ -6,7 +6,7 @@ import GHC.Conc
 import System.Random
 import Control.Monad.Par.RNG
 import Control.Monad.Par.Class as PC
-import qualified Control.Monad.Trans.State as TS
+import qualified Control.Monad.Trans.State.Strict as TS
 import qualified Control.Monad.Par.RNG_direct as Old
 
 #ifdef PARSCHED 
@@ -119,7 +119,12 @@ System.Random).
 
 BUT, we haven't made the RNG state strict yet.
 
+Doing that yields a very slight improvement.  Using mode "rand":
 
+    1 34  7.99s
+    2 34  4.23s
+    4 34  2.27s
 
+HOWEVER - that's getting 37% productivity on only 4 threads!!!!
 
  -}
