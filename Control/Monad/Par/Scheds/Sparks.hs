@@ -43,6 +43,8 @@ spawnP a = a `par` return (Future (rnf a `pseq` a))
 get :: Future a -> Par a
 get (Future a) = a `pseq` return a
 
+--------------------------------------------------------------------------------
+-- <boilerplate>
 
 instance Monad Par where
   return x = Done x
@@ -60,3 +62,6 @@ instance Functor Par where
 instance Applicative Par where
    (<*>) = ap
    pure  = return
+
+-- </boilerplate>
+--------------------------------------------------------------------------------
