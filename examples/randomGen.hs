@@ -1,5 +1,9 @@
 {-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -O2 #-}
+
+-- Note: this is really a test/microbenchmark, not an example.  Should
+-- move it.
+
 import Data.Int
 import System.Environment
 import GHC.Conc
@@ -7,7 +11,7 @@ import System.Random
 import Control.Monad.Par.RNG
 import Control.Monad.Par.Class as PC
 import qualified Control.Monad.Trans.State.Strict as TS
-import qualified Control.Monad.Par.RNG_direct as Old
+-- import qualified Control.Monad.Par.RNG_direct as Old
 
 #ifdef PARSCHED 
 import PARSCHED
@@ -43,14 +47,14 @@ parRand2 n = do
     return (x+y+extra)
 
 
-parRand3 :: Int -> Old.Par Int
-parRand3 n | n < 2 = Old.randInt
-parRand3 n = do 
-    extra <- Old.randInt
-    xf <- Old.spawn_$ parRand3 (n-1)
-    y  <-             parRand3 (n-2)
-    x  <- Old.get xf
-    return (x+y+extra)
+-- parRand3 :: Int -> Old.Par Int
+-- parRand3 n | n < 2 = Old.randInt
+-- parRand3 n = do 
+--     extra <- Old.randInt
+--     xf <- Old.spawn_$ parRand3 (n-1)
+--     y  <-             parRand3 (n-2)
+--     x  <- Old.get xf
+--     return (x+y+extra)
 
 
 -- This version maintains RNG state but doesn't actually generate randoms.
@@ -74,8 +78,8 @@ main = do
             "const" -> runParRand runPar $ parConst size 
             "rand"  -> runParRand runPar $ parRand  size 
             "rand2" -> runParRand runPar $ parRand2 size 
-            "rand3" -> do g <- newStdGen
-                          return (Old.runParRNG g $ parRand3 size)
+--            "rand3" -> do g <- newStdGen
+--                          return (Old.runParRNG g $ parRand3 size)
 
     putStrLn$ "Sum of ~2^"++show size++" random ints: "++ show sum
 
@@ -85,7 +89,6 @@ main = do
 [2011.11.29]
 
 Timing RNG.hs:
- On a macbook air laptop single threaded:
  On a 3.1ghz 4 core intel westmere:
 
   threads input time-parRand time-parfib

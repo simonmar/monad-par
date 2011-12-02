@@ -122,6 +122,7 @@ Library
                , containers
                , mtl >= 2.0.1.0
                , parallel >= 3.1
+--               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
   -- by the examples/benchmarks.  Run "make deps" in the examples
   -- directory.
