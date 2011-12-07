@@ -74,4 +74,7 @@ little better and yields the following:
     2 34  3.3s   0.96s
     4 34  1.78s  0.55s
 
+I'm seeing low productivities (a lot of time in GC).. typically 37%
+with default settings and 52% with -A1M.
+
  -}
