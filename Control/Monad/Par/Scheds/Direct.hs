@@ -33,7 +33,7 @@ import Data.IORef
 import Text.Printf
 import GHC.Conc
 import "mtl" Control.Monad.Cont as C
-import qualified "mtl" Control.Monad.Reader as R
+import qualified "mtl" Control.Monad.Reader as RD
 -- import qualified Data.Array as A
 -- import qualified Data.Vector as A
 import qualified Data.Sequence as Seq
@@ -45,15 +45,17 @@ import qualified Control.Monad.Par.Unsafe as UN
 import Control.DeepSeq
 
 -- import Data.Concurrent.Deque.Class as DQ
--- import Data.Concurrent.Deque.Class (WSDeque)
--- import Data.Concurrent.Deque.Class.Reference as DQ
-
-import Data.Concurrent.Deque.Class as DQ
--- import Data.Concurrent.Deque.Class.Reference.DequeInstance
+#ifdef REACTOR_DEQUE
+-- These performed ABYSMALLY:
 import Data.Concurrent.Deque.ChaseLev
 import Data.Concurrent.Deque.ChaseLev.DequeInstance
 import qualified Data.Concurrent.Deque.ReactorDeque as R
 import Data.Array.IO
+#else
+import Data.Concurrent.Deque.Class (WSDeque)
+import Data.Concurrent.Deque.Reference.DequeInstance
+import Data.Concurrent.Deque.Reference as R
+#endif
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -89,16 +91,18 @@ dbg = False
 -- computations return nothing.
 --
 newtype Par a = Par { unPar :: C.ContT () ROnly a }
-    deriving (Monad, MonadCont, R.MonadReader Sched)
-type ROnly = R.ReaderT Sched IO
+    deriving (Monad, MonadCont, RD.MonadReader Sched)
+type ROnly = RD.ReaderT Sched IO
 
 data Sched = Sched 
     { 
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
---      workpool :: WSDeque (Par ()),
---type instance Deque NT T D S Grow Safe elt = R.Deque IOArray elt
+#ifdef REACTOR_DEQUE
       workpool :: R.Deque IOArray (Par ()),
+#else
+      workpool :: WSDeque (Par ()),
+#endif
       rng      :: HotVar StdGen, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
@@ -111,11 +115,6 @@ data Sched = Sched
 newtype IVar a = IVar (IORef (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> Par ()]
-
--- This is not part of the Deque interface:
--- FIXME FIXME FIXME FIXME FIXME FIXME FIXME 
-null x = return False  -- TEMP FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME
--- FIXME FIXME FIXME FIXME FIXME FIXME FIXME 
 
 unsafeParIO :: IO a -> Par a 
 unsafeParIO io = Par (lift$ lift io)
@@ -209,7 +208,7 @@ writeHotVarRaw = writeTVar
 {-# INLINE popWork  #-}
 popWork :: Sched -> IO (Maybe (Par ()))
 popWork Sched{ workpool, no } = do 
-  mb <- tryPopL workpool 
+  mb <- R.tryPopL workpool 
   if dbg 
    then case mb of 
          Nothing -> return Nothing
@@ -222,7 +221,7 @@ popWork Sched{ workpool, no } = do
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched { workpool, idle, no, isMain } task = do
 --  modifyHotVar_ workpool (`pushL` task)
-  pushL workpool task
+  R.pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
 #ifdef WAKEIDLE
@@ -291,14 +290,14 @@ runPar userComp = unsafePerformIO $ do
              else do
 		  let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
 				      res <- userComp
-                                      finalSched <- R.ask 
+                                      finalSched <- RD.ask 
 				      when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
 
 				      -- Sanity check our work queues:
 				      when dbg $ io$ sanityCheck allscheds
 				      io$ putMVar m res
 		  
-		  R.runReaderT (C.runContT (unPar userComp') trivialCont) sched
+		  RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
                   when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
                                sanityCheck allscheds
 		  -- Not currently requiring that other scheduler threads have exited before we 
@@ -313,7 +312,7 @@ runPar userComp = unsafePerformIO $ do
 sanityCheck :: [Sched] -> IO ()
 sanityCheck allscheds = do
   forM_ allscheds $ \ Sched{no, workpool} -> do
-     b <- null workpool
+     b <- R.nullQ workpool
      when (not b) $ do 
          printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
   putStrLn "Sanity check complete."
@@ -321,7 +320,7 @@ sanityCheck allscheds = do
 
 -- Create the default scheduler(s) state:
 makeScheds main = do
-   workpools <- replicateM numCapabilities $ newQ
+   workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
    idle <- newHotVar []   
    killflag <- newHotVar False
@@ -354,7 +353,7 @@ get iv@(IVar v) =  do
        case e of
 	  Full a -> return a
 	  _ -> do
-            sch <- R.ask
+            sch <- RD.ask
 #  ifdef DEBUG
             sn <- io$ makeStableName iv
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!") 
@@ -383,7 +382,7 @@ unsafePeek iv@(IVar v) = do
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 put_ iv@(IVar v) !content = do
-   sched <- R.ask 
+   sched <- RD.ask 
    io$ do 
       cs <- atomicModifyIORef v $ \e -> case e of
                Empty      -> (Full content, [])
@@ -405,7 +404,7 @@ put_ iv@(IVar v) !content = do
 {-# INLINE unsafeTryPut #-}
 unsafeTryPut iv@(IVar v) !content = do
    -- Head strict rather than fully strict.
-   sched <- R.ask 
+   sched <- RD.ask 
    io$ do 
       (cs,res) <- atomicModifyIORef v $ \e -> case e of
 		   Empty      -> (Full content, ([], content))
@@ -426,11 +425,11 @@ fork :: Par () -> Par ()
 #ifdef FORKPARENT
 #warning "FORK PARENT POLICY USED"
 fork task = do 
-   sched <- R.ask   
+   sched <- RD.ask   
    callCC$ \parent -> do
       let wrapped = parent ()
       -- Is it possible to slip in a new Sched here?
-      -- let wrapped = lift$ R.runReaderT (parent ()) undefined
+      -- let wrapped = lift$ RD.runReaderT (parent ()) undefined
       io$ pushWork sched wrapped
       -- Then execute the child task and return to the scheduler when it is complete:
       task 
@@ -439,12 +438,12 @@ fork task = do
       io$ putStrLn " !!! ERROR: Should not reach this point #1"   
 
    when dbg$ do 
-    sched2 <- R.ask 
+    sched2 <- RD.ask 
     io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
 
 #else
 fork task = do
-   sch <- R.ask
+   sch <- RD.ask
    io$ when dbg$ printf " [%d] forking task...\n" (no sch)
    io$ pushWork sch task
 #endif
@@ -457,7 +456,7 @@ reschedule = Par $ C.ContT rescheduleR
 -- It runs the scheduler loop indefinitely, until it observers killflag==True
 rescheduleR :: ignoredCont -> ROnly ()
 rescheduleR k = do
-  mysched <- R.ask 
+  mysched <- RD.ask 
   when dbg$ liftIO$ printf " [%d]  - Reschedule...\n" (no mysched)
   mtask  <- liftIO$ popWork mysched
   case mtask of
@@ -475,12 +474,12 @@ rescheduleR k = do
        let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
        fn (\ () -> do 
-           sch <- R.ask
+           sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
 	   rescheduleR errK)
 
 {-# INLINE runReaderWith #-}
-runReaderWith state m = R.runReaderT m state
+runReaderWith state m = RD.runReaderT m state
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
@@ -525,7 +524,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
 --         let dq = workpool schd :: WSDeque (Par ())
          let dq = workpool schd 
-         r <- tryPopR dq
+         r <- R.tryPopR dq
 
          case r of
            Just task  -> do
@@ -561,7 +560,7 @@ trivialCont _ =
 spawn1_ f x = 
 #ifdef DEBUG
  do sn  <- io$ makeStableName f
-    sch <- R.ask; when dbg$ io$ printf " [%d] spawning fn %d with arg %s\n" (no sch) (hashStableName sn) (show x)
+    sch <- RD.ask; when dbg$ io$ printf " [%d] spawning fn %d with arg %s\n" (no sch) (hashStableName sn) (show x)
 #endif
     spawn_ (f x)
 
