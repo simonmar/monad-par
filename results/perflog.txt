@@ -72,3 +72,20 @@ Finally, trying ChaseLev deques, Reactor implementation:
 !! Terrible !!
 
 
+[2011.12.09] {Updating new Deque results}
+
+First, sanity checking what we had before:
+
+    fib(38) 4 threads:   4.17   16.15  47.9%  61.8G
+
+GHC 7.2.1, westmere 3.1ghz wokstation.
+
+Then, if we swap in atomicModifyIORefCAS...
+
+    fib(38) 4 threads:   3.84   14.9   51.6%  55.7G
+
+BUT now it segfaults!!!  CAS would appear to be completely broken at
+the moment.
+
+Darn.  Well, for now I'll have to back off and use the older version
+of abstract-deque.
