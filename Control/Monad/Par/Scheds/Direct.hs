@@ -5,6 +5,10 @@
 	     #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
+-- {- LANGUAGE Trustworthy -}
+-- TODO: Before declaring this module TRUSTWORTHY/SAFE, we need to
+-- make the IVar type abstract.
+
 -- | A scheduler for the Par monad based on directly performing IO
 -- actions when Par methods are called (i.e. without using a lazy
 -- trace data structure).
@@ -19,7 +23,7 @@ module Control.Monad.Par.Scheds.Direct (
     spawn, spawn_, spawnP,
     spawn1_
 --   runParAsync, runParAsyncHelper,
---   pollIVar, yield,
+--   yield,
  ) where
 
 import Control.Applicative
@@ -36,7 +40,8 @@ import qualified Data.Sequence as Seq
 import System.Random as Random
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName
-import qualified Control.Monad.Par.Class as PC
+import qualified Control.Monad.Par.Class  as PC
+import qualified Control.Monad.Par.Unsafe as UN
 import Control.DeepSeq
 
 -- import Data.Concurrent.Deque.Class as DQ
@@ -84,7 +89,7 @@ dbg = False
 -- computations return nothing.
 --
 newtype Par a = Par { unPar :: C.ContT () ROnly a }
-    deriving (Monad, MonadIO, MonadCont, R.MonadReader Sched)
+    deriving (Monad, MonadCont, R.MonadReader Sched)
 type ROnly = R.ReaderT Sched IO
 
 data Sched = Sched 
@@ -108,7 +113,13 @@ newtype IVar a = IVar (IORef (IVarContents a))
 data IVarContents a = Full a | Empty | Blocked [a -> Par ()]
 
 -- This is not part of the Deque interface:
-null x = return False  -- TEMP
+-- FIXME FIXME FIXME FIXME FIXME FIXME FIXME 
+null x = return False  -- TEMP FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME FIXME
+-- FIXME FIXME FIXME FIXME FIXME FIXME FIXME 
+
+unsafeParIO :: IO a -> Par a 
+unsafeParIO io = Par (lift$ lift io)
+io = unsafeParIO -- shorthand used below
 
 --------------------------------------------------------------------------------
 -- Helpers #1:  Atomic Variables
@@ -278,14 +289,14 @@ runPar userComp = unsafePerformIO $ do
 		     runReaderWith sched $ rescheduleR errK
 		     when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
              else do
-		  let userComp'  = do when dbg$ liftIO$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
+		  let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
 				      res <- userComp
                                       finalSched <- R.ask 
-				      when dbg$ liftIO$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
+				      when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
 
 				      -- Sanity check our work queues:
-				      when dbg $ sanityCheck allscheds
-				      liftIO$ putMVar m res
+				      when dbg $ io$ sanityCheck allscheds
+				      io$ putMVar m res
 		  
 		  R.runReaderT (C.runContT (unPar userComp') trivialCont) sched
                   when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
@@ -299,12 +310,13 @@ runPar userComp = unsafePerformIO $ do
 
 
 -- Make sure there is no work left in any deque after exiting.
-sanityCheck allscheds = liftIO$ do
+sanityCheck :: [Sched] -> IO ()
+sanityCheck allscheds = do
   forM_ allscheds $ \ Sched{no, workpool} -> do
      b <- null workpool
      when (not b) $ do 
          printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
-  liftIO$ putStrLn "Sanity check complete."
+  putStrLn "Sanity check complete."
 
 
 -- Create the default scheduler(s) state:
@@ -328,8 +340,8 @@ makeScheds main = do
 {-# INLINE new  #-}
 -- | creates a new @IVar@
 new :: Par (IVar a)
-new  = liftIO $ do r <- newIORef Empty
-                   return (IVar r)
+new  = io$ do r <- newIORef Empty
+              return (IVar r)
 
 {-# INLINE get  #-}
 -- | read the value in a @IVar@.  The 'get' can only return when the
@@ -338,13 +350,13 @@ new  = liftIO $ do r <- newIORef Empty
 get iv@(IVar v) =  do 
   callCC $ \cont -> 
     do
-       e  <- liftIO$ readIORef v
+       e  <- io$ readIORef v
        case e of
 	  Full a -> return a
 	  _ -> do
             sch <- R.ask
 #  ifdef DEBUG
-            sn <- liftIO$ makeStableName iv
+            sn <- io$ makeStableName iv
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!") 
 #else
             let resched = 
@@ -352,29 +364,61 @@ get iv@(IVar v) =  do
 			  reschedule
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
-	    r <- liftIO$ atomicModifyIORef v $ \e -> case e of
+	    r <- io$ atomicModifyIORef v $ \e -> case e of
 		      Empty      -> (Blocked [cont], resched)
 		      Full a     -> (Full a, return a)
 		      Blocked cs -> (Blocked (cont:cs), resched)
 	    r
 
+-- | NOTE unsafePeek is NOT exposed directly through this module.  (So
+-- this module remains SAFE in the Safe Haskell sense.)  It can only
+-- be accessed by importing Control.Monad.Par.Unsafe.
+{-# INLINE unsafePeek #-}
+unsafePeek iv@(IVar v) = do 
+  e  <- io$ readIORef v
+  case e of 
+    Full a -> return (Just a)
+    _      -> return Nothing
+
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 put_ iv@(IVar v) !content = do
    sched <- R.ask 
-   liftIO$ do 
+   io$ do 
       cs <- atomicModifyIORef v $ \e -> case e of
-               Empty    -> (Full content, [])
-               Full _   -> error "multiple put"
+               Empty      -> (Full content, [])
+               Full _     -> error "multiple put"
                Blocked cs -> (Full content, cs)
 
 #ifdef DEBUG
-      sn <- liftIO$ makeStableName iv
+      sn <- makeStableName iv
       printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length cs)
 #endif
       mapM_ (pushWork sched . ($content)) cs
       return ()
+
+
+-- | NOTE unsafeTryPut is NOT exposed directly through this module.  (So
+-- this module remains SAFE in the Safe Haskell sense.)  It can only
+-- be accessed by importing Control.Monad.Par.Unsafe.
+{-# INLINE unsafeTryPut #-}
+unsafeTryPut iv@(IVar v) !content = do
+   -- Head strict rather than fully strict.
+   sched <- R.ask 
+   io$ do 
+      (cs,res) <- atomicModifyIORef v $ \e -> case e of
+		   Empty      -> (Full content, ([], content))
+		   Full x     -> (Full x, ([], x))
+		   Blocked cs -> (Full content, (cs, content))
+#ifdef DEBUG
+      sn <- makeStableName iv
+      printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
+	     (no sched) (show content) (hashStableName sn) (length cs)
+#endif
+      mapM_ (pushWork sched . ($content)) cs
+      return res
+
 
 -- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
@@ -387,22 +431,22 @@ fork task = do
       let wrapped = parent ()
       -- Is it possible to slip in a new Sched here?
       -- let wrapped = lift$ R.runReaderT (parent ()) undefined
-      liftIO$ pushWork sched wrapped
+      io$ pushWork sched wrapped
       -- Then execute the child task and return to the scheduler when it is complete:
       task 
       -- If we get to this point we have finished the child task:
       reschedule -- We reschedule to pop the cont we pushed.
-      liftIO$ putStrLn " !!! ERROR: Should not reach this point #1"   
+      io$ putStrLn " !!! ERROR: Should not reach this point #1"   
 
    when dbg$ do 
     sched2 <- R.ask 
-    liftIO$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+    io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
 
 #else
 fork task = do
    sch <- R.ask
-   liftIO$ when dbg$ printf " [%d] forking task...\n" (no sch)
-   liftIO$ pushWork sch task
+   io$ when dbg$ printf " [%d] forking task...\n" (no sch)
+   io$ pushWork sch task
 #endif
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
@@ -415,13 +459,13 @@ rescheduleR :: ignoredCont -> ROnly ()
 rescheduleR k = do
   mysched <- R.ask 
   when dbg$ liftIO$ printf " [%d]  - Reschedule...\n" (no mysched)
-  mtask <- liftIO$ popWork mysched
+  mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do k <- liftIO$ readIORef (killflag mysched) 
 		  unless k $ do		    
-		     liftIO (steal mysched)
+		     liftIO$ steal mysched
 #ifdef WAKEIDLE
---                     liftIO$ tryWakeIdle (idle mysched)
+--                     io$ tryWakeIdle (idle mysched)
 #endif
 		     rescheduleR errK
     Just task -> do
@@ -485,7 +529,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
          case r of
            Just task  -> do
-              when dbg$ do sn <- liftIO$ makeStableName task
+              when dbg$ do sn <- makeStableName task
 			   printf " [%d]  | stole work (unit %d) from cpu %d\n" my_no (hashStableName sn) (no schd)
 	      runReaderWith mysched $ 
 		C.runContT (unPar task)
@@ -507,7 +551,7 @@ trivialCont _ =
 ----------------------------------------------------------------------------------------------------
 
 
-----------------------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 -- <boilerplate>
 
 -- TEMP: TODO: Factor out this boilerplate somehow.
@@ -516,8 +560,8 @@ trivialCont _ =
 -- Spawn a one argument function instead of a thunk.  This is good for debugging if the value supports "Show".
 spawn1_ f x = 
 #ifdef DEBUG
- do sn  <- liftIO$ makeStableName f
-    sch <- R.ask; when dbg$ liftIO$ printf " [%d] spawning fn %d with arg %s\n" (no sch) (hashStableName sn) (show x)
+ do sn  <- io$ makeStableName f
+    sch <- R.ask; when dbg$ io$ printf " [%d] spawning fn %d with arg %s\n" (no sch) (hashStableName sn) (show x)
 #endif
     spawn_ (f x)
 
@@ -570,6 +614,11 @@ instance PC.ParIVar Par IVar where
   put_ = put_
   newFull = newFull
   newFull_ = newFull_
+
+instance UN.ParUnsafe Par IVar where
+  unsafePeek   = unsafePeek
+  unsafeTryPut = unsafeTryPut
+  unsafeParIO  = unsafeParIO
 #endif
 
 instance Functor Par where

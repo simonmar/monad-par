@@ -93,13 +93,15 @@ extra-source-files:
 Library
   Exposed-modules: Control.Monad.Par
                  , Control.Monad.Par.Class
+                 , Control.Monad.Par.Unsafe
                  , Control.Monad.Par.Combinator
                  , Control.Monad.Par.RNG
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
+                 , Control.Monad.Par.Scheds.Sparks
                  , Control.Monad.Par.Scheds.SerialElision
                  , Control.Monad.Par.AList 
-                 -- AList is really internal.  Needs more testing and tuning:
+                 -- AList should probably be internal.  Needs more testing and tuning:
 
 
 
@@ -122,6 +124,7 @@ Library
                , parallel >= 3.1
                , abstract-deque
                , chaselev-deque
+--               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
   -- by the examples/benchmarks.  Run "make deps" in the examples
   -- directory.
@@ -131,15 +134,16 @@ Library
                  Control.Monad.Par.Stream
                , Control.Monad.Par.Scheds.Direct
                , Control.Monad.Par.Scheds.ContFree
-               , Control.Monad.Par.Scheds.Sparks
                , Control.Monad.Par.Logging
                , Control.Monad.Par.IList
 -- RRN: Not exposing OpenList yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
+ -- Also not ready for primetime quite yet:
                , Control.Monad.Par.Chan
                , Data.BitList
-
-
+               , Control.Monad.Par.State
+               , Control.Monad.Par.Pedigree
+--               , Control.Monad.Par.IMap
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0

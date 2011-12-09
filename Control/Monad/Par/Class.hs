@@ -1,6 +1,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, CPP,
      FlexibleInstances, UndecidableInstances
   #-}
+-- UndecidableInstances
 
 {-|
 
@@ -37,11 +38,20 @@ import Control.DeepSeq
 -- | @ParFuture@ captures the class of Par monads which support
 --   futures.  This level of functionality subsumes @par@/@pseq@ and is
 --   similar to the "Control.Parallel.Strategies.Eval" monad.
+-- 
+--   A minimal implementation consists of `spawn_` and `get`.
+--   However, for monads that are also a member of `ParIVar` it is
+--   typical to simple define `spawn` in terms of `fork`, `new`, and `put`.
 class Monad m => ParFuture m future | m -> future where
   spawn  :: NFData a => m a -> m (future a)
   spawnP :: NFData a =>   a -> m (future a)
   spawn_ :: m a -> m (future a)
   get    :: future a -> m a
+
+  -- Default implementations:
+  spawn  p = spawn_ (do x <- p; deepseq x (return x))
+  spawnP a = spawn (return a)
+
 
 --------------------------------------------------------------------------------
 
@@ -82,7 +92,7 @@ class ParFuture m ivar => ParIVar m ivar | m -> ivar where
 --   the local @Par@ thread.  That is, at @fork@ points it is
 --   necessary to give the child a separate set of stream cursors so
 --   that it observes the same sequences as the parent.
-class ParChan m snd rcv | m -> snd, m -> rcv where
+class Monad m => ParChan m snd rcv | m -> snd, m -> rcv where
    newChan :: m (snd a, rcv a)
    recv    :: rcv a -> m a
    send    :: snd a -> a -> m ()
@@ -110,6 +120,7 @@ class Monad m => ParDist m var | m -> var where
 
 -- TODO: Possible move to a different package to factor dependencies.
 #endif
+
 
 
 ----------------------------------------------------------------------------------------------------

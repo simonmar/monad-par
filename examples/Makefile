@@ -1,8 +1,8 @@
-include common.mk
+8include common.mk
 
 # 9 benchmarks
 BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
-            parfib_monad.hs parfib_pseq.hs \
+            parfib_monad.hs parfib_pseq.hs randomGen.hs \
             primes.hs cholesky.hs coins.hs \
            quicksort/parquicksort_monad.exe quicksort/parquicksort_pseq.exe
 # binomial_lattice.hs
