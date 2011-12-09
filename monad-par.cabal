@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.2.1
+Version:             0.2.2
 Synopsis:            A library for parallel programming based on a monad
 
 -- Version history:
@@ -10,6 +10,7 @@ Synopsis:            A library for parallel programming based on a monad
 
 --  0.2      : Bumped for new class-based API
 --  0.2.1    : Bumped for change AList
+--  0.2.2    : incorporation of real deque package
 
 
 Description:         This library offers an alternative parallel programming

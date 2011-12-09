@@ -51,7 +51,7 @@ import Control.DeepSeq
 import Data.Concurrent.Deque.Class as DQ
 -- import Data.Concurrent.Deque.Class.Reference.DequeInstance
 import Data.Concurrent.Deque.ChaseLev
-import Data.Concurrent.Deque.ChaseLev.Instances
+import Data.Concurrent.Deque.ChaseLev.DequeInstance
 import qualified Data.Concurrent.Deque.ReactorDeque as R
 import Data.Array.IO
 

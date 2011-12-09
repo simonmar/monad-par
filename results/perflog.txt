@@ -49,9 +49,9 @@ This is on a 3.10 ghz 4 core Westmere workstation.
 With -A1M -qa:
 
 First, the status-quo performance of Direct scheduler on the master
-branch (with list-in-a-)
-
-    fib(38) 4 threads:   3.46   13.5   48%   45GB
+branch (with the poor man's list-in-an-IORef queues).
+                         real   user   productivity mem 
+    fib(38) 4 threads:   3.46   13.5   48%          45GB
 
 Second, using SimpleDeque type from Reference.hs.  This is a Sequence
 in an IORef wih some extra overhead due to dealing with bounded-queue
