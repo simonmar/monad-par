@@ -104,7 +104,7 @@ printAllLogs =
 ------------------------------------------------------------
 -- Helpers and Scrap:
 
-commaint :: Integral a => a -> String
+commaint :: (Show a, Integral a) => a -> String
 commaint n = 
    reverse $
    concat $
