@@ -1,4 +1,4 @@
-8include common.mk
+include common.mk
 
 # 9 benchmarks
 BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
