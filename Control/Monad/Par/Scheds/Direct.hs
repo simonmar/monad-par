@@ -225,7 +225,8 @@ pushWork Sched { workpool, idle, no, isMain } task = do
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
 #ifdef WAKEIDLE
-  --when isMain$ 
+  --when isMain$    -- Experimenting with reducing contention by doing this only from a single thread.
+                    -- TODO: We need to have a proper binary wakeup-tree.
   tryWakeIdle idle
 #endif
 
