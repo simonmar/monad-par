@@ -9,5 +9,6 @@ examples/ and tests/ subdirectories.  Here are some commands you may
 be interested in:
 
     cd examples; make test
-    cd tests; make
+    cd tests; make deps; make
+
 

@@ -200,7 +200,8 @@ Library
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
-    main-is:    tests/AListTest.hs
-    build-depends: QuickCheck, HUnit
-                 , test-framework, test-framework-hunit, test-framework-quickcheck2
-
+    main-is:    tests/AllTests.hs
+    ghc-options: -itests -rtsopts -threaded
+    build-depends: QuickCheck, HUnit, time
+                 , test-framework, test-framework-th
+                 , test-framework-hunit, test-framework-quickcheck2
