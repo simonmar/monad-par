@@ -11,6 +11,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2      : Bumped for new class-based API
 --  0.2.1    : Bumped for change AList
 --  0.2.2    : incorporation of real deque package
+--  0.2.3    : Restricted module export for 0.2 release.
 
 
 Description:         This library offers an alternative parallel programming
@@ -92,18 +93,27 @@ extra-source-files:
      Control/Monad/Par/Stream.hs
 
 Library
-  Exposed-modules: Control.Monad.Par
+  Exposed-modules: 
+                 -- The classic, simple monad-par interface:
+                   Control.Monad.Par
+
+                 -- A class generalizing different levels of monad-par functionality:
                  , Control.Monad.Par.Class
+
+                 -- A class providing unsafe functionality:
                  , Control.Monad.Par.Unsafe
+
+                 -- A collection of combinators for common parallel
+                 -- patterns and data structure traversals:
                  , Control.Monad.Par.Combinator
-                 , Control.Monad.Par.RNG
+
+                 -- This is the default scheduler:
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
-                 , Control.Monad.Par.Scheds.Sparks
-                 , Control.Monad.Par.Scheds.SerialElision
-                 , Control.Monad.Par.AList 
-                 -- AList should probably be internal.  Needs more testing and tuning:
 
+                 -- This scheduler uses sparks rather than IO threads.
+                 -- It only supports Futures, not full IVars:
+                 , Control.Monad.Par.Scheds.Sparks
 
 
   Build-depends: base >= 4 && < 5
@@ -132,19 +142,61 @@ Library
 
   ghc-options: -O2
   Other-modules:
-                 Control.Monad.Par.Stream
-               , Control.Monad.Par.Scheds.Direct
+               ------------------------------------------------------------
+               --                Schedulers & Infrastructure             --
+               ------------------------------------------------------------
+
+               -- Replacement scheduler for Trace, not exposing yet:
+                 Control.Monad.Par.Scheds.Direct
+
+               -- Strawman scheduler that forks IO threads:
                , Control.Monad.Par.Scheds.ContFree
+
+               -- Internal logging framework:
                , Control.Monad.Par.Logging
+
+               -- Serial Elision is currently experimental:
+               , Control.Monad.Par.Scheds.SerialElision
+
+
+               ------------------------------------------------------------
+               --                   Data Structures                      -- 
+               ------------------------------------------------------------
+
+               -- ILists are internal:
                , Control.Monad.Par.IList
--- RRN: Not exposing OpenList yet.  Need to improve performance.
+
+               -- RRN: Not exposing Streams or OpenLists yet.  Need to improve performance.
                , Control.Monad.Par.OpenList
- -- Also not ready for primetime quite yet:
-               , Control.Monad.Par.Chan
-               , Data.BitList
-               , Control.Monad.Par.State
-               , Control.Monad.Par.Pedigree
+               , Control.Monad.Par.Stream
+
+               -- Unifinished, in addition to streams, we want associative key-value structures:
 --               , Control.Monad.Par.IMap
+
+                -- Channels: Also not ready for primetime quite yet:
+               , Control.Monad.Par.Chan
+
+               -- More compact representation for [Bool]:
+               , Data.BitList
+
+               -- AList should probably be internal.  Needs more testing and tuning:
+               , Control.Monad.Par.AList 
+
+               ------------------------------------------------------------
+               --                      Par Add-ons                       -- 
+               ------------------------------------------------------------
+
+               -- State is generally useful, should expose this soon:
+               , Control.Monad.Par.State
+
+               -- Pedigree is experimental, but potentially useful for
+               -- many purposes such as assigning unique, reproducable
+               -- identifiers to IVars
+               , Control.Monad.Par.Pedigree
+
+               -- Deterministic RNG should be released as soon as its tested more.
+               , Control.Monad.Par.RNG
+
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0

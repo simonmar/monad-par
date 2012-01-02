@@ -4,8 +4,11 @@
 -- | Unsafe operations.  NOT part of "Safe Haskell".
 -- 
 -- These are "unsafe" (in the normal, Haskell sense) when used with a
--- "runPar" of type `Par a -> a`.  If used with a runPar that stays in
--- the IO monad, then they are simply dangerous.  Unfortunately, there is no good way 
+-- "runPar" of type `Par a -> a`.  If used with a `runParIO` that
+-- stays in the IO monad, then they are simply dangerous.
+-- 
+-- For the purposes of Safe Haskell, any module that imports this
+-- module becomes untrustworthy.
 
 module Control.Monad.Par.Unsafe 
   (
@@ -28,6 +31,7 @@ class ParUnsafe p iv where
   -- | Lift an IO operation into the Par monad.
   unsafeParIO  :: IO a -> p a
 
+-- Aside:
 -- If the need ever arises we could also consider unsafeMultiplePut that
 -- would be able to change the current value of an IVar.  It could
 -- cause big problems in the distributed case, however.
