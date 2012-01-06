@@ -12,6 +12,7 @@
   capture continuations on blocking gets).
 
   Note that this version makes spawn cheaper at the expense of get.
+  This is largely a strawman for comparison with other schedulers.
 
   This implementation is similar to @Direct.hs@ without 'ContT'.
   Ideally, common pieces of the two would be factored out.
@@ -93,8 +94,8 @@ data IVarContents a = Full a | Empty | Blocked (MVar a)
 -- Helpers #1:  Simple Deques
 --------------------------------------------------------------------------------
 
---atomicModifyIORef :: IORef a -> (a -> (a,b)) -> IO b
---atomicModifyIORef (IORef (STRef r#)) f = IO $ \s -> atomicModifyMutVar# r# f s
+-- atomicModifyIORef :: IORef a -> (a -> (a,b)) -> IO b
+-- atomicModifyIORef (IORef (STRef r#)) f = IO $ \s -> atomicModifyMutVar# r# f s
 
 casIORef = undefined
 

@@ -31,6 +31,14 @@ Description:         This library offers an alternative parallel programming
                      Examples of use can be found in the examples/ directory
                      of the source package.
 
+                     The modules below provide additionaly schedulers,
+                     data structures, and other added capabilities
+                     layered on top of the 'Par' monad.
+
+                       * Foo
+                       * Bar
+
+
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
@@ -40,7 +48,7 @@ Copyright:           (c) Simon Marlow 2011
 Stability:           Experimental
 Category:            Control,Parallelism,Monads
 Build-type:          Simple
-Cabal-version:       >=1.2
+Cabal-version:       >=1.8
 
 extra-source-files:
      examples/benchlist.txt
@@ -133,7 +141,7 @@ Library
                , containers
                , mtl >= 2.0.1.0
                , parallel >= 3.1
-               , abstract-deque
+               , abstract-deque >= 0.1.4
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
