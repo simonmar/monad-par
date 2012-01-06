@@ -1,14 +1,23 @@
 {-# OPTIONS_GHC -XFlexibleInstances #-}
 
+import Control.Monad
 import Control.Monad.Par
-import qualified Data.Vector.Unboxed as V (Vector, null, length, head, tail, 
-            splitAt, cons, (!), (++), fromList, toList, singleton)
+import qualified Data.Vector.Unboxed as V 
+import qualified Data.Vector.Unboxed.Mutable as MV
+
 import System.Random
 import System.Environment
 import Control.Exception
 import Test.QuickCheck
 import Control.DeepSeq (NFData(..), deepseq)
 import Control.Parallel.Strategies (rdeepseq, runEval)
+
+import Data.List.Split (chunk)
+import Data.List (intersperse)
+import System.CPUTime (getCPUTime)
+import Text.Printf
+
+-- import Random.MWC.Pure (seed, range_random)
 
 
 -- Merge sort for a Vector using the Par monad
@@ -19,8 +28,8 @@ mergesort t vec = if (V.length vec) <= 1
                   else do
                       let n = (V.length vec) `div` 2
                       let (lhalf, rhalf) = V.splitAt n vec
-                      ileft <- spawn (mergesort t lhalf)
-                      right <- mergesort t rhalf
+                      ileft <- spawn_ (mergesort t lhalf)
+                      right <-         mergesort t rhalf
                       left  <- get ileft
                       merge t left right
 
@@ -41,8 +50,8 @@ merge t left right =
             let (splitL, splitR) = findSplit left right
             let (llhalf, rlhalf) = V.splitAt splitL left
             let (lrhalf, rrhalf) = V.splitAt splitR right
-            isortLeft <- spawn (merge t llhalf lrhalf)
-            sortRight <- merge t rlhalf rrhalf
+            isortLeft <- spawn_ (merge t llhalf lrhalf)
+            sortRight <-         merge t rlhalf rrhalf
             sortLeft  <- get isortLeft
             return (sortLeft V.++ sortRight)
         where 
@@ -137,27 +146,76 @@ genRandoms n g = loop g n
                      (V.++) (loop r1 (n-1))
                             (loop r2 (n-1))
 
+-- Create a vector containing the numbers [0,N) in random order.
+randomPermutation :: Int -> StdGen -> V.Vector Int
+randomPermutation len rng = 
+  -- Annoyingly there is no MV.generate:
+  V.create (do v <- V.unsafeThaw$ V.generate len id
+               loop 0 v rng)
+  -- loop 0 (MV.generate len id)
+ where 
+  loop n vec g | n == len  = return vec
+	       | otherwise = do 
+    let (offset,g') = randomR (0, len - n - 1) g
+--    MV.unsafeSwap vec n 
+    MV.swap vec n (n + offset)
+    loop (n+1) vec g'
+
+
+commaint :: (Show a, Integral a) => a -> String
+commaint n | n < 0 = "-" ++ commaint (-n)
+commaint n = 
+   reverse $ concat $
+   intersperse "," $ 
+   chunk 3 $ reverse (show n)
+
+
 -- Main, based on quicksort main
 main = do args <- getArgs
-          let (t, size) = case args of
-                            [] -> (2, 18)
-                            [t] -> ((read t), 18)
-                            [t, n] -> ((read t), (read n))
+          let (t, exponent) = case args of
+                            []  -> (2, 18)
+                            [t] -> (read t, 18)
+                            [t, n] -> (read t, read n)
 
           g <- getStdGen
-          let rands = genRandoms size g
 
-          putStrLn $ "Merge sorting " ++ show (V.length rands) ++ 
-                     " elements. First deepseq the rands."
-          --evaluate (deepseq rands ())
+          putStrLn $ "Merge sorting " ++ commaint (2^exponent) ++ 
+                     " elements. First generate a random permutation:"
 
+          start <- getCPUTime
+--          let rands = genRandoms exponent g
+          let rands = randomPermutation (2^exponent) g
+          evaluate$ rands
+          evaluate$ rands V.! 0
+          end   <- getCPUTime
+          printf "Creating vector took %0.3f sec.\n"
+		 ((fromIntegral$ end - start) / (10^12) :: Double)
 
-          putStrLn "Monad-par based version:"
-          print $ take 8 $ V.toList $ runPar $ mergesort t rands
+          putStrLn "Executing monad-par based sort..."
+          start <- getCPUTime
+          let sorted = runPar $ mergesort t rands
+          putStr "Prefix of sorted list:\n  "
+          print $ V.slice 0 8 sorted
+          end   <- getCPUTime
+          printf "Sorting vector took %0.3f sec.\n" 
+                 ((fromIntegral$ end - start) / (10^12) :: Double)
+
+          when (exponent <= 4) $ do
+            putStrLn$ "  Unsorted: " ++  show rands
+            putStrLn$ "  Sorted  : " ++  show sorted
+
 
 -- Needed for Par monad to work with unboxed vectors
-instance NFData (V.Vector Int) where
-  rnf = rnf . V.toList
+-- instance NFData (V.Vector Int) where
+--   rnf = rnf . V.toList
+-- 
+-- RRN: This ^^ is very inefficient!  If you did want to force the
+-- evaluation, at the very worst you would want to do a fold to
+-- traverse a (boxed) vector, but with an unboxed vector the whole
+-- thing is evaluated when one element is.  It should be enough to
+-- read one element.  (It *might* be enough to just use "pseq" or
+-- "evaluate" on the vector value itself, but I'm not sure.)
+
 
 -- Used for QuickCheck
 instance Arbitrary (V.Vector Int) where
