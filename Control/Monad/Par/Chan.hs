@@ -81,7 +81,9 @@ new      = lift  PC.new
 put  v x = lift$ PC.put  v x
 put_ v x = lift$ PC.put_ v x
 
-fork (task :: S.StateT s p ()) = 
+fork :: (SplittableState s, PC.ParIVar p iv) 
+     => S.StateT s p () -> S.StateT s p ()
+fork task = 
 		do s <- S.get 
 		   let (s1,s2) = splitState s
 		   S.put s2
