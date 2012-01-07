@@ -5,3 +5,7 @@
 .#*
 dist/
 .DS_Store
+results/*/*/bench_*.log
+results/*/*/bench_*.log.bz2
+results/*/*/results_*.summary
+results/*/*/results_*_graphs
