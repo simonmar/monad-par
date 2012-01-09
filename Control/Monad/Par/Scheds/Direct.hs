@@ -114,7 +114,7 @@ data Sched = Sched
 
 newtype IVar a = IVar (IORef (IVarContents a))
 
-data IVarContents a = Full a | Empty | Blocked [a -> Par ()]
+data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
 unsafeParIO :: IO a -> Par a 
 unsafeParIO io = Par (lift$ lift io)
@@ -362,12 +362,13 @@ get iv@(IVar v) =  do
             let resched = 
 #  endif
 			  reschedule
+            let k = pushWork sch . cont
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
 	    r <- io$ atomicModifyIORef v $ \e -> case e of
-		      Empty      -> (Blocked [cont], resched)
+		      Empty      -> (Blocked [k], resched)
 		      Full a     -> (Full a, return a)
-		      Blocked cs -> (Blocked (cont:cs), resched)
+		      Blocked ks -> (Blocked (k:ks), resched)
 	    r
 
 -- | NOTE unsafePeek is NOT exposed directly through this module.  (So
@@ -385,17 +386,17 @@ unsafePeek iv@(IVar v) = do
 put_ iv@(IVar v) !content = do
    sched <- RD.ask 
    io$ do 
-      cs <- atomicModifyIORef v $ \e -> case e of
+      ks <- atomicModifyIORef v $ \e -> case e of
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
-               Blocked cs -> (Full content, cs)
+               Blocked ks -> (Full content, ks)
 
 #ifdef DEBUG
       sn <- makeStableName iv
       printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
-	     (no sched) (show content) (hashStableName sn) (length cs)
+	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      mapM_ (pushWork sched . ($content)) cs
+      mapM_ ($content) ks
       return ()
 
 
@@ -407,16 +408,16 @@ unsafeTryPut iv@(IVar v) !content = do
    -- Head strict rather than fully strict.
    sched <- RD.ask 
    io$ do 
-      (cs,res) <- atomicModifyIORef v $ \e -> case e of
+      (ks,res) <- atomicModifyIORef v $ \e -> case e of
 		   Empty      -> (Full content, ([], content))
 		   Full x     -> (Full x, ([], x))
-		   Blocked cs -> (Full content, (cs, content))
+		   Blocked ks -> (Full content, (ks, content))
 #ifdef DEBUG
       sn <- makeStableName iv
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
-	     (no sched) (show content) (hashStableName sn) (length cs)
+	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      mapM_ (pushWork sched . ($content)) cs
+      mapM_ ($content) ks
       return res
 
 
