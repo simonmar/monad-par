@@ -362,13 +362,12 @@ get iv@(IVar v) =  do
             let resched = 
 #  endif
 			  reschedule
-            let k = pushWork sch . cont
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
 	    r <- io$ atomicModifyIORef v $ \e -> case e of
-		      Empty      -> (Blocked [k], resched)
+		      Empty      -> (Blocked [pushWork sch . cont], resched)
 		      Full a     -> (Full a, return a)
-		      Blocked ks -> (Blocked (k:ks), resched)
+		      Blocked ks -> (Blocked (pushWork sch . cont:ks), resched)
 	    r
 
 -- | NOTE unsafePeek is NOT exposed directly through this module.  (So
