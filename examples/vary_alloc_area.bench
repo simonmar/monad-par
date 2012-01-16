@@ -1,0 +1,23 @@
+
+
+ -- Benchmark: Test different allocation area sizes.
+
+[  
+   Vary (RTS "-A") ["256K", "512K", "1M", "2M"],
+   Set (RTS "-qa") "",
+   Set (RTS "-s")  "",
+
+   -- Next, set up the environment for benchmark.hs:
+   -- For now all the relevant info is passed through environment vars:
+   Vary (EnvVar "GHC") ["ghc-7.4.0.20111219", "ghc-7.2.1"],
+   Set (EnvVar "TRIALS")  "3",
+   -- For THREADS, the "Vary" is implicit:
+   Set (EnvVar "THREADS") "0 1 2 3 4",
+   Set (EnvVar "KEEPGOING") "1",
+   Set (EnvVar "SHORTRUN") "1",
+   Set (EnvVar "SCHEDS")   "Trace Direct Sparks",
+
+   -- Command "./benchmark.hs"
+   -- We have so many problems trying to use runhaskell that it's easier to compile:
+   Command "ghc-7.0.4 --make ./benchmark.hs && ./benchmark"
+]
