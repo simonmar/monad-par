@@ -36,6 +36,7 @@ buildsubs: $(EXES)
 	(cd partree;  $(MAKE))
 
 %.exe : %.hs $(ALLPARSRC)
+	@echo "Building executable: $@"
 	$(GHC) $(GHC_FLAGS) --make -i.. $< -o $@ -rtsopts
 
 test: all $(OUTS)

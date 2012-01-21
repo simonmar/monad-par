@@ -70,7 +70,7 @@ main = do
     case version of 
         "nested" -> do 
                 print$ runPar$ parfibNest size cutoff
-        "monad"  -> do 
+        "monad"  -> 
 		if cutoff == 1 
                 then do putStrLn "Using non-thresholded version:"
                         print$ runPar$ parfib1  size 
