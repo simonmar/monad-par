@@ -4,3 +4,6 @@
 [submodule "Deques"]
 	path = Deques
 	url = https://github.com/rrnewton/haskell-lockfree-queue.git
+[submodule "bench_results"]
+	path = bench_results
+	url = https://github.com/rrnewton/monad-par-results.git
