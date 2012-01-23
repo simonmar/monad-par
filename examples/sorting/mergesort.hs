@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -XFlexibleInstances #-}
+module Main where
 
 import Control.Monad
 import Control.Monad.Par
@@ -14,17 +15,23 @@ import Control.Parallel.Strategies (rdeepseq, runEval)
 
 import Data.List.Split (chunk)
 import Data.List (intersperse)
-import System.CPUTime (getCPUTime)
+
+import Data.Time.Clock
 import Text.Printf
+import Data.Vector.Algorithms.Intro (sort)
 
 -- import Random.MWC.Pure (seed, range_random)
 
+sortVec v = V.create $ do 
+                mut <- V.thaw v
+                sort mut
+                return mut
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
 mergesort :: Int -> V.Vector Int -> Par (V.Vector Int)
-mergesort t vec = if (V.length vec) <= 1
-                  then return vec
+mergesort t vec = if (V.length vec) <= t
+                  then return $ sortVec vec
                   else do
                       let n = (V.length vec) `div` 2
                       let (lhalf, rhalf) = V.splitAt n vec
@@ -42,10 +49,6 @@ merge :: Int -> (V.Vector Int) -> (V.Vector Int) -> Par (V.Vector Int)
 merge t left right =
         if ((V.length left) < t) || ((V.length right) < t)
         then return $ seqmerge left right
-        --else if ((V.length left) < t) || ((V.length right) < t)
-        --then if (V.length left) < (V.length right)
-        --     then return $ insertAll left right
-        --     else return $  insertAll right left
         else do
             let (splitL, splitR) = findSplit left right
             let (llhalf, rlhalf) = V.splitAt splitL left
@@ -54,13 +57,7 @@ merge t left right =
             sortRight <-         merge t rlhalf rrhalf
             sortLeft  <- get isortLeft
             return (sortLeft V.++ sortRight)
-        where 
-            insertAll :: (V.Vector Int) -> (V.Vector Int) -> V.Vector Int
-            insertAll left right = 
-                if V.null left 
-                then right
-                else insertAll (V.tail left) (insert (V.head left) right)
-
+        
 {-
  - Given two sorted vectors, return a pair of indices such that splitting on 
  - these indices results in 4 vectors in which every value in the two left 
@@ -74,7 +71,7 @@ merge t left right =
  - Additionally, (lIndex + rIndex) should be as close to 
  - (length(left) + length(right))/2 as possible.
  -}
-findSplit :: (V.Vector Int) -> (V.Vector Int) -> (Int, Int)
+findSplit :: V.Vector Int -> V.Vector Int -> (Int, Int)
 findSplit left right = (lIndex, rIndex)
         where
             (lIndex, rIndex) = split 0 (V.length left) 0 (V.length right)
@@ -101,50 +98,27 @@ findSplit left right = (lIndex, rIndex)
 
 -- Sequential merge: takes two sorted vectors and merges them in a sequential
 -- fashion.
-seqmerge :: (V.Vector Int) -> (V.Vector Int) -> (V.Vector Int)
-seqmerge left right = if V.null left
-                      then right
-                      else if V.null right
-                      then left
-                      else if (V.head left) < (V.head right)
-                      then V.cons (V.head left)
-                                  (seqmerge (V.tail left) right)
-                      else V.cons (V.head right)
-                                  (seqmerge left (V.tail right))
+-- Although vector cons is supported, it requires O(n) time. Since list cons
+-- is much faster, we'll build up a list of tuples and use the batch update
+-- for vectors: (//).
+seqmerge :: V.Vector Int -> V.Vector Int -> V.Vector Int
+seqmerge left right = 
+    -- (left V.++ right) V.// (seqhelp 0 left right)
+    V.unsafeUpd (V.replicate len 0) (seqhelp 0 left right)
 
--- Binary insertion: do a binary search to find where to insert the item
-insert :: Int -> V.Vector Int -> V.Vector Int
-insert i vec = if V.null vec
-               then V.cons i vec
-               else binInsert 0 (V.length vec)
     where
-        binInsert :: Int -> Int -> V.Vector Int
-        binInsert low high = 
-            if mid == 0
-            then if i < V.head vec
-                 then V.cons i vec
-                 else V.cons (V.head vec) (V.cons i (V.tail vec))
-            else if mid == low
-            then let (left, right) = V.splitAt (mid + 1) vec in
-                    left V.++ (V.cons i right)
-            else if (vec V.! (mid - 1)) < i
-            then if i <= (vec V.! mid)
-                 then let (left, right) = V.splitAt mid vec in
-                        left V.++ (V.cons i right)
-                 else binInsert mid high
-            else binInsert low mid
-
-            where mid = (low + high) `div` 2
-
-
--- Generate a Vector of random Ints
-genRandoms :: Int -> StdGen -> V.Vector Int
-genRandoms n g = loop g n
-    where
-      loop rng 0 = V.singleton $ fst $ next rng
-      loop rng n = let (r1, r2) = split rng in
-                     (V.++) (loop r1 (n-1))
-                            (loop r2 (n-1))
+        len = (V.length left) + (V.length right)
+        seqhelp :: Int -> V.Vector Int -> V.Vector Int -> [(Int, Int)]
+        seqhelp n left right = 
+            if n >= len
+            then []
+            else if V.null left
+            then zip [n..(n + V.length right)] (V.toList right)
+            else if V.null right
+            then zip [n..(n + V.length left)]  (V.toList left)
+            else if (V.head left) < (V.head right)
+            then (n, V.head left)  : seqhelp (n+1) (V.tail left) right
+            else (n, V.head right) : seqhelp (n+1) left (V.tail right)
 
 -- Create a vector containing the numbers [0,N) in random order.
 randomPermutation :: Int -> StdGen -> V.Vector Int
@@ -171,6 +145,9 @@ commaint n =
 
 
 -- Main, based on quicksort main
+-- Usage: ./Main [t] [expt]
+-- t is threshold to bottom out to sequential sort and sequential merge
+-- expt controls the length of the vector to sort (length = 2^expt)
 main = do args <- getArgs
           let (t, exponent) = case args of
                             []  -> (2, 18)
@@ -182,24 +159,23 @@ main = do args <- getArgs
           putStrLn $ "Merge sorting " ++ commaint (2^exponent) ++ 
                      " elements. First generate a random permutation:"
 
-          start <- getCPUTime
---          let rands = genRandoms exponent g
+          start <- getCurrentTime
           let rands = randomPermutation (2^exponent) g
           evaluate$ rands
           evaluate$ rands V.! 0
-          end   <- getCPUTime
+          end   <- getCurrentTime
           printf "Creating vector took %0.3f sec.\n"
-		 ((fromIntegral$ end - start) / (10^12) :: Double)
+            ((fromRational$ toRational $ diffUTCTime end start) :: Double)
 
           putStrLn "Executing monad-par based sort..."
-          start <- getCPUTime
+          start <- getCurrentTime
           let sorted = runPar $ mergesort t rands
           putStr "Prefix of sorted list:\n  "
           print $ V.slice 0 8 sorted
-          end   <- getCPUTime
-          printf "Sorting vector took %0.3f sec.\n" 
-                 ((fromIntegral$ end - start) / (10^12) :: Double)
-
+          end   <- getCurrentTime
+          let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
+          printf "Sorting vector took %0.3f sec.\n" runningTime
+          putStrLn $ "SELFTIMED " ++ show runningTime
           when (exponent <= 4) $ do
             putStrLn$ "  Unsorted: " ++  show rands
             putStrLn$ "  Sorted  : " ++  show sorted
