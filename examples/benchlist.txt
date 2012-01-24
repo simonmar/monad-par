@@ -45,5 +45,5 @@ partree/partree futures 600 20
 # minimax/minimax futures monad  ? ? 
 
 # These don't match the naming convention at the moment.
-matmult/matmult   futures 768 0 64
+matmult/MatMult   futures 768 0 64
 sumeuler/sumeuler futures 38 8000 100
