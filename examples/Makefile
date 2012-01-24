@@ -45,6 +45,10 @@ test: all $(OUTS)
 	@echo "Finally, checking for .err files:"
 	find -name "*.err"
 
+bench: benchmark.run
+benchmark.run: benchmark.hs
+	ghc --make benchmark.hs -o benchmark.run -threaded -rtsopts
+
 .exe.out:
 # We touch a .err file and then remove it if there is no error.
 	@touch "$(<:.exe=.err)"
@@ -80,6 +84,8 @@ deps:
 # Redifen clean from common.mk
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out *.exe
+	rm -rf build_*_threaded*
+	rm -rf build_*_serial*
 	(cd sumeuler; $(MAKE) clean)
 	(cd matmult;  $(MAKE) clean)
 	(cd minimax;  $(MAKE) clean)

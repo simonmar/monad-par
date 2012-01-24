@@ -9,7 +9,7 @@ import qualified Data.Vector.Unboxed.Mutable as MV
 import System.Random
 import System.Environment
 import Control.Exception
-import Test.QuickCheck
+import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
 import Control.DeepSeq (NFData(..), deepseq)
 import Control.Parallel.Strategies (rdeepseq, runEval)
 
