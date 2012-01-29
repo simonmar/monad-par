@@ -10,8 +10,6 @@ import System.Random
 import System.Environment
 import Control.Exception
 import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
-import Control.DeepSeq (NFData(..), deepseq)
-import Control.Parallel.Strategies (rdeepseq, runEval)
 
 import Data.List.Split (chunk)
 import Data.List (intersperse)

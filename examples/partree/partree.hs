@@ -26,10 +26,12 @@ main = do args <- getArgs
 bar :: Int -> Int -> Int
 bar c n = tree_fold (\x y -> (x+y) `quot` 2) 0 t 
           where forest = [ let 
-                             l = take n (iterate (+i) i)
+                             -- l = take n (iterate (+i) i)
+                             l = take c (iterate (+i) i)
                            in
                              list2tree l 
-                         | i <- [1..c + n `mod` 15] ]
+                         | i <- [1..c] ]
+                         -- | i <- [1..c + n `mod` 15] ]
                 t = foldl1 (^:) forest
 
 -- generate a tree with n nodes;
