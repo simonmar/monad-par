@@ -143,22 +143,22 @@ commaint n =
 
 
 -- Main, based on quicksort main
--- Usage: ./Main [t] [expt]
+-- Usage: ./Main [expt] [threshold]
 -- t is threshold to bottom out to sequential sort and sequential merge
 -- expt controls the length of the vector to sort (length = 2^expt)
 main = do args <- getArgs
-          let (t, exponent) = case args of
-                            []  -> (2, 18)
-                            [t] -> (read t, 18)
-                            [t, n] -> (read t, read n)
+          let (expt, t) = case args of
+                            []  -> (18, 2)
+                            [n] -> (read n, 2)
+                            [n, t] -> (read n, read t)
 
           g <- getStdGen
 
-          putStrLn $ "Merge sorting " ++ commaint (2^exponent) ++ 
+          putStrLn $ "Merge sorting " ++ commaint (2^expt) ++ 
                      " elements. First generate a random permutation:"
 
           start <- getCurrentTime
-          let rands = randomPermutation (2^exponent) g
+          let rands = randomPermutation (2^expt) g
           evaluate$ rands
           evaluate$ rands V.! 0
           end   <- getCurrentTime
@@ -174,7 +174,7 @@ main = do args <- getArgs
           let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
           printf "Sorting vector took %0.3f sec.\n" runningTime
           putStrLn $ "SELFTIMED " ++ show runningTime
-          when (exponent <= 4) $ do
+          when (expt <= 4) $ do
             putStrLn$ "  Unsorted: " ++  show rands
             putStrLn$ "  Sorted  : " ++  show sorted
 
