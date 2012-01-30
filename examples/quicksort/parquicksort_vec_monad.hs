@@ -3,7 +3,6 @@
 -- A quicksort benchmark for monad-par
 
 import Control.Monad
-import Control.Monad.Par
 import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
 import Data.Vector.Algorithms.Intro (sort)

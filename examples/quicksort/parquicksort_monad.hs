@@ -4,6 +4,9 @@
 
 import System.Random
 import System.Environment
+import Control.Monad
+import Data.Time.Clock
+import Text.Printf
 import Control.Monad.Par.AList as A
 import Control.Exception
 import Control.DeepSeq
@@ -18,6 +21,10 @@ import PARSCHED
 import Control.Monad.Par
 -- import Control.Monad.Par.Scheds.Trace
 #endif
+
+
+
+
 
 -- TODO: Rewrite with AList.. lists are not good for this.
 
@@ -86,5 +93,16 @@ main = do args <- getArgs
 --           putStrLn$ "Length of rands: "++ show (A.length rands)
 --           putStrLn$ "Length of filtered: "++ show (A.length (A.filter (>=0) rands))
 
-          putStrLn "Monad-par based version:"
-          print$ take 8 $ A.toList $ runPar$ quicksortP rands
+          putStrLn "Executing monad-par based sort..."
+          start <- getCurrentTime
+          let sorted = runPar $ quicksortP rands
+          putStr "Prefix of sorted list:\n  "
+          print$ take 8 $ A.toList sorted
+          end   <- getCurrentTime
+
+          let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
+          printf "Sorting AList took %0.3f sec.\n" runningTime
+          putStrLn $ "SELFTIMED " ++ show runningTime
+          when (size <= 4) $ do
+            putStrLn$ "  Unsorted: " ++  show rands
+            putStrLn$ "  Sorted  : " ++  show sorted
