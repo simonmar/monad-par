@@ -53,11 +53,17 @@ makeImage x y depth ls =
    prettyRGB :: Int -> (Int,Int,Int)
    prettyRGB s = let t = (depth - s) in (s,t,t)
 
+
+
+simple x y depth = runMandel (-2) (-2) 2 2 x y depth
+{-
 simple x y depth = 
   runMandel 0 0 x' y' x y depth
  where 
   x' = fromIntegral x
   y' = fromIntegral y 
+-}
+
 
 --------------------------------------------------------------------------------
 
@@ -78,7 +84,8 @@ main = do args <- getArgs
 		case args of
 		 [] -> 
     --                 runPar $ simple 3 3 3
-		       (3,3,3)
+                       -- Defaults recommended by Simon Marlow
+		       (1024,1024,256)
 
 		 [x,y,depth] -> 
     --		   simple (read x) (read y) (read depth)
