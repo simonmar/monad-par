@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PackageImports #-}
@@ -26,8 +27,15 @@ import System.Random
 import System.IO.Unsafe (unsafePerformIO)
 
 import Text.Printf
+import qualified Debug.Trace as DT
 
 import Control.Monad.Par.Meta.HotVar.IORef
+
+#ifdef DEBUG
+dbg = True
+#else
+dbg = False
+#endif
 
 --------------------------------------------------------------------------------
 -- Types
@@ -67,7 +75,11 @@ instance Show Sched where
 
 {-# INLINE popWork #-}
 popWork :: Sched -> IO (Maybe (Par ()))
-popWork Sched{ workpool } = R.tryPopL workpool
+popWork Sched{ workpool, no } = do
+  when dbg $ do
+    (cap, _) <- threadCapability =<< myThreadId
+    printf "[%d] trying to pop work from %d\n" cap no
+  R.tryPopL workpool
 
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
@@ -100,7 +112,10 @@ makeOrGetSched sa cap = do
   modifyHotVar globalScheds $ \scheds ->
     case IntMap.lookup cap scheds of
       Just sched -> (scheds, sched)
-      Nothing -> (IntMap.insert cap sched scheds, sched)
+      Nothing -> if dbg
+                 then DT.trace (printf "[%d] created scheduler" cap)
+                               (IntMap.insert cap sched scheds, sched)
+                 else (IntMap.insert cap sched scheds, sched)
 
 --------------------------------------------------------------------------------
 -- Worker routines
@@ -113,6 +128,7 @@ spawnWorkerOnCap sa cap = forkOn cap $ do
   me <- myThreadId
   sched@Sched{ tids } <- makeOrGetSched sa cap
   modifyHotVar_ tids (Set.insert me)
+  when dbg $ printf "[%d] spawning new worker\n" cap
   runReaderT (workerLoop errK) sched
 
 errK = error "this closure shouldn't be used"
@@ -139,6 +155,7 @@ workerLoop _k = do
         case mwork of
           Just work -> runContT (unPar work) $ const (workerLoop _k)
           Nothing -> do
+            when dbg $ liftIO $ printf "[%d] failed to find work; looping\n" no
             -- idle behavior might go here
             workerLoop _k
 
@@ -213,7 +230,6 @@ runMetaParIO ia sa work = do
           -- our capability. If non-nested, we're done with the whole
           -- thing, and should really shut down.
           modifyHotVar_ mortals (1+)
-  pushWork sched wrappedComp
 
   -- determine whether this is a nested call
   isNested <- Set.member tid <$> readHotVar tids
@@ -221,7 +237,8 @@ runMetaParIO ia sa work = do
   unless isNested (ia globalScheds)
   -- if it is, we need to spawn a replacement worker while we wait on ansMVar
   when isNested (void $ spawnWorkerOnCap sa cap)
-  -- wait for the answer
+  -- push the work, and then wait for the answer
+  pushWork sched wrappedComp
   ans <- takeMVar ansMVar
   return ans
 

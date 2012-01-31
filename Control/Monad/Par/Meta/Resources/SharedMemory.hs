@@ -10,10 +10,10 @@ module Control.Monad.Par.Meta.Resources.SharedMemory (
 import Control.Concurrent
 import Control.Monad
 
-import Data.IntMap (IntMap)
+-- import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 
-import GHC.Conc
+-- import GHC.Conc
 
 import System.Random    
 
@@ -53,7 +53,10 @@ stealAction caps triesPerCap Sched { no, rng } schedsRef = do
           Nothing -> do 
             void $ printf "WARNING: no Sched for cap %d during steal\n" i
             loop (n-1) =<< getNext
-          Just stealee@Sched { .. } -> do
-            undefined
+          Just stealee -> do
+            mtask <- popWork stealee
+            case mtask of
+              Nothing -> loop (n-1) =<< getNext
+              jtask -> return jtask
                         
   loop numTries =<< getNext
