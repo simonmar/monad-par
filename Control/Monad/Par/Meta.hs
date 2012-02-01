@@ -2,6 +2,7 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PackageImports #-}
 
 module Control.Monad.Par.Meta where
@@ -30,6 +31,7 @@ import Text.Printf
 import qualified Debug.Trace as DT
 
 import Control.Monad.Par.Meta.HotVar.IORef
+import qualified Control.Monad.Par.Class as PC
 
 #ifdef DEBUG
 dbg = True
@@ -245,3 +247,20 @@ runMetaParIO ia sa work = do
 {-# INLINE runMetaPar #-}
 runMetaPar :: InitAction -> StealAction -> Par a -> a
 runMetaPar ia sa work = unsafePerformIO $ runMetaParIO ia sa work
+
+--------------------------------------------------------------------------------
+-- Boilerplate
+
+spawnP :: NFData a => a -> Par (IVar a)
+spawnP = spawn . return
+
+instance PC.ParFuture Par IVar where
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+
+instance PC.ParIVar Par IVar where
+  fork = fork
+  new  = new
+  put_ = put_
