@@ -123,6 +123,11 @@ Library
                  -- It only supports Futures, not full IVars:
                  , Control.Monad.Par.Scheds.Sparks
 
+                 -- Meta scheduler and friends
+                 , Control.Monad.Par.Meta
+                 , Control.Monad.Par.Meta.SharedMemoryOnly
+                 , Control.Monad.Par.Meta.Resources.SharedMemory
+
 
   Build-depends: base >= 4 && < 5
 -- The parallel package currently requires deepseq 1.1:
@@ -142,6 +147,7 @@ Library
                , mtl >= 2.0.1.0
                , parallel >= 3.1
                , abstract-deque >= 0.1.4
+               , accelerate >= 0.10.0
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
