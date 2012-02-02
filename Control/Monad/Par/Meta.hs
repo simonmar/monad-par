@@ -33,6 +33,7 @@ import qualified Debug.Trace as DT
 import Control.Monad.Par.Meta.HotVar.IORef
 import qualified Control.Monad.Par.Class as PC
 
+dbg :: Bool
 #ifdef DEBUG
 dbg = True
 #else
@@ -238,7 +239,8 @@ runMetaParIO ia sa work = do
   -- if it's not, we need to run the init action
   unless isNested (ia globalScheds)
   -- if it is, we need to spawn a replacement worker while we wait on ansMVar
-  when isNested (void $ spawnWorkerOnCap sa cap)
+  -- FIXME: need a barrier before par work starts, for init methods to finish
+  when True (void $ spawnWorkerOnCap sa cap)
   -- push the work, and then wait for the answer
   pushWork sched wrappedComp
   ans <- takeMVar ansMVar
