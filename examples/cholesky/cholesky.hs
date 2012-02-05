@@ -98,7 +98,7 @@ type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 -- NFData is needed for spawnP.  Use default instances.
 instance NFData Matrix
 instance NFData Tile where
-instance NFData Tiles3D where
+-- instance NFData Tiles3D where
 -- ^^ The automatic instance for Maps was REMOVED in Deepseq 1.2
 --    Deepseq 1.1 will cause a problem here.  We force 1.2 in the monad-par.cabal file.
 
@@ -222,7 +222,7 @@ initLkji arrA n p b =
                m <- get mv
                tv <- new
                spawnP $ insert (i, j, k) tv m
-    in foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
+    in List.foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
      
 
 -- composeResult collect the tiles with the final results back into one single matrix.    

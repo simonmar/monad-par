@@ -1,11 +1,19 @@
 include common.mk
 
-# 9 benchmarks
+# This Makefile is largely redundant with the benchmark script, but it
+# provides a simple (and parallel) way to build and test the examples.
+# 
+# Entrypoints:
+#   make all
+#   make test
+
+# ================================================================================
+
 BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
             parfib_monad.hs parfib_pseq.hs randomGen.hs \
-            primes.hs cholesky.hs coins.hs \
-           quicksort/parquicksort_monad.exe quicksort/parquicksort_pseq.exe \
-	   kmeans.hs
+            primes.hs cholesky/cholesky.hs coins.hs \
+            quicksort/parquicksort_monad.hs quicksort/parquicksort_pseq.hs \
+	    kmeans/kmeans.hs
 # binomial_lattice.hs
 
 EXES= $(BENCHMARKS:.hs=.exe)
@@ -28,7 +36,7 @@ OUTS  = $(ALLEXES:.exe=.out)
 .SUFFIXES: .o .c .exe .out
 .PRECIOUS: $(ALLEXES) $(OUTS)
 
-all: $(EXES) buildsubs
+all: $(EXES) buildsubs datasets 
 buildsubs: $(EXES)
 	(cd sumeuler; $(MAKE))
 	(cd matmult;  $(MAKE))
@@ -38,17 +46,16 @@ buildsubs: $(EXES)
 
 %.exe : %.hs $(ALLPARSRC)
 	@echo "Building executable: $@"
-	$(GHC) $(GHC_FLAGS) --make -i.. $< -o $@ -rtsopts
+	$(GHC) $(GHC_FLAGS) --make -i.. -i$(shell dirname $<) $< -o $@ -rtsopts
+
+# ================================================================================
+# Testing:
 
 test: all $(OUTS)
 	@echo 
 	@echo ========================================
 	@echo "Finally, checking for .err files:"
 	find -name "*.err"
-
-bench: benchmark.run
-benchmark.run: benchmark.hs
-	ghc --make benchmark.hs -o benchmark.run -threaded -rtsopts
 
 .exe.out:
 # We touch a .err file and then remove it if there is no error.
@@ -72,6 +79,18 @@ wiperesults:
 	rm -f results_*.dat results_*.dat.*
 	rm -f bench_*.log bench_*.log.*
 
+
+# ================================================================================
+# Benchmarking infrastructure:
+
+bench: benchmark.run
+benchmark.run: benchmark.hs
+	ghc --make benchmark.hs -o benchmark.run -threaded -rtsopts
+
+# ================================================================================
+datasets:
+	(cd cholesky; ./get_cholesky_data.sh)
+	(cd kmeans;   ./get_kmeans_data.sh)
 
 # ================================================================================
 # Install dependencies used by test programs.
