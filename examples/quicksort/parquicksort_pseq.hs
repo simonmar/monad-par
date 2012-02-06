@@ -25,7 +25,7 @@ genRandoms n = take n $ randoms (mkStdGen 120) :: [Int]
 main = do args <- getArgs
           let size =
                 case args of
-                  [] -> 25000
+                  []  -> 2^8
                   [n] -> (read n)
           
           let rands = genRandoms size

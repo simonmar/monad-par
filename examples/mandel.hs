@@ -85,7 +85,9 @@ main = do args <- getArgs
 		 [] -> 
     --                 runPar $ simple 3 3 3
                        -- Defaults recommended by Simon Marlow
-		       (1024,1024,256)
+		       -- (1024,1024,256)
+                       -- Note, this should do something very *quick* when called with no args:
+                       (3,3,3)
 
 		 [x,y,depth] -> 
     --		   simple (read x) (read y) (read depth)

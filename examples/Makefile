@@ -13,17 +13,16 @@ BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
             parfib_monad.hs parfib_pseq.hs randomGen.hs \
             primes.hs cholesky/cholesky.hs coins.hs \
             quicksort/parquicksort_monad.hs quicksort/parquicksort_pseq.hs \
+            sumeuler/sumeuler.hs \
+            matmult/MatMult.hs \
+            minimax/Main.hs \
+            stream/simple1_measureSrc.hs \
+            partree/partree.hs \
 	    kmeans/kmeans.hs
 # binomial_lattice.hs
-
-EXES= $(BENCHMARKS:.hs=.exe)
-
-# Another four in their own subdirectories:
-OTHEREXES= matmult/matmult.exe minimax/minimax.exe sumeuler/sumeuler.exe \
-           stream/simple1_measureSrc.exe 
 # Note: not using all of the stream benchmarks at the moment.
 
-ALLEXES= $(EXES) $(OTHEREXES)
+ALLEXES= $(BENCHMARKS:.hs=.exe)
 
 # FILE EXTENSIONS USED:
 #   .hs   -- example source
@@ -36,13 +35,7 @@ OUTS  = $(ALLEXES:.exe=.out)
 .SUFFIXES: .o .c .exe .out
 .PRECIOUS: $(ALLEXES) $(OUTS)
 
-all: $(EXES) buildsubs datasets 
-buildsubs: $(EXES)
-	(cd sumeuler; $(MAKE))
-	(cd matmult;  $(MAKE))
-	(cd minimax;  $(MAKE))
-	(cd stream;   $(MAKE) simple1_measureSrc.exe)
-	(cd partree;  $(MAKE))
+all: $(ALLEXES) datasets 
 
 %.exe : %.hs $(ALLPARSRC)
 	@echo "Building executable: $@"
@@ -100,18 +93,20 @@ datasets:
 install-deps: deps
 deps:
 	cabal install parallel fft carray --with-ghc=$(GHC)
+# For kmeans:
+	cabal install binary --with-ghc=$(GHC)
 
 # Redifen clean from common.mk
 clean:
 	rm -f $(ALLEXES) *.o *.hi *.out *.exe
 	rm -rf build_*_threaded*
 	rm -rf build_*_serial*
-	(cd sumeuler; $(MAKE) clean)
-	(cd matmult;  $(MAKE) clean)
-	(cd minimax;  $(MAKE) clean)
-	(cd stream;   $(MAKE) clean)
-	(cd partree;  $(MAKE) clean)
+	rm -f $(ALLEXES) */*.o */*.hi */*.out */*.exe
+	rm -rf */build_*_threaded*
+	rm -rf */build_*_serial*
 
+distclean: clean
+	rm -f benchmark.run
 
 # ================================================================================
 
