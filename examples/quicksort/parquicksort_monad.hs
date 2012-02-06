@@ -78,7 +78,7 @@ genRandoms n g = loop g n
 main = do args <- getArgs
           let size =
                 case args of
-                  []  -> 18
+                  []  -> 8
                   [n] -> (read n)
 
           g <- getStdGen          
