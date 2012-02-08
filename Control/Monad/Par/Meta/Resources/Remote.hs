@@ -1,15 +1,17 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE NamedFieldPuns, DeriveGeneric #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
 -- | Resource for Remote execution.
 
-module Control.Monad.Par.Meta.Resources.Remote (
-    initAction
-  , stealAction
---  , spawnAcc
-  ) where
+module Control.Monad.Par.Meta.Resources.Remote 
+--   (
+--     initAction
+--   , stealAction
+-- --  , spawnAcc
+--   )  
+ where
 
 import Control.Concurrent
 import Control.DeepSeq
@@ -30,7 +32,22 @@ import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
 
 import qualified Data.Vector as V
-import Data.Serialize (encode,encodeLazy,decode)
+import GHC.Generics (Generic)
+
+-- import Data.Serialize (encode,encodeLazy,decode)
+-- import Data.Serialize.Derive
+-- Cloud Haskell is in the "binary" rather than "cereal" camp presently:
+import Data.Binary (encode,decode, Binary(..))
+import Data.Binary.Derive
+
+--import qualified Data.Binary as Bin
+--import Data.Binary.Put (runPut)
+import qualified Data.Serialize as Bin
+import Data.Serialize.Put (runPut)
+
+-- import Data.DeriveTH
+-- $( derive makeBinary ''WorkMessage )
+
 
 import Remote (Payload, Serializable)
 import Remote.Closure
@@ -72,8 +89,11 @@ dbg = False
 type IVarId = Int
 
 -- TODO: Make this configurable:
-the_port = "8099"
-master_addr_file = "./master_source_addr.txt"
+control_port = "8099"
+work_port    = "8098"
+master_addr_file = mkAddrFile "master_control"
+
+mkAddrFile machine = "./" ++ machine  ++ "_source.addr" 
 
 --------------------------------------------------------------------------------
 -- Global structures 
@@ -129,9 +149,32 @@ peerTable = unsafePerformIO $ newHotVar V.empty
 --   when dbg $ printf "gpu daemon entering loop\n" 
 --   join (readChan gpuQueue) >> gpuDaemon
 
-data InitMode = Master | Client
+data InitMode = Master | Slave
 
-data ControlMessage
+-- Control messages are for starting the system up and communicating
+-- between slaves and the master.
+data ControlMessage = 
+     AnnounceSlave 
+   | MachineList [BS.ByteString]
+  deriving (Show, Generic)
+
+-- Work messages are for getting things done (stealing work, returning results).
+data WorkMessage = 
+     Steal 
+   | Respond
+   | Other1
+   | Other2
+  deriving (Show, Generic)
+
+-- Use the GHC Generics mechanism to derive these:
+-- (default methods would make this easier)
+instance Binary WorkMessage where
+  put = derivePut 
+  get = deriveGet
+instance Binary ControlMessage where
+  put = derivePut 
+  get = deriveGet
+-- Note, these encodings of sums are not efficient.
 
 initAction :: InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
@@ -139,62 +182,75 @@ initAction :: InitMode -> InitAction
 initAction Master schedMap = 
   do forkIO receiveDaemon
 
+     putStrLn$ "Initializing master..."
      -- Initialize the transport layer:
      let 
 	 host    = "localhost" 
 	 sourceAddrFilePath = master_addr_file
-	 machineList = ["foobar","baz"]
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host the_port
+	 machineList = ["hulk"]
+     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
 
      (sourceAddr, targetEnd) <- T.newConnection transport
-     -- Clear files storing client addresses:
-     forM_ machineList $ \ machine -> 
-        removeFile$ machine ++ "_source_addr.txt" 
+     -- Clear files storing slave addresses:
+     forM_ machineList $ \ machine -> do
+        let file = mkAddrFile machine
+        b <- doesFileExist file
+        when b $ removeFile file
 
-     -- Write a file with our address enabling clients to find us:
+     -- Write a file with our address enabling slaves to find us:
      BS.writeFile sourceAddrFilePath $ T.serialize sourceAddr
 
      -- Connection Listening Loop:
      ----------------------------------------
      -- Every time we, the master, receive a connection on this port
-     -- it indicates a new client starting up.
+     -- it indicates a new slave starting up.
      -- As the master we eagerly set up connections with everyone:
-     let clientConnectLoop = do
-	  [name,srcAddrBytes] <- T.receive targetEnd
-	  putStrLn$ "master node: register new client: "++ BS.unpack name
-          -- Deserialize each of the sourceEnds received by the clients:
+     let slaveConnectLoop = do
+	  strs <- T.receive targetEnd
+          putStrLn$ "Master received from slave: "++ show strs
+          let [name,srcAddrBytes] = strs
+	  putStrLn$ "master node: register new slave: "++ BS.unpack name
+          -- Deserialize each of the sourceEnds received by the slaves:
 	  case T.deserialize transport srcAddrBytes of
-	    Nothing         -> fail "Garbage message from client!"
+	    Nothing         -> fail "Garbage message from slave!"
 	    Just sourceAddr -> do 
               srcEnd <- T.connect sourceAddr
-              -- Convention: send clients the machine list:
+              -- Convention: send slaves the machine list:
               T.send srcEnd (map BS.pack machineList)
+
+              putStrLn$ "Sent machine list to slave: "++ unwords machineList
+
               -- Write the file to communicate that the machine is
               -- online and set up a way to contact it:
-              let filename = BS.unpack name ++ ".txt"
+              let filename = mkAddrFile (BS.unpack name)
               BS.writeFile filename srcAddrBytes
-	      putStrLn$ "Wrote file to signify client online: " ++ filename
+	      putStrLn$ "Wrote file to signify slave online: " ++ filename
 
               -- Keep track of the connection for future communications:
               modifyHotVar_ peerTable (\ pt -> V.cons (BS.unpack name, Just srcEnd) pt)	      
 
-	  clientConnectLoop 
+	  slaveConnectLoop 
      ----------------------------------------
-     forkIO clientConnectLoop
+--     forkIO slaveConnectLoop
+     slaveConnectLoop
      return ()
 
 
-initAction Client schedMap = 
+initAction Slave schedMap = 
   do 
 --     forkIO receiveDaemon  
      let host = "localhost"
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host the_port
-     (mySourceAddr, targetEnd) <- T.newConnection transport
+     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host work_port
+     (mySourceAddr, fromMaster) <- T.newConnection transport
+
+     putStrLn$ "Slave Source addr :" ++ BS.unpack (T.serialize mySourceAddr)
 
      -- For now: Assume shared filesystem:
      let masterloop = do
            e <- doesFileExist master_addr_file
            if e then do
+
+             putStrLn$ "File exists: "++ master_addr_file
              bstr <- BS.readFile master_addr_file
 	     case T.deserialize transport bstr of 
 	       Nothing -> fail$ "Garbage message in master file: "++ master_addr_file
@@ -204,17 +260,23 @@ initAction Client schedMap =
 		 -- Convention: connect by sending name and reverse connection:
 		 T.send toMaster [BS.pack name, T.serialize mySourceAddr]
 
+                 putStrLn$ "Sent name and addr to master "
+
+	         machines <- T.receive fromMaster
+
+                 putStrLn$ "Received machine list from master: "++ unwords (map BS.unpack machines)
+
 		 -- Write the file to communicate that the machine is online:
 -- 		 let filename = BS.unpack name ++ ".txt"
 -- 		 writeFile filename "I'm online."
--- 		 putStrLn$ "Wrote file to signify client online: " ++ filename
+-- 		 putStrLn$ "Wrote file to signify slave online: " ++ filename
 
 -- 		 -- Keep track of the connection for future communications:
 -- 		 modifyHotVar_ peerTable (\ pt -> V.cons (BS.unpack name, Just srcEnd) pt)	      
 	         
 	     return ()
             else masterloop 
-
+     masterloop
      return ()
 
 hostName = liftM trim $
@@ -229,14 +291,14 @@ hostName = liftM trim $
 -- TODO: ShutDown function:
 {-
 
-     (clientSourceEnds, masterTargetEnd) <- return (sourceEnds, targetEnd)
+     (slaveSourceEnds, masterTargetEnd) <- return (sourceEnds, targetEnd)
 
      zipWithM_
-       (\clientSourceEnd clientId -> send clientSourceEnd [BS.pack . show $ clientId])
-       clientSourceEnds [0 .. numSlaves-1]
+       (\slaveSourceEnd slaveId -> send slaveSourceEnd [BS.pack . show $ slaveId])
+       slaveSourceEnds [0 .. numSlaves-1]
      replicateM_ numSlaves $ do
-       [clientMessage] <- receive masterTargetEnd
-       print clientMessage
+       [slaveMessage] <- receive masterTargetEnd
+       print slaveMessage
 	     
      closeTargetEnd masterTargetEnd
      putStrLn "master: close connections"
@@ -374,4 +436,18 @@ longSpawn  :: (NFData a, Serializable a)
 --   newFull_ = newFull_
 
 #endif
+
+
+
+----------------------------------------------------------------------------------------------------
+-- SCRAP
+
+
+-- This uses a byte per bit:
+test = runPut$ 
+       do Bin.put True
+	  Bin.put False
+	  Bin.put True
+	  Bin.put False
+	  Bin.put True
 
