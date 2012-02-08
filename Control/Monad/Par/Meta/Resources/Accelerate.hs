@@ -70,6 +70,10 @@ spawnAcc comp = do
     liftIO $ writeChan gpuQueue wrappedComp
     return iv               
 
+
+-- runAcc :: (Arrays a) => Acc a -> Par a
+
+
 -- | Loop for the GPU daemon; repeatedly takes work off the 'gpuQueue'
 -- and runs it.
 gpuDaemon :: IO ()

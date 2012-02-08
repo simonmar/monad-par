@@ -5,6 +5,15 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PackageImports #-}
 
+
+-- The Meta scheduler which can be parameterized over various
+-- "Resources", including:
+--   * Serial execution
+--   * Shared memory SMP
+--   * GPU accelerators
+--   * Remote Machine "accelerators" (i.e. distributed)
+
+
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
