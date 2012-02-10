@@ -30,22 +30,32 @@ import Control.DeepSeq
 import System.Environment
 import Data.Time.Clock
 import Control.Exception
+import System.Random.Mersenne
 
 main = do
-  points <- decodeFile "kmeans-points.bin"
-  printf "Read %d points\n" (length points)
   clusters <- getClusters "kmeans-clusters"
+  printf "%d clusters read\n" (length clusters)
+  rs <- newMTGen (Just 42) >>= randoms :: IO [Double]
   let nclusters = length clusters
   args <- getArgs
-  evaluate (length points)
   t0 <- getCurrentTime
+  let points = case args of
+                [_, _, npts] -> genPoints rs (read npts)
+                [_]      -> genPoints rs 21
+                _        -> error "Need strategy, n-threads, and n-points"
+  evaluate (length points)
+  printf "%d points generated\n" (length points)
   final_clusters <- case args of
-   ["strat",n] -> kmeans_strat (read n) nclusters points clusters
-   ["par",n] -> kmeans_par (read n) nclusters points clusters
+   ["strat",n, _] -> kmeans_strat (read n) nclusters points clusters
+   ["par",n, _] -> kmeans_par (read n) nclusters points clusters
    _other -> kmeans_seq nclusters points clusters
   t1 <- getCurrentTime
   print final_clusters
   printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
+
+genPoints :: [Double] -> Int -> [Vector]
+genPoints _ 0        = []
+genPoints (x:y:xs) n = (Vector (x*5) (y*5) : genPoints xs (n-1))
 
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (sequential)
