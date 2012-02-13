@@ -19,6 +19,7 @@
 import System.IO
 import KMeansCommon
 import Data.Array
+-- import Data.Vector.Unboxed
 import Text.Printf
 import Data.List
 import Data.Function
