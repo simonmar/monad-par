@@ -2,7 +2,7 @@
 {-# LANGUAGE FlexibleContexts #-}
 import Data.Array.Accelerate as Acc
 import Data.Array.Accelerate.Interpreter (run)
-import Prelude           hiding (zip, map, scanl, scanr, zipWith, fst)
+import Prelude           hiding (zip, map, scanl, scanr, zipWith, fst, scanl1)
 import Data.Array.IArray hiding ((!))
 import Data.Array.Unboxed       (UArray, IArray)
 import Data.Array.IO            (MArray, IOUArray)
@@ -12,7 +12,7 @@ import qualified Data.Array.MArray as M
 
 import Control.Exception  (evaluate)
 import System.Environment (getArgs)
-import System.Random
+import System.Random ()
 import System.Random.MWC  (uniformR, withSystemRandom, Variate, GenIO)
 
 {-
@@ -92,7 +92,7 @@ checkSorted arr = Acc.fold (&&*) (lift True) $ Acc.zipWith (<=*) arr' arr
 {- Do a quicksort
  -}
 seqSort :: Acc (Vector a) -> Acc (Vector a)
-seqSort arr = 
+seqSort arr = undefined
     where
         -- copy pivot across with scanl
         pivots = scanl const (arr ! 0) arr
@@ -102,7 +102,7 @@ seqSort arr =
         -- numbers >= pivot
         pivotSort = split arr flags
 
-seqSort' arr flags = 
+seqSort' arr flags = undefined
     where
         -- array of pivot values copied across to their resp. segments
         pivotArr = fstA pairPivotsFlags
@@ -129,13 +129,18 @@ split arr flags = permute const arr (\i -> index1 (newInds ! i)) arr
         -- choose from iup and idown, depending on whether flag is 0 or 1
         choose f x = let (a,b) = unlift x in (f ==* 0) ? (a,b)
         -- n = array size
-        n     = constant $ (arraySize $ arrahShape arr) - 1
+        n     = constant $ (arraySize $ arrayShape arr) - 1
         -- indices for 0's (numbers < pivot)
         idown = prescanl (+) 0 . map (xor 1) $ flags
         -- indices for 1's (numbers >= pivot)
         iup   = map (n -) . prescanr (+) 0   $ flags
         -- calculate new indices, based on 0's and 1's
         newInds = zipWith choose flags (zip idown iup) 
+
+xor 1 1 = 0
+xor 0 1 = 1
+xor 1 0 = 1
+xor 0 0 = 0 
 
 -- Scatter: takes an array of elements and an array of their destination 
 --   indices. Uses Acc.permute to move each element from the original array to 
