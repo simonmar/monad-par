@@ -4,6 +4,7 @@
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 
 
 -- The Meta scheduler which can be parameterized over various
@@ -32,6 +33,7 @@ import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Typeable (Typeable)
 
 import System.Random
 import System.IO.Unsafe (unsafePerformIO)
@@ -54,7 +56,7 @@ dbg = False
 
 newtype Par a = Par { unPar :: ContT () ROnly a }
     deriving (Monad, MonadCont, MonadReader Sched, 
-              MonadIO, Applicative, Functor)
+              MonadIO, Applicative, Functor, Typeable)
 type ROnly = ReaderT Sched IO
 
 newtype IVar a = IVar (HotVar (IVarContents a))

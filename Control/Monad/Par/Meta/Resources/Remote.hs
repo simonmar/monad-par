@@ -59,6 +59,9 @@ import qualified Remote.Process as P
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process (readProcess)
 import System.Directory (removeFile, doesFileExist)
+
+import System.Random (randomIO)
+
 import Text.Printf
 
 import qualified Network.Transport     as T
@@ -118,12 +121,14 @@ longQueue :: HotVar (DQ.Queue LongWork)
 longQueue = unsafePerformIO $ R.newQ >>= newHotVar 
 -- longQueue = unsafePerformIO newChan
 
+{-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
 type PeerName = String
 peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
 -- peerTable = unsafePerformIO $ newHotVar V.empty
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
 
+{-# NOINLINE myNodeID #-}
 myNodeID :: HotVar Int
 myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 
@@ -146,6 +151,16 @@ nameToID bs1 bsls =
      Just x  -> x
  where 
   basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
+
+hostName = liftM trim $
+--    readProcess "uname" ["-n"] ""
+    readProcess "hostname" [] ""
+ where 
+  -- | Trim whitespace from both ends of a string.
+  trim :: String -> String
+  trim = f . f
+     where f = reverse . dropWhile isSpace
+
 
 -- --------------------------------------------------------------------------------
 -- Establish workers.
@@ -306,15 +321,15 @@ initAction (Master machineList) schedMap =
 
 initAction Slave schedMap = 
   do 
---     forkIO receiveDaemon  
-     let host = "localhost"
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host work_port
+     name <- hostName 
+     let namebs = BS.pack name
+     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints name work_port
      (mySourceAddr, fromMaster) <- T.newConnection transport
 
      taggedMsg$ "Init slave, source addr = " ++ BS.unpack (T.serialize mySourceAddr)
 
      -- For now: Assume shared filesystem:
-     let masterloop = do
+     let masterloop = do  -- Loop until connected to master.
            e <- doesFileExist master_addr_file
            if e then do
 
@@ -324,31 +339,24 @@ initAction Slave schedMap =
 	       Nothing -> fail$ " [distmeta] Garbage message in master file: "++ master_addr_file
    	       Just masterAddr -> do 
 		 toMaster <- T.connect masterAddr
-                 name <- liftM BS.pack hostName 
 		 -- Convention: connect by sending name and reverse connection:
-		 T.send toMaster [encode$ AnnounceSlave name (T.serialize mySourceAddr)]
+		 T.send toMaster [encode$ AnnounceSlave namebs (T.serialize mySourceAddr)]
 
                  taggedMsg$ "Sent name and addr to master "
 	         machines <- T.receive fromMaster
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 	         
-	         let id = nameToID name machines
+	         let id = nameToID namebs machines
 		 writeIORef myNodeID id
 		 return ()
 
 	     return ()
-            else masterloop 
+            else do threadDelay (10*1000)
+		    masterloop 
      masterloop
+     forkIO$ receiveDaemon fromMaster
      return ()
 
-hostName = liftM trim $
---    readProcess "uname" ["-n"] ""
-    readProcess "hostname" [] ""
- where 
-  -- | Trim whitespace from both ends of a string.
-  trim :: String -> String
-  trim = f . f
-     where f = reverse . dropWhile isSpace
 
 
 -- TODO: ShutDown function:
@@ -374,7 +382,13 @@ hostName = liftM trim $
 
 stealAction :: StealAction
 stealAction _ _ = do
-   putStrLn "STEAL ACTION"
+   taggedMsg$ "STEAL ACTION - TEMPORARY BLOCKING VERSION"
+   n :: Int <- randomIO 
+   pt <- readHotVar peerTable
+   let ind = n `mod` V.length pt
+
+   taggedMsg$ "Attempting steal from Node ID "++show ind
+   let it = pt V.! ind
 
 -- stealAction _ _ = R.tryPopR resultQueue
    return Nothing
@@ -389,7 +403,7 @@ longSpawn clo@(Closure n pld) = do
 
 --  modifyHotVar_ longQueue (addback (ivarid, pclo))
 
-  return undefined
+  return (error "longspaws result not defined yet")
 
 
 --   iv <- new
