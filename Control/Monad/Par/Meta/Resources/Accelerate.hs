@@ -82,7 +82,7 @@ gpuDaemon = do
   join (readChan gpuQueue) >> gpuDaemon
 
 initAction :: InitAction
-initAction _ = do
+initAction _ _ = do
   void $ forkIO gpuDaemon
 
 stealAction :: StealAction

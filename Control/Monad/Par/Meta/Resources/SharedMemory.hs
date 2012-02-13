@@ -35,12 +35,12 @@ dbg = False
 -- | 'Int' argument controls the number of steal attemps to make per
 -- capability on a given execution of the 'StealAction'.
 initAction :: Int -> InitAction
-initAction triesPerCap _ = do
+initAction triesPerCap sa _ = do
   when dbg $ printf "spawning worker threads for shared memory\n"
   caps <- getNumCapabilities
   (cap, _) <- threadCapability =<< myThreadId
   forM_ [0..caps-1] $ \n ->
-    when (n /= cap) $ void $ spawnWorkerOnCap (stealAction caps triesPerCap) n
+    when (n /= cap) $ void $ spawnWorkerOnCap sa n
 
 randModN :: Int -> HotVar StdGen -> IO Int
 randModN caps rngRef = 
