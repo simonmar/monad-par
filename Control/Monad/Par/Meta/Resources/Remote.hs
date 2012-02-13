@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE NamedFieldPuns, DeriveGeneric #-}
+{-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -24,14 +24,18 @@ import Control.Monad.Par.Meta.HotVar.IORef
 -- 	       matchIf, send, match, receiveTimeout, receiveWait, matchUnknownThrow, 
 -- 	       findPeerByRole, getPeers, spawnLocal, nameQueryOrStart, remoteInit)
 
+import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
 --import qualified Data.ByteString.Lazy       as BS
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
+import Data.List as L
+import Data.List.Split (splitOn)
 
 import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as MV
 import GHC.Generics (Generic)
 
 -- import Data.Serialize (encode,encodeLazy,decode)
@@ -39,11 +43,10 @@ import GHC.Generics (Generic)
 -- Cloud Haskell is in the "binary" rather than "cereal" camp presently:
 import Data.Binary (encode,decode, Binary(..))
 import Data.Binary.Derive
+import qualified Data.Binary as Bin
 
---import qualified Data.Binary as Bin
---import Data.Binary.Put (runPut)
-import qualified Data.Serialize as Bin
-import Data.Serialize.Put (runPut)
+-- import qualified Data.Serialize as Bin
+-- import Data.Serialize.Put (runPut)
 
 -- import Data.DeriveTH
 -- $( derive makeBinary ''WorkMessage )
@@ -118,13 +121,45 @@ longQueue = unsafePerformIO $ R.newQ >>= newHotVar
 -- Each peer is either connected, or not connected yet.
 type PeerName = String
 peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
-peerTable = unsafePerformIO $ newHotVar V.empty
+-- peerTable = unsafePerformIO $ newHotVar V.empty
+peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
+
+myNodeID :: HotVar Int
+myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 
 -- {-# NOINLINE resultQueue #-}
 -- | Result queue is pushed to by the GPU daemon, and popped by the
 -- 'Par' workers, meaning the 'WSDeque' is appropriate.
 -- resultQueue :: WSDeque (Par ())
 -- resultQueue = unsafePerformIO R.newQ
+
+taggedMsg s = putStrLn$ " [distmeta] "++s
+
+-- --------------------------------------------------------------------------------
+-- Misc Helpers:
+
+nameToID :: BS.ByteString -> [BS.ByteString] -> Int
+nameToID bs1 bsls = 
+  case findIndex (\ bs2 -> bs1 == bs2 
+	           || basename bs1 == basename bs2) bsls
+  of Nothing -> error$ "nameToID: host not included in machine list: "++BS.unpack bs1
+     Just x  -> x
+ where 
+  basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
+
+-- --------------------------------------------------------------------------------
+-- Establish workers.
+--
+-- This initialization and discovery phase could be factored into a
+-- separate module.  At the end of the discovery process the global
+-- structure is initialized with a table of connections to all other
+-- peer nodes.
+
+-- (However, these connections may or may not actually be connected.
+-- Lazy connection is permissable.)
+
+
+
 
 -- --------------------------------------------------------------------------------
 -- -- spawnAcc operator and init/steal definitions to export
@@ -149,18 +184,23 @@ peerTable = unsafePerformIO $ newHotVar V.empty
 --   when dbg $ printf "gpu daemon entering loop\n" 
 --   join (readChan gpuQueue) >> gpuDaemon
 
-data InitMode = Master | Slave
+-- | For now it is the master's job to know the machine list:
+data InitMode = Master MachineList | Slave
+type MachineList = [BS.ByteString]
+
+type NodeID = Int
 
 -- Control messages are for starting the system up and communicating
 -- between slaves and the master.
 data ControlMessage = 
-     AnnounceSlave 
-   | MachineList [BS.ByteString]
+     AnnounceSlave { name   :: BS.ByteString, 
+		     toAddr :: BS.ByteString }
+   | MachineListMsg MachineList
   deriving (Show, Generic)
 
 -- Work messages are for getting things done (stealing work, returning results).
 data WorkMessage = 
-     Steal 
+     Steal
    | Respond
    | Other1
    | Other2
@@ -176,63 +216,91 @@ instance Binary ControlMessage where
   get = deriveGet
 -- Note, these encodings of sums are not efficient.
 
+
+-- | A message signifying a steal request and including the NodeID of
+--   the sender.
+data StealRequest = StealRequest NodeID
+--                    deriving (Typeable)
+  deriving (Show)
+
+instance Binary StealRequest where
+  get = do n <- Bin.get
+	   return (StealRequest n)
+  put (StealRequest n) = Bin.put n
+
+data StealResponse = 
+  StealResponse (Maybe (IVarId, Closure Payload))
+--  deriving (Typeable)
+
+------------------------------------------------------------------------------------------
+
+
 initAction :: InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction Master schedMap = 
-  do forkIO receiveDaemon
+initAction (Master machineList) schedMap = 
+  do 
+     taggedMsg$ "Initializing master..."
 
-     putStrLn$ "Initializing master..."
+     -- Initialize the peerTable now that we know how many nodes there are:
+     writeHotVar peerTable (V.replicate (length machineList) (error "Peer table uninitialized"))
+
      -- Initialize the transport layer:
-     let 
-	 host    = "localhost" 
-	 sourceAddrFilePath = master_addr_file
-	 machineList = ["hulk"]
+     host <- hostName
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
 
      (sourceAddr, targetEnd) <- T.newConnection transport
      -- Clear files storing slave addresses:
      forM_ machineList $ \ machine -> do
-        let file = mkAddrFile machine
+        let file = mkAddrFile (BS.unpack machine)
         b <- doesFileExist file
         when b $ removeFile file
 
      -- Write a file with our address enabling slaves to find us:
-     BS.writeFile sourceAddrFilePath $ T.serialize sourceAddr
+     BS.writeFile master_addr_file $ T.serialize sourceAddr
 
      -- Connection Listening Loop:
      ----------------------------------------
      -- Every time we, the master, receive a connection on this port
      -- it indicates a new slave starting up.
      -- As the master we eagerly set up connections with everyone:
-     let slaveConnectLoop = do
-	  strs <- T.receive targetEnd
-          putStrLn$ "Master received from slave: "++ show strs
-          let [name,srcAddrBytes] = strs
-	  putStrLn$ "master node: register new slave: "++ BS.unpack name
+     let slaveConnectLoop 0 = return ()
+	 slaveConnectLoop iter = do
+	  [str] <- T.receive targetEnd
+          let AnnounceSlave{name,toAddr} = decode str
+	  taggedMsg$ "Master: register new slave, name: "++ BS.unpack name
+          taggedMsg$ "  Full message received from slave: "++ (BS.unpack str)
+
           -- Deserialize each of the sourceEnds received by the slaves:
-	  case T.deserialize transport srcAddrBytes of
+	  case T.deserialize transport toAddr of
 	    Nothing         -> fail "Garbage message from slave!"
 	    Just sourceAddr -> do 
               srcEnd <- T.connect sourceAddr
               -- Convention: send slaves the machine list:
-              T.send srcEnd (map BS.pack machineList)
+              T.send srcEnd machineList
 
-              putStrLn$ "Sent machine list to slave: "++ unwords machineList
+              taggedMsg$ "Sent machine list to slave: "++ unwords (map BS.unpack machineList)
 
               -- Write the file to communicate that the machine is
               -- online and set up a way to contact it:
               let filename = mkAddrFile (BS.unpack name)
-              BS.writeFile filename srcAddrBytes
-	      putStrLn$ "Wrote file to signify slave online: " ++ filename
+		  id = nameToID name machineList
+              BS.writeFile filename toAddr
+	      taggedMsg$ "  Wrote file to signify slave online: " ++ filename
 
               -- Keep track of the connection for future communications:
-              modifyHotVar_ peerTable (\ pt -> V.cons (BS.unpack name, Just srcEnd) pt)	      
+	      let entry = (BS.unpack name, Just srcEnd)
+--              modifyHotVar_ peerTable (\ pt -> V.cons entry pt)
+	      taggedMsg$ "  Extending peerTable with node ID "++ show id
+              modifyHotVar_ peerTable (\ pt -> V.modify (\v -> MV.write v id entry) pt)
 
-	  slaveConnectLoop 
+	  slaveConnectLoop (iter-1)
      ----------------------------------------
 --     forkIO slaveConnectLoop
-     slaveConnectLoop
+--     slaveConnectLoop (-1)  -- Loop forever
+     slaveConnectLoop (length machineList)
+     taggedMsg$ "All slaves connected!  Launching receiveDaemon..."
+     forkIO$ receiveDaemon targetEnd
      return ()
 
 
@@ -243,44 +311,39 @@ initAction Slave schedMap =
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host work_port
      (mySourceAddr, fromMaster) <- T.newConnection transport
 
-     putStrLn$ "Slave Source addr :" ++ BS.unpack (T.serialize mySourceAddr)
+     taggedMsg$ "Init slave, source addr = " ++ BS.unpack (T.serialize mySourceAddr)
 
      -- For now: Assume shared filesystem:
      let masterloop = do
            e <- doesFileExist master_addr_file
            if e then do
 
-             putStrLn$ "File exists: "++ master_addr_file
+             taggedMsg$ "Found master's address in file: "++ master_addr_file
              bstr <- BS.readFile master_addr_file
 	     case T.deserialize transport bstr of 
-	       Nothing -> fail$ "Garbage message in master file: "++ master_addr_file
+	       Nothing -> fail$ " [distmeta] Garbage message in master file: "++ master_addr_file
    	       Just masterAddr -> do 
 		 toMaster <- T.connect masterAddr
-                 name <- hostName 
+                 name <- liftM BS.pack hostName 
 		 -- Convention: connect by sending name and reverse connection:
-		 T.send toMaster [BS.pack name, T.serialize mySourceAddr]
+		 T.send toMaster [encode$ AnnounceSlave name (T.serialize mySourceAddr)]
 
-                 putStrLn$ "Sent name and addr to master "
-
+                 taggedMsg$ "Sent name and addr to master "
 	         machines <- T.receive fromMaster
-
-                 putStrLn$ "Received machine list from master: "++ unwords (map BS.unpack machines)
-
-		 -- Write the file to communicate that the machine is online:
--- 		 let filename = BS.unpack name ++ ".txt"
--- 		 writeFile filename "I'm online."
--- 		 putStrLn$ "Wrote file to signify slave online: " ++ filename
-
--- 		 -- Keep track of the connection for future communications:
--- 		 modifyHotVar_ peerTable (\ pt -> V.cons (BS.unpack name, Just srcEnd) pt)	      
+                 taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 	         
+	         let id = nameToID name machines
+		 writeIORef myNodeID id
+		 return ()
+
 	     return ()
             else masterloop 
      masterloop
      return ()
 
 hostName = liftM trim $
-    readProcess "uname" ["-n"] ""
+--    readProcess "uname" ["-n"] ""
+    readProcess "hostname" [] ""
  where 
   -- | Trim whitespace from both ends of a string.
   trim :: String -> String
@@ -305,9 +368,16 @@ hostName = liftM trim $
 -}
 
 
+-- type StealAction =  Sched                 -- ^ 'Sched' for the current thread
+--                  -> HotVar (IntMap Sched) -- ^ Map of all 'Sched's
+--                  -> IO (Maybe (Par ()))
+
 stealAction :: StealAction
-stealAction = undefined
+stealAction _ _ = do
+   putStrLn "STEAL ACTION"
+
 -- stealAction _ _ = R.tryPopR resultQueue
+   return Nothing
 
 
 longSpawn clo@(Closure n pld) = do
@@ -354,10 +424,18 @@ longSpawn clo@(Closure n pld) = do
 --------------------------------------------------------------------------------
 
 -- | Receive steal requests from other nodes.
-receiveDaemon :: IO ()
-receiveDaemon = do
+receiveDaemon :: T.TargetEnd -> IO ()
+receiveDaemon targetEnd = do
 
-  receiveDaemon
+  bss <- T.receive targetEnd
+  taggedMsg$ "Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
+  let msg :: StealRequest = decode (BS.concat bss)
+  taggedMsg$ "Received work message: "++ show msg
+
+--  case msg of 
+--    Steal -> return ()
+
+  receiveDaemon targetEnd
  where 
 
 -- receiveDaemon :: ProcessM ()
@@ -444,10 +522,10 @@ longSpawn  :: (NFData a, Serializable a)
 
 
 -- This uses a byte per bit:
-test = runPut$ 
-       do Bin.put True
-	  Bin.put False
-	  Bin.put True
-	  Bin.put False
-	  Bin.put True
+-- test = runPut$ 
+--        do Bin.put True
+-- 	  Bin.put False
+-- 	  Bin.put True
+-- 	  Bin.put False
+-- 	  Bin.put True
 
