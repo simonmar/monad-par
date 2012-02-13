@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables #-}
+{-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 
 {-# OPTIONS_GHC -Wall #-}
 
@@ -13,6 +13,7 @@ module Control.Monad.Par.Meta.Resources.Remote
 --   )  
  where
 
+import Control.Applicative ((<$>))
 import Control.Concurrent
 import Control.DeepSeq
 import Control.Exception.Base (evaluate)
@@ -24,6 +25,8 @@ import Control.Monad.Par.Meta.HotVar.IORef
 -- 	       matchIf, send, match, receiveTimeout, receiveWait, matchUnknownThrow, 
 -- 	       findPeerByRole, getPeers, spawnLocal, nameQueryOrStart, remoteInit)
 
+import Data.Unique (hashUnique, newUnique)
+import Data.Typeable (Typeable)
 import Data.IORef
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
@@ -52,10 +55,9 @@ import qualified Data.Binary as Bin
 -- $( derive makeBinary ''WorkMessage )
 
 
-import Remote (Payload, Serializable)
-import Remote.Closure
-import Remote.Encoding (serialDecode)
-import qualified Remote.Process as P 
+import Remote2.Closure
+import Remote2.Encoding (Payload, Serializable, serialDecode)
+-- import qualified Remote.Process as P 
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process (readProcess)
 import System.Directory (removeFile, doesFileExist)
@@ -84,6 +86,17 @@ import qualified Network.Transport.TCP as TCP
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 
+----------------------------------------------------------------------------------------------------
+--                                              TODO                                              --
+----------------------------------------------------------------------------------------------------
+
+--   * Make ivarid actually unique.  Per-thread incremented counters would be fine.
+--   * Add configurability for constants below.
+
+----------------------------------------------------------------------------------------------------
+
+-- Global constants:
+
 dbg :: Bool
 #ifdef DEBUG
 dbg = True
@@ -102,12 +115,12 @@ master_addr_file = mkAddrFile "master_control"
 mkAddrFile machine = "./" ++ machine  ++ "_source.addr" 
 
 --------------------------------------------------------------------------------
--- Global structures 
+-- Global Mutable Structures 
 
 -- An item of work that can be executed either locally, or stolen
 -- through the network.
 data LongWork = LongWork {
-     localver  :: IO (),
+     localver  :: Par (),
      stealver  :: (IVarId, Closure Payload)
 --     writeback :: a -> 
   }
@@ -116,10 +129,14 @@ data LongWork = LongWork {
 -- | Long-stealing queue is pushed to by 'Par' workers, and popped
 --   both by par workers and by remote processes.
 -- longQueue :: Chan (IO ())
---longQueue :: HotVar (Deque (IVarId, Closure Payload))
-longQueue :: HotVar (DQ.Queue LongWork)
-longQueue = unsafePerformIO $ R.newQ >>= newHotVar 
 -- longQueue = unsafePerformIO newChan
+--longQueue :: HotVar (Deque (IVarId, Closure Payload))
+--longQueue :: HotVar (DQ.Queue LongWork)
+--longQueue = unsafePerformIO $ R.newQ >>= newHotVar 
+
+longQueue :: DQ.Queue LongWork
+longQueue = unsafePerformIO $ R.newQ
+
 
 {-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
@@ -138,8 +155,6 @@ myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 -- resultQueue :: WSDeque (Par ())
 -- resultQueue = unsafePerformIO R.newQ
 
-taggedMsg s = putStrLn$ " [distmeta] "++s
-
 -- --------------------------------------------------------------------------------
 -- Misc Helpers:
 
@@ -152,7 +167,7 @@ nameToID bs1 bsls =
  where 
   basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
-hostName = liftM trim $
+hostName = trim <$>
 --    readProcess "uname" ["-n"] ""
     readProcess "hostname" [] ""
  where 
@@ -162,8 +177,21 @@ hostName = liftM trim $
      where f = reverse . dropWhile isSpace
 
 
+-- | Send to a particular node in the peerTable:
+sendTo :: NodeID -> BS.ByteString -> IO ()
+sendTo ndid msg = do
+  table <- readHotVar peerTable
+  let (_,Just target) = table V.! ndid
+  T.send target [msg]
+
+taggedMsg s = putStrLn$ " [distmeta] "++s
+
+-- When debugging it is helpful to slow down certain fast paths to a human scale:
+dbgDelay msg = threadDelay (200*1000)
+
+
 -- --------------------------------------------------------------------------------
--- Establish workers.
+-- Initialize & Establish workers.
 --
 -- This initialization and discovery phase could be factored into a
 -- separate module.  At the end of the discovery process the global
@@ -215,11 +243,11 @@ data ControlMessage =
 
 -- Work messages are for getting things done (stealing work, returning results).
 data WorkMessage = 
-     Steal
-   | Respond
-   | Other1
-   | Other2
-  deriving (Show, Generic)
+     -- | A message signifying a steal request and including the NodeID of
+     --   the sender:
+     StealRequest NodeID
+   | StealResponse (IVarId, Closure Payload)
+  deriving (Show, Generic, Typeable)
 
 -- Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
@@ -229,23 +257,26 @@ instance Binary WorkMessage where
 instance Binary ControlMessage where
   put = derivePut 
   get = deriveGet
--- Note, these encodings of sums are not efficient.
+-- Note, these encodings of sums are not efficient!
 
 
--- | A message signifying a steal request and including the NodeID of
---   the sender.
-data StealRequest = StealRequest NodeID
---                    deriving (Typeable)
-  deriving (Show)
+-- data StealRequest = StealRequest NodeID
+--   deriving (Show)
 
-instance Binary StealRequest where
-  get = do n <- Bin.get
-	   return (StealRequest n)
-  put (StealRequest n) = Bin.put n
+-- data StealResponse = 
+--   StealResponse (IVarId, Closure Payload)
+-- --  StealResponse (Maybe (IVarId, Closure Payload))
+-- --  deriving (Typeable)
 
-data StealResponse = 
-  StealResponse (Maybe (IVarId, Closure Payload))
---  deriving (Typeable)
+-- instance Binary StealRequest where
+--   get = do n <- Bin.get
+-- 	   return (StealRequest n)
+--   put (StealRequest n) = Bin.put n
+
+-- instance Binary StealResponse where
+--   get = StealResponse <$> Bin.get 
+--   put (StealResponse pld) = Bin.put pld
+
 
 ------------------------------------------------------------------------------------------
 
@@ -313,9 +344,12 @@ initAction (Master machineList) schedMap =
      ----------------------------------------
 --     forkIO slaveConnectLoop
 --     slaveConnectLoop (-1)  -- Loop forever
+     taggedMsg$ "  ... waiting for slaves to connect."
      slaveConnectLoop (length machineList)
-     taggedMsg$ "All slaves connected!  Launching receiveDaemon..."
+     taggedMsg$ "  All slaves connected!  Launching receiveDaemon..."
      forkIO$ receiveDaemon targetEnd
+
+     taggedMsg$ "Master initAction returning control to scheduler..."
      return ()
 
 
@@ -355,6 +389,7 @@ initAction Slave schedMap =
 		    masterloop 
      masterloop
      forkIO$ receiveDaemon fromMaster
+     taggedMsg$ "Slave initAction returning control to scheduler..."
      return ()
 
 
@@ -381,36 +416,63 @@ initAction Slave schedMap =
 --                  -> IO (Maybe (Par ()))
 
 stealAction :: StealAction
-stealAction _ _ = do
-   taggedMsg$ "STEAL ACTION - TEMPORARY BLOCKING VERSION"
-   n :: Int <- randomIO 
-   pt <- readHotVar peerTable
-   let ind = n `mod` V.length pt
+stealAction Sched{no} _ = do
+  -- First try a "provably good steal":
+  x <- R.tryPopR longQueue
+  case x of 
+    Just (LongWork{localver}) -> do
+      taggedMsg$ "stealAction: worker number "++show no++" found work in own queue."
+      return (Just localver)
+    Nothing -> raidPeer
+ where 
+  raidPeer = do
+     n :: Int <- randomIO 
+     pt <- readHotVar peerTable
+     let ind = n `mod` V.length pt
 
-   taggedMsg$ "Attempting steal from Node ID "++show ind
-   let it = pt V.! ind
+     taggedMsg$ "Attempting steal from Node ID "++show ind
+     let it = pt V.! ind
 
--- stealAction _ _ = R.tryPopR resultQueue
-   return Nothing
+  -- stealAction _ _ = R.tryPopR resultQueue
+
+     dbgDelay "stealAction"
+     return Nothing
+
+-- TEMP FIXME: INLINING THIS HERE:
+makePayloadClosure :: Closure a -> Maybe (Closure Payload)
+makePayloadClosure (Closure name arg) = 
+                case isSuffixOf "__impl" name of
+                  False -> Nothing
+                  True -> Just $ Closure (name++"Pl") arg
 
 
 longSpawn clo@(Closure n pld) = do
   let pclo = fromMaybe (error "Could not find Payload closure")
-                     $ P.makePayloadClosure clo
+                     $ makePayloadClosure clo
+
+  iv <- new
   liftIO$ do
+    taggedMsg$ " Serialized closure: " ++ show clo
+
     (cap, _) <- (threadCapability =<< myThreadId)
     when dbg $ printf " [%d] longSpawn'ing computation...\n" cap
 
---  modifyHotVar_ longQueue (addback (ivarid, pclo))
+    -- Create a unique identifier for this IVar that is valid for the
+    -- rest of the current run:
+    ivarid <- hashUnique <$> newUnique -- This is not actually safe.  Hashes may collide.
 
-  return (error "longspaws result not defined yet")
+    R.pushR longQueue 
+       (LongWork{ stealver= (ivarid,pclo),
+		  localver= error "Local version of longwork unimplemented"
+		})
+
+  return iv
 
 
---   iv <- new
+
 --   liftIO $ do 
---     -- Create a unique identifier for this IVar that is valid for the
---     -- rest of the current run:
---     ivarid <- hashUnique <$> newUnique
+
+
 --     let pred (WorkFinished iid _)      = iid == ivarid
 --         -- the "continuation" to be invoked when receiving a
 --         -- 'WorkFinished' message for our 'IVarId'
@@ -443,11 +505,14 @@ receiveDaemon targetEnd = do
 
   bss <- T.receive targetEnd
   taggedMsg$ "Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
-  let msg :: StealRequest = decode (BS.concat bss)
-  taggedMsg$ "Received work message: "++ show msg
-
---  case msg of 
---    Steal -> return ()
+  let (StealRequest ndid) = decode (BS.concat bss)
+  taggedMsg$ "Received StealRequest from: "++ show ndid
+  p <- R.tryPopL longQueue
+  case p of 
+    Nothing -> return ()
+    Just (LongWork{stealver}) -> do 
+      taggedMsg$ "  Had longwork to perform, responding with StealResponse..."
+      sendTo ndid (encode$ StealResponse stealver)
 
   receiveDaemon targetEnd
  where 

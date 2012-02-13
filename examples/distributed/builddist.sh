@@ -9,7 +9,7 @@ else
   OPTS=""
 fi
 
-ghc -i../.. --make parfib_dist.hs -O2 -threaded -rtsopts $OPTS $@
+ghc -i../.. -hide-package remote --make parfib_dist.hs -O2 -threaded -rtsopts $OPTS $@
 # -fforce-recomp 
 cp parfib_dist worker/
 

@@ -7,13 +7,14 @@ import GHC.Conc
 import Control.Applicative
 import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get)
 
-import Remote
+-- import Remote
 
 -- necessary imports for remotable-generated code
 import Control.Monad.IO.Class
-import Remote.Closure
-import Remote.Encoding
-import Remote.Reg
+import Remote2.Closure (Closure(..))
+import Remote2.Encoding (Payload, serialEncodePure, serialDecode, serialEncode)
+import Remote2.Reg (putReg, RemoteCallMetaData)
+import Remote2.Call()
 
 type FibType = Int64
 
@@ -23,8 +24,7 @@ fibIO 0 = return 1
 fibIO 1 = return 1
 fibIO x = (+) <$> fibIO (x-2) <*> fibIO (x-1)
 
--- remotable ['fibIO]
-
+-- ( remotable ['fibIO] )
 
 
 fibPar :: FibType -> Par FibType
@@ -37,7 +37,7 @@ fibPar x = (+) <$> fibPar (x-2) <*> fibPar (x-1)
 
 parfib1__0__impl :: Payload -> IO FibType
 parfib1__0__impl a
-  = do res <- liftIO (Remote.Encoding.serialDecode a)
+  = do res <- liftIO (serialDecode a)
        case res of 
          Just a1 -> liftIO $ runParDist (parfib1 a1)
          _ -> error "Bad decoding in closure splice of parfib1"
@@ -45,23 +45,23 @@ parfib1__0__impl a
 parfib1__0__implPl :: Payload -> IO Payload
 parfib1__0__implPl a
   = do res <- parfib1__0__impl a
-       liftIO (Remote.Encoding.serialEncode res)
+       liftIO (serialEncode res)
 
-parfib1__closure :: FibType -> Closure (Par FibType)
+parfib1__closure :: FibType -> Remote2.Closure.Closure (Par FibType)
 parfib1__closure
   = \ a1
-      -> Remote.Closure.Closure
-           "Main.parfib1__0__impl" (Remote.Encoding.serialEncodePure a1)
+      -> Closure
+           "Main.parfib1__0__impl" (serialEncodePure a1)
 
 __remoteCallMetaData :: RemoteCallMetaData
 __remoteCallMetaData x
-  = Remote.Reg.putReg
+  = putReg
       parfib1__0__impl
       "Main.parfib1__0__impl"
-      (Remote.Reg.putReg
+      (putReg
          parfib1__0__implPl
          "Main.parfib1__0__implPl"
-         (Remote.Reg.putReg parfib1__closure "Main.parfib1__closure" x))
+         (putReg parfib1__closure "Main.parfib1__closure" x))
 
 -- Par monad version:
 parfib1 :: FibType -> Par FibType
@@ -75,8 +75,8 @@ parfib1 n = do
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 
-            []      -> ("monad", 20, 1)
-            [v]     -> (v,       20, 1)
+            []      -> ("master", 3, 1)
+            [v]     -> (v,        3, 1)
             [v,n]   -> (v, read n,   1)
             [v,n,c] -> (v, read n, read c)
 
