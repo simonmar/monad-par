@@ -7,6 +7,7 @@ module Remote2.Call (
          mkClosure,
          mkClosure2,
          mkClosureRec,
+         mkClosureRec2,
         ) where
 
 import Language.Haskell.TH
@@ -18,6 +19,10 @@ import Remote2.Closure (Closure(..))
 -- import Remote.Process (ProcessM)
 import Remote2.Reg (putReg,RemoteCallMetaData)
 -- import Remote.Task (TaskM,serialEncodeA,serialDecodeA)
+
+import Control.Monad.Par.Meta
+
+import Debug.Trace
 
 ----------------------------------------------
 -- * Compile-time metadata
@@ -38,24 +43,6 @@ mkClosure n = do info <- reify n
                            newinfo <- reify newn
                            case newinfo of
                               VarI newiname _ _ _ -> varE newiname
-                              _ -> error $ "Unexpected type of closure symbol for "++show n
-                    _ -> error $ "No closure corresponding to "++show n
-
-
--- RRN: Hacking this version to include a tuple of the original and the serialized closure.
-mkClosure2 :: Name -> Q Exp
-mkClosure2 n = do info <- reify n
-                  case info of
-                    orig@(VarI iname _ _ _) -> 
-                        do let newn = mkName $ show iname ++ "__closure"
-			       arg  = mkName "x"
-                           newinfo <- reify newn
-                           case newinfo of
-                              VarI newiname _ _ _ -> 
-                                  -- Eta expand to apply to both:
-				  lamE [return (VarP arg)] 
-				       (tupE [appE (varE n) (varE arg), 
-					      appE (varE newiname) (varE arg)])
                               _ -> error $ "Unexpected type of closure symbol for "++show n
                     _ -> error $ "No closure corresponding to "++show n
 
@@ -83,6 +70,49 @@ mkClosureRec name =
              _ -> error "mkClosureRec can't figure out module of symbol"
        _ -> error "mkClosureRec applied to something weird"
 
+----------------------------------------------------------------------------------------------------
+-- RRN: Hacking the below versions to include a tuple of the original and the serialized closure.
+----------------------------------------------------------------------------------------------------
+mkClosure2 :: Name -> Q Exp
+mkClosure2 n = do info <- reify n
+                  case info of
+                    orig@(VarI iname _ _ _) -> 
+                        do let newn = mkName $ show iname ++ "__closure"
+			       arg  = mkName "x"
+                           newinfo <- reify newn
+                           case newinfo of
+                              VarI newiname _ _ _ -> 
+                                  -- Eta expand to apply to both:
+				  lamE [return (VarP arg)] 
+				       (tupE [appE (varE n) (varE arg), 
+					      appE (varE newiname) (varE arg)])
+                              _ -> error $ "Unexpected type of closure symbol for "++show n
+                    _ -> error $ "No closure corresponding to "++show n
+mkClosureRec2 :: Name -> Q Exp
+mkClosureRec2 name =
+ do e <- makeEnv
+    inf <- reify name
+    case inf of
+       VarI aname atype _ _ -> 
+          let arg  = mkName "x" in
+          case nameModule aname of
+             Just a -> case a == loc_module (eLoc e) of
+                           False -> error "Can't use mkClosureRec across modules: use mkClosure instead"
+                           True -> do (aat,aae) <- closureInfo e aname atype
+                                      let lam = lamE [return (VarP arg)] 
+						     (tupE [appE (varE aname) (varE arg), 
+							    appE (return aae) (varE arg)])
+					  -- Constructing the matching type is quite annoying:
+					  AppT (AppT ArrowT left) right = aat
+					  AppT _ inner = right -- Peel off the "Closure"
+                                          newty = appT (appT arrowT (return left)) $ 
+						       appT (appT (tupleT 2) (return inner)) 
+						            (return right)
+                                      sigE lam newty
+
+             _ -> error "mkClosureRec can't figure out module of symbol"
+       _ -> error "mkClosureRec applied to something weird"
+ ----------------------------------------------------------------------------------------------------
 
 closureInfo :: Env -> Name -> Type -> Q (Type,Exp)
 closureInfo e named typed = 
@@ -111,6 +141,7 @@ data Env = Env
 --    eProcessM :: Type
     eIO :: Type
 --  , eTaskM :: Type
+  , ePar :: Type
   , ePayload :: Type
   , eLoc :: Loc
   , eLiftIO :: Exp
@@ -126,9 +157,11 @@ makeEnv =
 --     eProcessM <- [t| ProcessM |]
      eIO <- [t| IO |]
 --     eTaskM <- [t| TaskM |]
+     ePar <- [t| Par |]
      eLoc <- location
      ePayload <- [t| Payload |]
      eLiftIO <- [e|liftIO|]
+--     erunPar <- [e|runPar|]
      eReturn <- [e|return|]
      eClosure <- [e|Closure|]
      eClosureT <- [t|Closure|]
@@ -136,6 +169,8 @@ makeEnv =
 --                  eProcessM=eProcessM,
                   eIO = eIO,
 --                  eTaskM = eTaskM,
+--                  ePar = ConT (mkName "Par"),
+                  ePar = ePar,
                   eLoc = eLoc,
                   ePayload=ePayload,
                   eLiftIO=eLiftIO,
@@ -144,27 +179,42 @@ makeEnv =
                   eClosureT=eClosureT
                 }
 
+-------------------------------
+-- RRN: Hackish business of matching against special supported monads.
+
+-- Is it the IO or Par monads?
 isMonad :: Env -> Type -> Bool
-isMonad e t
-  =    
+isMonad e t = 
+--  trace (" ** ISMONAD " ++ show (t,bl)) $
+  bl
+ where bl = t == eIO e || t == ePar e
 --     t == eProcessM e
-       t == eIO e
 --    || t == eTaskM e
 
+-- Is it (IO a) or (Par a) ??
 monadOf :: Env -> Type -> Maybe Type
 monadOf e (AppT m _) |  isMonad e m = Just m
 monadOf e _ = Nothing
 
+-- Go UNDER Par or IO type constructors:
 restOf :: Env -> Type -> Type
 restOf e (AppT m r ) | isMonad e m = r
 restOf e r = r
 
+-- Strip off applications of monads which we recognize (and convert to IO):
 wrapMonad :: Env -> Type -> Type -> Type
 wrapMonad e monad val =
-  case monadOf e val of
-    Just t | t == monad -> val
-    Just n -> AppT monad (restOf e val)
-    Nothing -> AppT monad val
+  trace (" ** WRAPMONAD " ++ show monad ++ " / " ++ show val ++ "\n\t  => " ++ show res) $
+  res 
+ where 
+--  outputM = monad
+  outputM = eIO e  -- RRN: Always going to IO here.
+  res = case monadOf e val of
+--	  Just t | t == monad -> val
+          -- RRN: Convert Par to IO here:
+	  Just t | t == monad -> AppT outputM (restOf e val)
+	  Just n  -> AppT outputM (restOf e val)
+	  Nothing -> AppT outputM val
 
 getReturns :: Type -> Int -> ([Type],[Type])
 getReturns t shift = splitAt ((length arglist - 1) - shift) arglist
@@ -188,13 +238,18 @@ generateDecl e name t shift =
      implName = mkName (nameBase name ++ "__" ++ show shift ++ "__impl") 
      implPlName = mkName (nameBase name ++ "__" ++ show shift ++ "__implPl")
      (params,returns) = getReturns t shift
-     topmonad = case monadOf e $ last returns of
+--     topmonad = case monadOf e $ last returns of
+--                  Just p | p == (ePar e) -> ePar e
 --                 Just p | p == (eTaskM e) -> eTaskM e
 --                 _ -> eProcessM e
-                 _ -> error "RRN: TaskM/ProcessM disabled from Call.generateDecl"
+--                 _ -> error "RRN: TaskM/ProcessM disabled from Call.generateDecl"
+--     topmonad = eIO e 
+     topmonad = ePar e 
      lifter :: Exp -> ExpQ
      lifter x = case monadOf e $ putParams returns of
-                 Just p | p == topmonad -> return x
+                 Just p | p == topmonad -> 
+                      do op <- varE$ mkName "runParDist" -- [e|\x->x|]
+			 return $ AppE op x
                  Just p | p == eIO e -> return $ AppE (eLiftIO e) x
                  _ -> return $ AppE (eReturn e) x
      serialEncoder x = case topmonad of
@@ -209,14 +264,20 @@ generateDecl e name t shift =
 
      just a = conP (mkName "Prelude.Just") [a]
 
-     impldec = sigD implName (appT (appT arrowT (return (ePayload e))) (return $ wrapMonad e topmonad $ putParams returns))
+     -- First the __impl declaration:
+     impldec = sigD implName (appT (appT arrowT (return (ePayload e))) 
+			      (return $ wrapMonad e topmonad $ putParams returns))
      impldef = funD implName [clause [varP (mkName "a")]
                  (normalB (doE [bindS (varP (mkName "res")) ((serialDecoder (varE (mkName "a")))),
                                 noBindS (caseE (varE (mkName "res"))
-                                        [match (just (tupP paramnamesP)) (normalB (lifter (applyArgs (VarE name) paramnamesE))) [],
-                                         match wildP (normalB (appE [e|error|] (litE (stringL ("Bad decoding in closure splice of "++nameBase name))))) []])
+                                        [match (just (tupP paramnamesP)) 
+					 (normalB (lifter (applyArgs (VarE name) paramnamesE))) [],
+                                         match wildP (normalB (appE [e|error|] 
+		                         (litE (stringL ("Bad decoding in closure splice of "++nameBase name)))))
+					 []])
                                       ]))
                       []]
+     -- Second, the __implPl declaration:
      implPldec = sigD implPlName (return $ putParams $ [ePayload e,wrapMonad e topmonad (ePayload e)] )
      implPldef = funD implPlName [clause [varP (mkName "a")]
                                          (normalB (doE [bindS (varP (mkName "res")) ( (appE (varE implName) (varE (mkName "a")))),
@@ -309,6 +370,7 @@ getType name =
        VarI iname itype _ _ -> return $ Just (iname,itype)
        _ -> return Nothing
 
+-- | Construct an arbitrarily long chain of arrow types:
 putParams :: [Type] -> Type
 putParams (afst:lst:[]) = AppT (AppT ArrowT afst) lst
 putParams (afst:[]) = afst
