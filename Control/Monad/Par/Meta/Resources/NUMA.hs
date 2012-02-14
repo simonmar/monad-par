@@ -18,7 +18,7 @@ import qualified Data.Vector as Vector
 
 import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
-import System.Random    
+import System.Random.MWC
 
 import Text.Printf
 
@@ -58,12 +58,8 @@ topoFromEnv = unsafePerformIO $ do
   return topo
 
 {-# INLINE randModN #-}
-randModN :: Int -> HotVar StdGen -> IO Int
-randModN n rngRef = 
-  modifyHotVar rngRef $ \g ->
-      let (n', g') = next g
-          i = n' `mod` n
-      in (g', i)
+randModN :: Int -> HotVar GenIO -> IO Int
+randModN n rngRef = uniformR (0, n-1) =<< readHotVar rngRef
 
 -- | Given a 'SimpleTopology' and a number of steals to attempt per
 -- invocation, return a 'StealAction'.

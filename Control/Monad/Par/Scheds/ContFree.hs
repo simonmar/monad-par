@@ -40,7 +40,7 @@ import qualified Data.Set as Set
 import Debug.Trace
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import GHC.Conc
-import System.Random as Random
+import System.Random.MWC as Random
 import System.Mem.StableName
 import Text.Printf
 
@@ -74,7 +74,7 @@ data Sched = Sched
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
       workpool :: HotVar (Deque (Par ())),
-      rng      :: HotVar StdGen, -- Random number gen for work stealing.
+      rng      :: HotVar GenIO, -- Random number gen for work stealing.
       -- Mortal set: currently distinct set per processor:
       mortal   :: HotVar (Set.Set Int), -- Could possibly use a vector....
 
@@ -238,13 +238,8 @@ pushWork Sched { workpool, idle } task = do
     r -- wake one up
 #endif
 
-rand :: HotVar StdGen -> IO Int
-rand ref = 
- do g <- readHotVar ref
-    let (n,g') = next g
-	i = n `mod` numCapabilities
-    writeHotVar ref g'
-    return i
+rand :: HotVar GenIO -> IO Int
+rand ref = uniformR (0, numCapabilities-1) =<< readHotVar ref
 
 
 --------------------------------------------------------------------------------
@@ -325,7 +320,7 @@ runPar userComp = unsafePerformIO $ do
 -- Create the default scheduler(s) state:
 makeScheds = do
    workpools <- replicateM numCapabilities $ newHotVar emptydeque
-   rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
+   rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle <- newHotVar []   
    killflag <- newHotVar False
    mortals  <- mapM newHotVar (replicate numCapabilities Set.empty)

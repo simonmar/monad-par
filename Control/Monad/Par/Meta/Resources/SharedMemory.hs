@@ -18,7 +18,7 @@ import qualified Data.IntMap as IntMap
 import Data.List
 import qualified Data.Vector as Vector
 
-import System.Random    
+import System.Random.MWC
 
 import Text.Printf
 
@@ -50,12 +50,8 @@ initActionForCaps caps sa _ = do
     when (n /= cap) $ void $ spawnWorkerOnCap sa n       
 
 {-# INLINE randModN #-}
-randModN :: Int -> HotVar StdGen -> IO Int
-randModN caps rngRef = 
-  modifyHotVar rngRef $ \g ->
-      let (n, g') = next g
-          i = n `mod` caps
-      in (g', i)
+randModN :: Int -> HotVar GenIO -> IO Int
+randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 
 -- | 'StealAction' for all capabilities.
 stealAction :: Int -> StealAction

@@ -33,8 +33,8 @@ import qualified Data.IntMap as IntMap
 import Data.Set (Set)
 import qualified Data.Set as Set
 
-import System.Random
 import System.IO.Unsafe (unsafePerformIO)
+import System.Random.MWC
 
 import Text.Printf
 import qualified Debug.Trace as DT
@@ -81,7 +81,7 @@ data Sched = Sched
       no       :: {-# UNPACK #-} !Int,
       tids     :: HotVar (Set ThreadId),
       workpool :: WSDeque (Par ()),
-      rng      :: HotVar StdGen, -- Random number gen for work stealing.
+      rng      :: HotVar GenIO, -- Random number gen for work stealing.
       mortals  :: HotVar Int, -- How many threads are mortal on this capability?
 
       ---- Meta addition ----
@@ -127,7 +127,7 @@ makeOrGetSched :: StealAction -> Int -> IO Sched
 makeOrGetSched sa cap = do
   sched <- Sched cap <$> newHotVar (Set.empty)
                      <*> R.newQ
-                     <*> (newHotVar =<< newStdGen)
+                     <*> (newHotVar =<< create)
                      <*> newHotVar 0
                      <*> pure sa
   modifyHotVar globalScheds $ \scheds ->
