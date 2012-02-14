@@ -5,6 +5,7 @@
 module Remote2.Call (
          remotable,
          mkClosure,
+         mkClosure2,
          mkClosureRec,
         ) where
 
@@ -39,6 +40,25 @@ mkClosure n = do info <- reify n
                               VarI newiname _ _ _ -> varE newiname
                               _ -> error $ "Unexpected type of closure symbol for "++show n
                     _ -> error $ "No closure corresponding to "++show n
+
+
+-- RRN: Hacking this version to include a tuple of the original and the serialized closure.
+mkClosure2 :: Name -> Q Exp
+mkClosure2 n = do info <- reify n
+                  case info of
+                    orig@(VarI iname _ _ _) -> 
+                        do let newn = mkName $ show iname ++ "__closure"
+			       arg  = mkName "x"
+                           newinfo <- reify newn
+                           case newinfo of
+                              VarI newiname _ _ _ -> 
+                                  -- Eta expand to apply to both:
+				  lamE [return (VarP arg)] 
+				       (tupE [appE (varE n) (varE arg), 
+					      appE (varE newiname) (varE arg)])
+                              _ -> error $ "Unexpected type of closure symbol for "++show n
+                    _ -> error $ "No closure corresponding to "++show n
+
 
 -- | A variant of 'mkClosure' suitable for expanding closures
 -- of functions declared in the same module, including that

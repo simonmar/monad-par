@@ -44,7 +44,7 @@ import GHC.Generics (Generic)
 -- import Data.Serialize (encode,encodeLazy,decode)
 -- import Data.Serialize.Derive
 -- Cloud Haskell is in the "binary" rather than "cereal" camp presently:
-import Data.Binary (encode,decode, Binary(..))
+import Data.Binary (encode,decode, Binary)
 import Data.Binary.Derive
 import qualified Data.Binary as Bin
 
@@ -106,6 +106,8 @@ dbg = False
 
 -- | Machine-unique identifier for 'IVar's
 type IVarId = Int
+
+type ParClosure a = (Par a, Closure (Par a))
 
 -- TODO: Make this configurable:
 control_port = "8099"
@@ -446,7 +448,7 @@ makePayloadClosure (Closure name arg) =
                   True -> Just $ Closure (name++"Pl") arg
 
 
-longSpawn clo@(Closure n pld) = do
+longSpawn (local, clo@(Closure n pld)) = do
   let pclo = fromMaybe (error "Could not find Payload closure")
                      $ makePayloadClosure clo
 
@@ -463,7 +465,7 @@ longSpawn clo@(Closure n pld) = do
 
     R.pushR longQueue 
        (LongWork{ stealver= (ivarid,pclo),
-		  localver= error "Local version of longwork unimplemented"
+		  localver= do x <- local; put iv x
 		})
 
   return iv
@@ -559,7 +561,7 @@ receiveDaemon targetEnd = do
 -- runPar   :: Show a => Par a -> a
 -- runParIO :: Show a => Par a -> IO a
 longSpawn  :: (Show a, NFData a, Serializable a) 
-           => Closure (Par a) -> Par (IVar a)
+           => ParClosure a -> Par (IVar a)
 #else
 -- spawn      :: NFData a => Par a -> Par (IVar a)
 -- spawn_     :: Par a -> Par (IVar a)
@@ -574,7 +576,7 @@ longSpawn  :: (Show a, NFData a, Serializable a)
 -- wrapper around CH's remoteInit? How much flexibility should we
 -- offer with args?
 longSpawn  :: (NFData a, Serializable a) 
-           => Closure (Par a) -> Par (IVar a)
+           => ParClosure a -> Par (IVar a)
 -- newFull    :: NFData a => a -> Par (IVar a)
 -- newFull_   :: a -> Par (IVar a)
 

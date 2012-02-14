@@ -25,6 +25,7 @@ import Remote2.Encoding (Payload)
 data Closure a = Closure String Payload
      deriving (Typeable)
 
+
 instance Show (Closure a) where
      show a = case a of
                 (Closure fn _pl) -> show fn

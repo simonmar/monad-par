@@ -14,7 +14,7 @@ import Control.Monad.IO.Class
 import Remote2.Closure (Closure(..))
 import Remote2.Encoding (Payload, serialEncodePure, serialDecode, serialEncode)
 import Remote2.Reg (putReg, RemoteCallMetaData)
-import Remote2.Call()
+import Remote2.Call (mkClosure2)
 
 type FibType = Int64
 
@@ -63,11 +63,14 @@ __remoteCallMetaData x
          "Main.parfib1__0__implPl"
          (putReg parfib1__closure "Main.parfib1__closure" x))
 
+--------------------------------------------------------------------------------
+
 -- Par monad version:
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
-    xf <- longSpawn $ parfib1__closure (n-1)
+--    xf <- longSpawn $ parfib1__closure (n-1)
+    xf <- longSpawn $ $(mkClosure2 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
     return (x+y)
