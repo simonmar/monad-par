@@ -13,6 +13,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.List (lookup)
 import Control.Monad (liftM)
+import Control.Monad.Par.Meta.HotVar.IORef
 
 import GHC.Conc
 
@@ -34,7 +35,18 @@ sa = RemoteRsrc.stealAction
 --runPar   = runMetaPar   ia sa
 runParDist = runMetaParIO ia sa
 
-runParSlave = RemoteRsrc.initAction RemoteRsrc.Slave (error "no sched map for initializing slave")
+runParSlave = do
+  RemoteRsrc.taggedMsg "runParSlave invoked."
+  schedmap <- readHotVar globalScheds
+  RemoteRsrc.initAction RemoteRsrc.Slave globalScheds
+  tid      <- myThreadId
+  (cap, _) <- threadCapability tid
+--  mysched  <- getSchedForCap cap
+  mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
 
+  RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
+  let schedloop = do RemoteRsrc.stealAction mysched globalScheds
+		     schedloop
+  schedloop
 
 -- [RemoteCallMetaData]

@@ -144,6 +144,7 @@ longQueue = unsafePerformIO $ R.newQ
 -- Each peer is either connected, or not connected yet.
 type PeerName = String
 peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
+-- peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
 -- peerTable = unsafePerformIO $ newHotVar V.empty
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
 
@@ -186,11 +187,16 @@ sendTo ndid msg = do
   let (_,Just target) = table V.! ndid
   T.send target [msg]
 
-taggedMsg s = putStrLn$ " [distmeta] "++s
+-- Just for debugging, tracking global node as M (master) or S (slave):
+global_mode = unsafePerformIO$ newIORef "M"
+taggedMsg s = do m <- readIORef global_mode
+		 putStrLn$ " [distmeta"++m++"] "++s
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay msg = threadDelay (200*1000)
 
+initPeerTable machineList = 
+     writeHotVar peerTable (V.replicate (length machineList) (error "Peer table entry uninitialized"))
 
 -- --------------------------------------------------------------------------------
 -- Initialize & Establish workers.
@@ -282,7 +288,6 @@ instance Binary ControlMessage where
 
 ------------------------------------------------------------------------------------------
 
-
 initAction :: InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
@@ -291,7 +296,7 @@ initAction (Master machineList) schedMap =
      taggedMsg$ "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
-     writeHotVar peerTable (V.replicate (length machineList) (error "Peer table uninitialized"))
+     initPeerTable machineList
 
      -- Initialize the transport layer:
      host <- hostName
@@ -358,6 +363,8 @@ initAction (Master machineList) schedMap =
 initAction Slave schedMap = 
   do 
      name <- hostName 
+     writeIORef global_mode "S"
+
      let namebs = BS.pack name
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints name work_port
      (mySourceAddr, fromMaster) <- T.newConnection transport
@@ -381,6 +388,7 @@ initAction Slave schedMap =
                  taggedMsg$ "Sent name and addr to master "
 	         machines <- T.receive fromMaster
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
+		 initPeerTable machines
 	         
 	         let id = nameToID namebs machines
 		 writeIORef myNodeID id
@@ -390,8 +398,12 @@ initAction Slave schedMap =
             else do threadDelay (10*1000)
 		    masterloop 
      masterloop
+
      forkIO$ receiveDaemon fromMaster
      taggedMsg$ "Slave initAction returning control to scheduler..."
+
+--     taggedMsg$ "Slave initAction jumping directly into receiveDaemon loop..."
+--     receiveDaemon fromMaster
      return ()
 
 
@@ -432,10 +444,13 @@ stealAction Sched{no} _ = do
      pt <- readHotVar peerTable
      let ind = n `mod` V.length pt
 
-     taggedMsg$ "Attempting steal from Node ID "++show ind
-     let it = pt V.! ind
+     myid <- readHotVar myNodeID
 
+     taggedMsg$ "Attempting steal from Node ID "++show ind
+     let (_,Just conn) = pt V.! ind
+	 msg = StealRequest myid
   -- stealAction _ _ = R.tryPopR resultQueue
+     T.send conn [encode msg]
 
      dbgDelay "stealAction"
      return Nothing
@@ -507,14 +522,20 @@ receiveDaemon targetEnd = do
 
   bss <- T.receive targetEnd
   taggedMsg$ "Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
-  let (StealRequest ndid) = decode (BS.concat bss)
-  taggedMsg$ "Received StealRequest from: "++ show ndid
-  p <- R.tryPopL longQueue
-  case p of 
-    Nothing -> return ()
-    Just (LongWork{stealver}) -> do 
-      taggedMsg$ "  Had longwork to perform, responding with StealResponse..."
-      sendTo ndid (encode$ StealResponse stealver)
+
+  case decode (BS.concat bss) of 
+    (StealRequest ndid) -> do
+      taggedMsg$ "Received StealRequest from: "++ show ndid
+      p <- R.tryPopL longQueue
+      case p of 
+	Nothing -> return ()
+	Just (LongWork{stealver}) -> do 
+	  taggedMsg$ "  Had longwork to perform, responding with StealResponse..."
+	  sendTo ndid (encode$ StealResponse stealver)
+
+    (StealResponse (ivar,pclo)) -> do
+      taggedMsg$ "Received Steal RESPONSE "++ show (ivar,pclo)
+      return ()
 
   receiveDaemon targetEnd
  where 
