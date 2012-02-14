@@ -62,16 +62,16 @@ newtype IVar a = IVar (HotVar (IVarContents a))
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
 type InitAction =
-    -- | Combined 'StealAction' for the current scheduler.
+    -- Combined 'StealAction' for the current scheduler.
      StealAction           
-    -- | The global structure of schedulers.
+    -- The global structure of schedulers.
   -> HotVar (IntMap Sched) 
   -> IO ()
 
 type StealAction =  
-     -- | 'Sched' for the current thread
+     -- 'Sched' for the current thread
      Sched
-     -- | Map of all 'Sched's
+     -- Map of all 'Sched's
   -> HotVar (IntMap Sched)
   -> IO (Maybe (Par ()))
 

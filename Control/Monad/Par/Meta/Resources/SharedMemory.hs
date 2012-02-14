@@ -5,7 +5,9 @@
 
 module Control.Monad.Par.Meta.Resources.SharedMemory (
     initAction
+  , initActionForCaps
   , stealAction
+  , stealActionForCaps
   ) where
 
 import Control.Concurrent
@@ -70,13 +72,13 @@ stealActionForCaps caps triesPerCap Sched { no, rng } schedsRef = do
       numTries = numCaps * triesPerCap
       -- | Main steal loop
       loop :: Int -> Int -> IO (Maybe (Par ()))
-      loop 0 _ = return Nothing      
+      loop 0 _ = return Nothing
       loop n i | caps !! i == no = loop (n-1) =<< getNext
                | otherwise =
         let target = (caps !! i) in
         case IntMap.lookup target scheds of
           Nothing -> do 
-            void $ printf "WARNING: no Sched for cap %d during steal\n" target
+            printf "WARNING: no Sched for cap %d during steal\n" target
             loop (n-1) =<< getNext
           Just Sched { workpool = stealee } -> do
             mtask <- R.tryPopR stealee
