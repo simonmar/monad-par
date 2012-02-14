@@ -7,6 +7,8 @@ module Control.Monad.Par.Meta.SharedMemoryAccelerate (
   , module Control.Monad.Par.Meta
 ) where
 
+import Control.Monad
+
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
@@ -18,7 +20,11 @@ ia :: InitAction
 ia = SharedMemory.initAction >> Accelerate.initAction
 
 sa :: StealAction
-sa = SharedMemory.stealAction tries >> Accelerate.stealAction
+sa sched schedRef = do
+  mtask <- SharedMemory.stealAction tries sched schedRef
+  case mtask of
+    jtask@(Just _) -> return jtask
+    Nothing -> Accelerate.stealAction sched schedRef
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a
