@@ -78,7 +78,8 @@ stealActionForCaps caps triesPerCap Sched { no, rng } schedsRef = do
         let target = (caps !! i) in
         case IntMap.lookup target scheds of
           Nothing -> do 
-            printf "WARNING: no Sched for cap %d during steal\n" target
+            when dbg $ 
+              printf "WARNING: no Sched for cap %d during steal\n" target
             loop (n-1) =<< getNext
           Just Sched { workpool = stealee } -> do
             mtask <- R.tryPopR stealee

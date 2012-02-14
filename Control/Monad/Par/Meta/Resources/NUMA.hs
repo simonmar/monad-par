@@ -74,6 +74,7 @@ stealAction topo triesPerNode = sa
     subSteals = map buildSteal topo
     capAssocs = [map (\cap -> (cap, sa)) caps | caps <- topo | sa <- subSteals]
     capMap = IntMap.fromList (concat capAssocs)
+    numTries = numNodes * triesPerNode
     sa :: StealAction
     sa sched@Sched { no, rng } schedsRef = do
       -- first, steal from the scheduler for this clique
@@ -85,10 +86,8 @@ stealAction topo triesPerNode = sa
           case mtask of
             jtask@(Just _) -> return jtask
             Nothing -> do
-              let numNodes = length topo
-                  getNext :: IO Int
+              let getNext :: IO Int
                   getNext = randModN numNodes rng
-                  numTries = numNodes * triesPerNode
                   -- | Main steal loop
                   loop :: Int -> Int -> IO (Maybe (Par ()))
                   loop 0 _ = return Nothing      
