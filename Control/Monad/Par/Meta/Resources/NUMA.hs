@@ -14,6 +14,7 @@ module Control.Monad.Par.Meta.Resources.NUMA (
 import Control.Monad
 
 import qualified Data.IntMap as IntMap
+import qualified Data.Vector as Vector
 
 import System.Environment
 import System.IO.Unsafe (unsafePerformIO)
@@ -56,6 +57,7 @@ topoFromEnv = unsafePerformIO $ do
   when dbg $ printf "Read NUMA_TOPOLOGY=%s\n" (show topo)
   return topo
 
+{-# INLINE randModN #-}
 randModN :: Int -> HotVar StdGen -> IO Int
 randModN n rngRef = 
   modifyHotVar rngRef $ \g ->
@@ -64,17 +66,18 @@ randModN n rngRef =
       in (g', i)
 
 -- | Given a 'SimpleTopology' and a number of steals to attempt per
--- NUMA node, return a 'StealAction'.
+-- invocation, return a 'StealAction'.
 stealAction :: SimpleTopology -> Int -> StealAction
-stealAction topo triesPerNode = sa
+stealAction topo numTries = sa
   where
     numNodes = length topo
+    triesPerNode = numTries `quot` numNodes
     buildSteal caps = 
-      SharedMemory.stealActionForCaps caps (numNodes * triesPerNode)
+      SharedMemory.stealActionForCaps caps triesPerNode
     subSteals = map buildSteal topo
     capAssocs = [map (\cap -> (cap, sa)) caps | caps <- topo | sa <- subSteals]
     capMap = IntMap.fromList (concat capAssocs)
-    numTries = numNodes * triesPerNode
+    saVec = Vector.fromList subSteals
     sa :: StealAction
     sa sched@Sched { no, rng } schedsRef = do
       -- first, steal from the scheduler for this clique
@@ -93,7 +96,7 @@ stealAction topo triesPerNode = sa
                   loop 0 _ = return Nothing      
                   loop n i = do
                     -- unlike shared memory, ok to steal from "self"
-                    mtask <- (subSteals !! i) sched schedsRef
+                    mtask <- (saVec Vector.! i) sched schedsRef
                     maybe (loop (n-1) =<< getNext) (return . return) mtask
               loop numTries =<< getNext
 

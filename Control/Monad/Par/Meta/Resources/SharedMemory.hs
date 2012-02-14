@@ -16,6 +16,7 @@ import Control.Monad
 import Data.Concurrent.Deque.Reference as R
 import qualified Data.IntMap as IntMap
 import Data.List
+import qualified Data.Vector as Vector
 
 import System.Random    
 
@@ -48,6 +49,7 @@ initActionForCaps caps sa _ = do
   forM_ (nub caps) $ \n ->
     when (n /= cap) $ void $ spawnWorkerOnCap sa n       
 
+{-# INLINE randModN #-}
 randModN :: Int -> HotVar StdGen -> IO Int
 randModN caps rngRef = 
   modifyHotVar rngRef $ \g ->
@@ -64,26 +66,31 @@ stealAction triesPerCap sched schedsRef = do
 -- | Given a set of capabilities and a number of steals to attempt per
 -- capability, return a 'StealAction'.
 stealActionForCaps :: [Int] -> Int -> StealAction
-stealActionForCaps caps triesPerCap Sched { no, rng } schedsRef = do
-  scheds <- readHotVar schedsRef
-  let numCaps = length caps
-      getNext :: IO Int
-      getNext = randModN numCaps rng
-      numTries = numCaps * triesPerCap
-      -- | Main steal loop
-      loop :: Int -> Int -> IO (Maybe (Par ()))
-      loop 0 _ = return Nothing
-      loop n i | caps !! i == no = loop (n-1) =<< getNext
-               | otherwise =
-        let target = (caps !! i) in
-        case IntMap.lookup target scheds of
-          Nothing -> do 
-            when dbg $ 
-              printf "WARNING: no Sched for cap %d during steal\n" target
-            loop (n-1) =<< getNext
-          Just Sched { workpool = stealee } -> do
-            mtask <- R.tryPopR stealee
-            case mtask of
-              Nothing -> loop (n-1) =<< getNext
-              jtask -> return jtask                        
-  loop numTries =<< getNext
+stealActionForCaps caps triesPerCap = sa
+  where 
+    numCaps = length caps
+    numTries = numCaps * triesPerCap
+    capVec = Vector.fromList caps
+    sa :: StealAction
+    sa Sched { no, rng } schedsRef = do
+      scheds <- readHotVar schedsRef
+      let {-# INLINE getNext #-}
+          getNext :: IO Int
+          getNext = randModN numCaps rng
+          -- | Main steal loop
+          loop :: Int -> Int -> IO (Maybe (Par ()))
+          loop 0 _ = return Nothing
+          loop n i | capVec Vector.! i == no = loop (n-1) =<< getNext
+                   | otherwise =
+            let target = capVec Vector.! i in
+            case IntMap.lookup target scheds of
+              Nothing -> do 
+                when dbg $ 
+                  printf "WARNING: no Sched for cap %d during steal\n" target
+                loop (n-1) =<< getNext
+              Just Sched { workpool = stealee } -> do
+                mtask <- R.tryPopR stealee
+                case mtask of
+                  Nothing -> loop (n-1) =<< getNext
+                  jtask -> return jtask                        
+      loop numTries =<< getNext
