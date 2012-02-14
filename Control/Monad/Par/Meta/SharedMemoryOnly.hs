@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wall #-}
+
 module Control.Monad.Par.Meta.SharedMemoryOnly (
     runPar
   , runParIO
@@ -7,13 +9,16 @@ module Control.Monad.Par.Meta.SharedMemoryOnly (
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
 
-import GHC.Conc
-
+tries :: Int
 tries = 20
-caps  = numCapabilities
 
-ia = SharedMemory.initAction tries
-sa = SharedMemory.stealAction caps tries
+ia :: InitAction
+ia = SharedMemory.initAction
 
+sa :: StealAction
+sa = SharedMemory.stealAction tries
+
+runPar   :: Par a -> a
+runParIO :: Par a -> IO a
 runPar   = runMetaPar   ia sa
 runParIO = runMetaParIO ia sa

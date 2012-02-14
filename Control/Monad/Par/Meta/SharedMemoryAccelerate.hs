@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wall #-}
+
 module Control.Monad.Par.Meta.SharedMemoryAccelerate (
     runPar
   , runParIO
@@ -9,13 +11,16 @@ import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
 
-import GHC.Conc
-
+tries :: Int
 tries = 20
-caps  = numCapabilities
 
-ia = SharedMemory.initAction tries >> Accelerate.initAction
-sa = SharedMemory.stealAction caps tries >> Accelerate.stealAction
+ia :: InitAction
+ia = SharedMemory.initAction >> Accelerate.initAction
 
+sa :: StealAction
+sa = SharedMemory.stealAction tries >> Accelerate.stealAction
+
+runPar   :: Par a -> a
+runParIO :: Par a -> IO a
 runPar   = runMetaPar   ia sa
 runParIO = runMetaParIO ia sa

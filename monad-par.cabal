@@ -52,7 +52,6 @@ Cabal-version:       >=1.8
 
 extra-source-files:
      examples/benchlist.txt
-     examples/benchmark.sh
      examples/blackscholes_data.hs
      examples/blackscholes.hs
      examples/cholesky.hs
