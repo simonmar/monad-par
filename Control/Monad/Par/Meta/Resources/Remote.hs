@@ -56,8 +56,11 @@ import qualified Data.Binary as Bin
 -- $( derive makeBinary ''WorkMessage )
 
 
-import Remote2.Closure
-import Remote2.Encoding (Payload, Serializable, serialDecode)
+import Remote2.Closure 
+import Remote2.Encoding (Payload, Serializable, serialDecode, getPayloadContent)
+-- import qualified Remote2.Reg (RemoteCallMetaData, getEntryByIdent, registerCalls)
+import qualified Remote2.Reg as Reg
+
 -- import qualified Remote.Process as P 
 import System.IO (hPutStr, hFlush, stdout)
 import System.IO.Unsafe (unsafePerformIO)
@@ -163,6 +166,11 @@ myTransport = unsafePerformIO$ newIORef (error "global myTransport uninitialized
 myNodeID :: HotVar Int
 myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 
+{-# NOINLINE globalRPCMetadata #-}
+globalRPCMetadata :: IORef Reg.Lookup
+globalRPCMetadata = unsafePerformIO$ newIORef (error "uninitialized 'globalRPCMetadata'")
+
+
 -- {-# NOINLINE resultQueue #-}
 -- | Result queue is pushed to by the GPU daemon, and popped by the
 -- 'Par' workers, meaning the 'WSDeque' is appropriate.
@@ -216,6 +224,25 @@ atomicWriteFile file contents = do
    BS.writeFile tmpfile contents
    renameFile tmpfile file
 
+
+-- | This assumes a "Payload closure" as produced by makePayloadClosure below.
+deClosure :: Closure Payload -> IO (Par ())
+-- deClosure :: (Typeable a) => Closure a -> IO (Maybe a)
+deClosure pclo@(Closure ident payload) = do 
+  Just (arg :: Payload) <- serialDecode payload
+  lkp <- readIORef globalRPCMetadata
+  case Reg.getEntryByIdent lkp ident of 
+    Nothing -> fail$ "deClosure: failed to deserialize closure identifier: "++show ident
+    Just fn -> return (fn arg)
+
+-- TEMP FIXME: INLINING THIS HERE:
+makePayloadClosure :: Closure a -> Maybe (Closure Payload)
+makePayloadClosure (Closure name arg) = 
+                case isSuffixOf "__impl" name of
+                  False -> Nothing
+                  True -> Just $ Closure (name++"Pl") arg
+
+    
 -- --------------------------------------------------------------------------------
 -- Initialize & Establish workers.
 --
@@ -357,12 +384,15 @@ instance Binary ControlMessage where
 
 ------------------------------------------------------------------------------------------
 
-initAction :: InitMode -> InitAction
+initAction :: [Reg.RemoteCallMetaData] -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction (Master machineList) schedMap = 
+initAction metadata (Master machineList) schedMap = 
   do 
      taggedMsg$ "Initializing master..."
+
+     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
+     taggedMsg "RPC metadata initialized."
 
      -- Initialize the peerTable now that we know how many nodes there are:
      initPeerTable machineList
@@ -440,10 +470,13 @@ initAction (Master machineList) schedMap =
      return ()
 
 
-initAction Slave schedMap = 
+initAction metadata Slave schedMap = 
   do 
      name <- hostName 
      writeIORef global_mode "S"
+
+     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
+     taggedMsg "RPC metadata initialized."
 
      let namebs = BS.pack name
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints name work_port
@@ -543,12 +576,6 @@ stealAction Sched{no} _ = do
      -- We have nothing to return immediately, but hopefully work will come back later.
      return Nothing
 
--- TEMP FIXME: INLINING THIS HERE:
-makePayloadClosure :: Closure a -> Maybe (Closure Payload)
-makePayloadClosure (Closure name arg) = 
-                case isSuffixOf "__impl" name of
-                  False -> Nothing
-                  True -> Just $ Closure (name++"Pl") arg
 
 
 longSpawn (local, clo@(Closure n pld)) = do
@@ -624,8 +651,9 @@ receiveDaemon targetEnd = do
     (StealResponse pr@(ivar,pclo)) -> do
       taggedMsg$ "Received Steal RESPONSE "++ show (ivar,pclo)
 
+      loc <- deClosure pclo
       R.pushL longQueue (LongWork { stealver = pr, 
-				    localver = error "FINISH ME, LOCALVER"
+				    localver = loc
 				  })
 
       return ()

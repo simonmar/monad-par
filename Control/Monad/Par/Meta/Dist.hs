@@ -15,12 +15,14 @@ import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 
+import Remote2.Reg (registerCalls)
+
 import GHC.Conc
 
 -- tries = 20
 -- caps  = numCapabilities
 
-ia scheds = 
+ia metadata scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -29,25 +31,42 @@ ia scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        RemoteRsrc.initAction (RemoteRsrc.Master$ map BS.pack ml) scheds
+        RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) scheds
 sa = RemoteRsrc.stealAction 
 
 --runPar   = runMetaPar   ia sa
-runParDist = runMetaParIO ia sa
+runParDist metadata = runMetaParIO (ia metadata) sa
 
-runParSlave = do
+-- When global initialization has already happened:
+-- runParDistNested = runMetaParIO (ia Nothing) sa
+
+runParSlave metadata = do
   RemoteRsrc.taggedMsg "runParSlave invoked."
-  schedmap <- readHotVar globalScheds
-  RemoteRsrc.initAction RemoteRsrc.Slave globalScheds
-  tid      <- myThreadId
-  (cap, _) <- threadCapability tid
---  mysched  <- getSchedForCap cap
-  mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
+--  registerCalls metadata
+--  RemoteRsrc.taggedMsg "RPC metadata initialized."
 
-  RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
-  let schedloop = do work <- RemoteRsrc.stealAction mysched globalScheds
+  -- We run a par computation that will not terminate to get the
+  -- system up, running, and work-stealing:
+  runMetaParIO (RemoteRsrc.initAction metadata RemoteRsrc.Slave)
+	       RemoteRsrc.stealAction
+	       (new >>= get)
+
+  fail "RETURNED FROM RUNMETAPARIO - THIS SHOULD NOT HAPPEN"
+
+--   schedmap <- readHotVar globalScheds
+--   RemoteRsrc.initAction RemoteRsrc.Slave globalScheds
+--   tid      <- myThreadId
+--   (cap, _) <- threadCapability tid
+-- --  mysched  <- getSchedForCap cap
+--   mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
+
+--   RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
+--   let schedloop = do work <- RemoteRsrc.stealAction mysched globalScheds
 		     
-		     schedloop
-  schedloop
+-- 		     schedloop
+--   schedloop
 
--- [RemoteCallMetaData]
+
+          -- defaultMetaData = [Remote.Task.__remoteCallMetaData]
+          -- lookup = registerCalls (defaultMetaData ++ metadata)
+
