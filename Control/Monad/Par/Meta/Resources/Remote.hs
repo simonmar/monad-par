@@ -429,7 +429,7 @@ instance Binary ControlMessage where
 initAction :: [Reg.RemoteCallMetaData] -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction metadata (Master machineList) schedMap = 
+initAction metadata (Master machineList) topStealAction schedMap = 
   do 
      taggedMsg$ "Initializing master..."
 
@@ -514,7 +514,7 @@ initAction metadata (Master machineList) schedMap =
      taggedMsg$ "Master initAction returning control to scheduler..."
      return ()
 
-initAction metadata Slave schedMap = 
+initAction metadata Slave topStealAction schedMap = 
   do 
      host <- BS.pack <$> commonInit metadata work_port
      writeIORef global_mode "_S"

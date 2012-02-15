@@ -22,7 +22,7 @@ import GHC.Conc
 -- tries = 20
 -- caps  = numCapabilities
 
-ia metadata scheds = 
+ia metadata sa scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -31,7 +31,8 @@ ia metadata scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) scheds
+        RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) sa scheds
+sa :: StealAction
 sa = RemoteRsrc.stealAction 
 
 --runPar   = runMetaPar   ia sa
