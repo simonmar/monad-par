@@ -45,3 +45,5 @@ main = do
 		       putStrLn "Using non-thresholded version:"
 		       ans <- (runParDist (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
+        str -> error$"Unhandled mode: " ++ str
+

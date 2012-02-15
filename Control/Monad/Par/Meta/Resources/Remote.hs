@@ -28,6 +28,7 @@ import Control.Monad.Par.Meta.HotVar.IORef
 import Data.Unique (hashUnique, newUnique)
 import Data.Typeable (Typeable)
 import Data.IORef
+import Data.Int
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
 --import qualified Data.ByteString.Lazy       as BS
@@ -58,9 +59,10 @@ import qualified Data.Binary as Bin
 import Remote2.Closure
 import Remote2.Encoding (Payload, Serializable, serialDecode)
 -- import qualified Remote.Process as P 
+import System.IO (hPutStr, hFlush, stdout)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process (readProcess)
-import System.Directory (removeFile, doesFileExist)
+import System.Directory (removeFile, doesFileExist, renameFile)
 
 import System.Random (randomIO)
 
@@ -112,9 +114,9 @@ type ParClosure a = (Par a, Closure (Par a))
 -- TODO: Make this configurable:
 control_port = "8099"
 work_port    = "8098"
-master_addr_file = mkAddrFile "master_control"
+master_addr_file = mkAddrFile (BS.pack "master_control")
 
-mkAddrFile machine = "./" ++ machine  ++ "_source.addr" 
+mkAddrFile machine = "./" ++ BS.unpack machine  ++ "_source.addr" 
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -142,11 +144,20 @@ longQueue = unsafePerformIO $ R.newQ
 
 {-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
-type PeerName = String
-peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
--- peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
+type PeerName = BS.ByteString
+-- peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
+peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
 -- peerTable = unsafePerformIO $ newHotVar V.empty
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
+
+
+{-# NOINLINE machineList #-}
+machineList :: IORef [BS.ByteString]
+machineList = unsafePerformIO$ newIORef (error "global machineList uninitialized")
+
+{-# NOINLINE myTransport #-}
+myTransport :: IORef T.Transport
+myTransport = unsafePerformIO$ newIORef (error "global myTransport uninitialized")
 
 {-# NOINLINE myNodeID #-}
 myNodeID :: HotVar Int
@@ -164,6 +175,7 @@ myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 nameToID :: BS.ByteString -> [BS.ByteString] -> Int
 nameToID bs1 bsls = 
   case findIndex (\ bs2 -> bs1 == bs2 
+		  -- Hack: handle foo instead of foo.domain.com:
 	           || basename bs1 == basename bs2) bsls
   of Nothing -> error$ "nameToID: host not included in machine list: "++BS.unpack bs1
      Just x  -> x
@@ -184,7 +196,7 @@ hostName = trim <$>
 sendTo :: NodeID -> BS.ByteString -> IO ()
 sendTo ndid msg = do
   table <- readHotVar peerTable
-  let (_,Just target) = table V.! ndid
+  let (Just (_,target)) = table V.! ndid
   T.send target [msg]
 
 -- Just for debugging, tracking global node as M (master) or S (slave):
@@ -195,8 +207,14 @@ taggedMsg s = do m <- readIORef global_mode
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay msg = threadDelay (200*1000)
 
-initPeerTable machineList = 
-     writeHotVar peerTable (V.replicate (length machineList) (error "Peer table entry uninitialized"))
+
+-- | We don't want anyone to try to use a file that isn't completely written.
+--   Note, this needs further thought for use with NFS...
+atomicWriteFile file contents = do 
+   rand :: Int64 <- randomIO
+   let tmpfile = "./tmpfile_"++show rand
+   BS.writeFile tmpfile contents
+   renameFile tmpfile file
 
 -- --------------------------------------------------------------------------------
 -- Initialize & Establish workers.
@@ -208,6 +226,57 @@ initPeerTable machineList =
 
 -- (However, these connections may or may not actually be connected.
 -- Lazy connection is permissable.)
+
+-- Initialize global state.
+initPeerTable ms = do
+     writeIORef  machineList ms
+     taggedMsg$ "PeerTable:"
+     forM_ (zip [0..] ms) $ \ (i,m) -> 
+        putStrLn$ "  "++show i++": "++ BS.unpack m
+     writeHotVar peerTable (V.replicate (length ms) Nothing)
+
+
+-- | Connect to a node if there is not already a connection.  Return
+--   the name and active connection.
+connectNode ind = do
+  pt <- readHotVar peerTable
+  let entry = pt V.! ind
+  case entry of 
+    Just x  -> return x
+    Nothing -> do 
+      ml <- readIORef machineList
+      let name  = ml !! ind
+          file = mkAddrFile name
+
+      toPeer <- waitReadAndConnect ind file
+      let entry = (name, toPeer)
+      modifyHotVar_ peerTable (\pt -> pt V.// [(ind,Just entry)])
+      return entry
+
+-- | Wait until a file appears, read an addr from it, and connect.
+waitReadAndConnect ind file = do 
+      taggedMsg$ "Establishing connection to node by reading file: "++file
+      transport <- readIORef myTransport
+--      ml        <- readIORef machineList
+      let 
+--          name  = ml !! ind
+          loop bool = do
+	  b <- doesFileExist file 
+	  if b then BS.readFile file
+	   else do if bool then 
+                      taggedMsg$ "  File does not exist yet...."
+		    else do 
+                      hPutStr stdout "."
+                      hFlush stdout
+		   threadDelay (10*1000)
+		   loop False
+      bstr <- loop True
+      addr <- case T.deserialize transport bstr of 
+ 	        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
+		Just a  -> return a
+      conn <- T.connect addr
+      taggedMsg$ "  ... Connected."
+      return conn
 
 
 
@@ -301,16 +370,25 @@ initAction (Master machineList) schedMap =
      -- Initialize the transport layer:
      host <- hostName
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
+     writeIORef myTransport transport
+        
+     let allButMe = if (elem (BS.pack host) machineList) 
+		    then delete (BS.pack host) machineList
+		    else error$ "Could not find master domain name "++host++
+			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
 
      (sourceAddr, targetEnd) <- T.newConnection transport
      -- Clear files storing slave addresses:
      forM_ machineList $ \ machine -> do
-        let file = mkAddrFile (BS.unpack machine)
+        let file = mkAddrFile machine
         b <- doesFileExist file
         when b $ removeFile file
 
      -- Write a file with our address enabling slaves to find us:
-     BS.writeFile master_addr_file $ T.serialize sourceAddr
+     atomicWriteFile master_addr_file $ T.serialize sourceAddr
+     -- We are also a worker, so we write the file under our own name as well:
+     atomicWriteFile (mkAddrFile$ BS.pack host) $ T.serialize sourceAddr
+
 
      -- Connection Listening Loop:
      ----------------------------------------
@@ -330,19 +408,21 @@ initAction (Master machineList) schedMap =
 	    Just sourceAddr -> do 
               srcEnd <- T.connect sourceAddr
               -- Convention: send slaves the machine list:
-              T.send srcEnd machineList
+              T.send srcEnd [encode machineList]
 
               taggedMsg$ "Sent machine list to slave: "++ unwords (map BS.unpack machineList)
 
               -- Write the file to communicate that the machine is
               -- online and set up a way to contact it:
-              let filename = mkAddrFile (BS.unpack name)
+              let filename = mkAddrFile name
 		  id = nameToID name machineList
-              BS.writeFile filename toAddr
+
+              writeIORef myNodeID id
+              atomicWriteFile filename toAddr
 	      taggedMsg$ "  Wrote file to signify slave online: " ++ filename
 
               -- Keep track of the connection for future communications:
-	      let entry = (BS.unpack name, Just srcEnd)
+	      let entry = Just (name, srcEnd)
 --              modifyHotVar_ peerTable (\ pt -> V.cons entry pt)
 	      taggedMsg$ "  Extending peerTable with node ID "++ show id
               modifyHotVar_ peerTable (\ pt -> V.modify (\v -> MV.write v id entry) pt)
@@ -352,7 +432,7 @@ initAction (Master machineList) schedMap =
 --     forkIO slaveConnectLoop
 --     slaveConnectLoop (-1)  -- Loop forever
      taggedMsg$ "  ... waiting for slaves to connect."
-     slaveConnectLoop (length machineList)
+     slaveConnectLoop (length allButMe)
      taggedMsg$ "  All slaves connected!  Launching receiveDaemon..."
      forkIO$ receiveDaemon targetEnd
 
@@ -367,6 +447,8 @@ initAction Slave schedMap =
 
      let namebs = BS.pack name
      transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints name work_port
+     writeIORef myTransport transport
+
      (mySourceAddr, fromMaster) <- T.newConnection transport
 
      taggedMsg$ "Init slave, source addr = " ++ BS.unpack (T.serialize mySourceAddr)
@@ -386,7 +468,8 @@ initAction Slave schedMap =
 		 T.send toMaster [encode$ AnnounceSlave namebs (T.serialize mySourceAddr)]
 
                  taggedMsg$ "Sent name and addr to master "
-	         machines <- T.receive fromMaster
+	         _machines_bss <- T.receive fromMaster
+                 let machines = decode (BS.concat _machines_bss)
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 	         
@@ -439,20 +522,25 @@ stealAction Sched{no} _ = do
       return (Just localver)
     Nothing -> raidPeer
  where 
+  pickVictim myid = do
+     pt   <- readHotVar peerTable
+     let len = V.length pt
+         loop = do 
+	   n :: Int <- randomIO 
+	   let ind = n `mod` len
+	   if ind == myid 
+	    then pickVictim myid
+	    else return ind
+     loop 
+
   raidPeer = do
-     n :: Int <- randomIO 
-     pt <- readHotVar peerTable
-     let ind = n `mod` V.length pt
-
      myid <- readHotVar myNodeID
-
+     ind  <- pickVictim myid
      taggedMsg$ "Attempting steal from Node ID "++show ind
-     let (_,Just conn) = pt V.! ind
-	 msg = StealRequest myid
-  -- stealAction _ _ = R.tryPopR resultQueue
-     T.send conn [encode msg]
-
+     (_,conn) <- connectNode ind 
+     T.send conn [encode$ StealRequest myid]
      dbgDelay "stealAction"
+     -- We have nothing to return immediately, but hopefully work will come back later.
      return Nothing
 
 -- TEMP FIXME: INLINING THIS HERE:
@@ -533,8 +621,13 @@ receiveDaemon targetEnd = do
 	  taggedMsg$ "  Had longwork to perform, responding with StealResponse..."
 	  sendTo ndid (encode$ StealResponse stealver)
 
-    (StealResponse (ivar,pclo)) -> do
+    (StealResponse pr@(ivar,pclo)) -> do
       taggedMsg$ "Received Steal RESPONSE "++ show (ivar,pclo)
+
+      R.pushL longQueue (LongWork { stealver = pr, 
+				    localver = error "FINISH ME, LOCALVER"
+				  })
+
       return ()
 
   receiveDaemon targetEnd

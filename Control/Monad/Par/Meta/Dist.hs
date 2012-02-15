@@ -45,7 +45,8 @@ runParSlave = do
   mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
 
   RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
-  let schedloop = do RemoteRsrc.stealAction mysched globalScheds
+  let schedloop = do work <- RemoteRsrc.stealAction mysched globalScheds
+		     
 		     schedloop
   schedloop
 
