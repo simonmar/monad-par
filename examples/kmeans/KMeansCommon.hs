@@ -5,15 +5,14 @@ import Data.List (foldl')
 import Data.Typeable (Typeable)
 import Data.Data (Data)
 import qualified Data.ByteString.Char8 as B
-import Data.Binary
 import Control.DeepSeq
 
 data Vector = Vector {-#UNPACK#-}!Double {-#UNPACK#-}!Double deriving (Show,Read,Typeable,Data,Eq)
 
-instance Binary Vector where put (Vector a b) = put a>>put b
-                             get = do a<-get
-                                      b<-get
-                                      return $ Vector a b
+-- instance Binary Vector where put (Vector a b) = put a>>put b
+--                              get = do a<-get
+--                                       b<-get
+--                                       return $ Vector a b
 
 data Cluster = Cluster
                {
