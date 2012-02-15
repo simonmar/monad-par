@@ -52,7 +52,6 @@ Cabal-version:       >=1.8
 
 extra-source-files:
      examples/benchlist.txt
-     examples/benchmark.sh
      examples/blackscholes_data.hs
      examples/blackscholes.hs
      examples/cholesky.hs
@@ -127,6 +126,8 @@ Library
                  , Control.Monad.Par.Meta
                  , Control.Monad.Par.Meta.SharedMemoryOnly
                  , Control.Monad.Par.Meta.Resources.SharedMemory
+                 , Control.Monad.Par.Meta.SharedMemoryAccelerate
+                 , Control.Monad.Par.Meta.Resources.Accelerate
 
 
   Build-depends: base >= 4 && < 5
@@ -140,14 +141,15 @@ Library
                , split >= 0.1.2.3
                , carray >= 0.1.5
                , array >= 0.3
-               , random >= 1.0.0
+               , random >= 1.0.0.0
+               , mwc-random >= 0.11
                , transformers >= 0.2.2.0
                , vector
                , containers
                , mtl >= 2.0.1.0
                , parallel >= 3.1
                , abstract-deque >= 0.1.4
-               , accelerate >= 0.10.0
+               , accelerate >= 0.9.0.1
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required

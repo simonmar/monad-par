@@ -1,24 +1,24 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
 
 module Control.Monad.Par.Meta.Resources.SharedMemory (
     initAction
+  , initActionForCaps
   , stealAction
+  , stealActionForCaps
   ) where
 
 import Control.Concurrent
 import Control.Monad
 
 import Data.Concurrent.Deque.Reference as R
-
--- import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.List
+import qualified Data.Vector as Vector
 
--- import GHC.Conc
-
-import System.Random    
+import System.Random.MWC
 
 import Text.Printf
 
@@ -32,44 +32,61 @@ dbg = True
 dbg = False
 #endif
 
--- | 'Int' argument controls the number of steal attemps to make per
--- capability on a given execution of the 'StealAction'.
-initAction :: Int -> InitAction
-initAction triesPerCap _ = do
-  when dbg $ printf "spawning worker threads for shared memory\n"
+-- | 'InitAction' for spawning threads on all capabilities.
+initAction :: InitAction
+initAction sa _m = do
   caps <- getNumCapabilities
+  initActionForCaps [0..caps-1] sa _m
+  
+-- | 'InitAction' for spawning threads only on a particular set of
+-- capabilities.
+initActionForCaps :: [Int] -> InitAction
+initActionForCaps caps sa _ = do
+  when dbg $ do
+    printf "spawning worker threads for shared memory on caps:\n"
+    printf "\t%s\n" (show caps)
   (cap, _) <- threadCapability =<< myThreadId
-  forM_ [0..caps-1] $ \n ->
-    when (n /= cap) $ void $ spawnWorkerOnCap (stealAction caps triesPerCap) n
+  forM_ (nub caps) $ \n ->
+    when (n /= cap) $ void $ spawnWorkerOnCap sa n       
 
-randModN :: Int -> HotVar StdGen -> IO Int
-randModN caps rngRef = 
-  modifyHotVar rngRef $ \g ->
-      let (n, g') = next g
-          i = n `mod` caps
-      in (g', i)
+{-# INLINE randModN #-}
+randModN :: Int -> HotVar GenIO -> IO Int
+randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 
--- | Given the number of capabilities at initialization and a number
--- of steals to attempt per capability, return a 'StealAction'.
-stealAction :: Int -> Int -> StealAction
-stealAction caps triesPerCap Sched { no, rng } schedsRef = do
-  scheds <- readHotVar schedsRef
-  let getNext :: IO Int
-      getNext = randModN caps rng
-      numTries = caps * triesPerCap
-      -- | Main steal loop
-      loop :: Int -> Int -> IO (Maybe (Par ()))
-      loop 0 _ = return Nothing      
-      loop n i | i == no   = loop (n-1) =<< getNext
-               | otherwise = 
-        case IntMap.lookup i scheds of
-          Nothing -> do 
-            void $ printf "WARNING: no Sched for cap %d during steal\n" i
-            loop (n-1) =<< getNext
-          Just Sched { workpool = stealee } -> do
-            mtask <- R.tryPopR stealee
-            case mtask of
-              Nothing -> loop (n-1) =<< getNext
-              jtask -> return jtask
-                        
-  loop numTries =<< getNext
+-- | 'StealAction' for all capabilities.
+stealAction :: Int -> StealAction
+stealAction triesPerCap sched schedsRef = do
+  caps <- getNumCapabilities
+  stealActionForCaps [0..caps-1] triesPerCap sched schedsRef
+
+-- | Given a set of capabilities and a number of steals to attempt per
+-- capability, return a 'StealAction'.
+stealActionForCaps :: [Int] -> Int -> StealAction
+stealActionForCaps caps triesPerCap = sa
+  where 
+    numCaps = length caps
+    numTries = numCaps * triesPerCap
+    capVec = Vector.fromList caps
+    sa :: StealAction
+    sa Sched { no, rng } schedsRef = do
+      scheds <- readHotVar schedsRef
+      let {-# INLINE getNext #-}
+          getNext :: IO Int
+          getNext = randModN numCaps rng
+          -- | Main steal loop
+          loop :: Int -> Int -> IO (Maybe (Par ()))
+          loop 0 _ = return Nothing
+          loop n i | capVec Vector.! i == no = loop (n-1) =<< getNext
+                   | otherwise =
+            let target = capVec Vector.! i in
+            case IntMap.lookup target scheds of
+              Nothing -> do 
+                when dbg $ 
+                  printf "WARNING: no Sched for cap %d during steal\n" target
+                loop (n-1) =<< getNext
+              Just Sched { workpool = stealee } -> do
+                mtask <- R.tryPopR stealee
+                case mtask of
+                  Nothing -> loop (n-1) =<< getNext
+                  jtask -> return jtask                        
+      loop numTries =<< getNext

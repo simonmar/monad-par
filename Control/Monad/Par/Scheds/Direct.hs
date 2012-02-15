@@ -37,7 +37,7 @@ import qualified "mtl" Control.Monad.Reader as RD
 -- import qualified Data.Array as A
 -- import qualified Data.Vector as A
 import qualified Data.Sequence as Seq
-import System.Random as Random
+import System.Random.MWC as Random
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName
 import qualified Control.Monad.Par.Class  as PC
@@ -103,7 +103,7 @@ data Sched = Sched
 #else
       workpool :: WSDeque (Par ()),
 #endif
-      rng      :: HotVar StdGen, -- Random number gen for work stealing.
+      rng      :: HotVar GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
       ---- Global data: ----
@@ -242,14 +242,8 @@ tryWakeIdle idle = do
                              (i:is) -> (is, putMVar i False))
     r -- wake an idle worker up by putting an MVar.
 
-rand :: HotVar StdGen -> IO Int
-rand ref = 
- do g <- readHotVar ref
-    let (n,g') = next g
-	i = n `mod` numCapabilities
-    writeHotVar ref g'
-    return i
-
+rand :: HotVar GenIO -> IO Int
+rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 
 --------------------------------------------------------------------------------
 -- Running computations in the Par monad
@@ -322,7 +316,7 @@ sanityCheck allscheds = do
 -- Create the default scheduler(s) state:
 makeScheds main = do
    workpools <- replicateM numCapabilities $ R.newQ
-   rngs      <- replicateM numCapabilities $ newStdGen >>= newHotVar 
+   rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle <- newHotVar []   
    killflag <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),

@@ -35,8 +35,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 
-import System.Random
 import System.IO.Unsafe (unsafePerformIO)
+import System.Random.MWC
 
 import Text.Printf
 import qualified Debug.Trace as DT
@@ -63,10 +63,19 @@ newtype IVar a = IVar (HotVar (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
-type InitAction  = HotVar (IntMap Sched) -> IO ()
-type StealAction =  Sched                 -- ^ 'Sched' for the current thread
-                 -> HotVar (IntMap Sched) -- ^ Map of all 'Sched's
-                 -> IO (Maybe (Par ()))
+type InitAction =
+    -- Combined 'StealAction' for the current scheduler.
+     StealAction           
+    -- The global structure of schedulers.
+  -> HotVar (IntMap Sched) 
+  -> IO ()
+
+type StealAction =  
+     -- 'Sched' for the current thread
+     Sched
+     -- Map of all 'Sched's
+  -> HotVar (IntMap Sched)
+  -> IO (Maybe (Par ()))
 
 data Sched = Sched 
     { 
@@ -74,7 +83,7 @@ data Sched = Sched
       no       :: {-# UNPACK #-} !Int,
       tids     :: HotVar (Set ThreadId),
       workpool :: WSDeque (Par ()),
-      rng      :: HotVar StdGen, -- Random number gen for work stealing.
+      rng      :: HotVar GenIO, -- Random number gen for work stealing.
       mortals  :: HotVar Int, -- How many threads are mortal on this capability?
 
       ---- Meta addition ----
@@ -120,7 +129,7 @@ makeOrGetSched :: StealAction -> Int -> IO Sched
 makeOrGetSched sa cap = do
   sched <- Sched cap <$> newHotVar (Set.empty)
                      <*> R.newQ
-                     <*> (newHotVar =<< newStdGen)
+                     <*> (newHotVar =<< create)
                      <*> newHotVar 0
                      <*> pure sa
   modifyHotVar globalScheds $ \scheds ->
@@ -248,7 +257,7 @@ runMetaParIO ia sa work = do
   -- determine whether this is a nested call
   isNested <- Set.member tid <$> readHotVar tids
   -- if it's not, we need to run the init action
-  unless isNested (ia globalScheds)
+  unless isNested (ia sa globalScheds)
   -- if it is, we need to spawn a replacement worker while we wait on ansMVar
   -- FIXME: need a barrier before par work starts, for init methods to finish
   when True (void $ spawnWorkerOnCap sa cap)
