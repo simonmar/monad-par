@@ -23,6 +23,7 @@ type FibType = Int64
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
+    liftIO $ putStrLn $ " PARFIB "++show n
     xf <- longSpawn $ $(mkClosureRec2 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
@@ -40,10 +41,10 @@ main = do
             [v,n,c] -> (v, read n, read c)
 
     case version of 
-        "slave" -> runParSlave
+        "slave" -> runParSlave [__remoteCallMetaData]
         "master" -> do 
 		       putStrLn "Using non-thresholded version:"
-		       ans <- (runParDist (parfib1 size) :: IO FibType)
+		       ans <- (runParDist [__remoteCallMetaData] (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
         str -> error$"Unhandled mode: " ++ str
 

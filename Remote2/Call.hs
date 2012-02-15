@@ -118,7 +118,7 @@ closureInfo :: Env -> Name -> Type -> Q (Type,Exp)
 closureInfo e named typed = 
   do v <- theval
      return (thetype,v)
-   where
+ where   
      implFqn = loc_module (eLoc e) ++ "." ++ nameBase named ++ "__0__impl"
      (params, returns) = getReturns typed 0
      wrapit x = case isArrowType e x of
@@ -207,8 +207,8 @@ wrapMonad e monad val =
   trace (" ** WRAPMONAD " ++ show monad ++ " / " ++ show val ++ "\n\t  => " ++ show res) $
   res 
  where 
---  outputM = monad
-  outputM = eIO e  -- RRN: Always going to IO here.
+  outputM = monad
+--  outputM = eIO e  -- RRN: Always going to IO here.
   res = case monadOf e val of
 --	  Just t | t == monad -> val
           -- RRN: Convert Par to IO here:
@@ -249,7 +249,8 @@ generateDecl e name t shift =
      lifter x = case monadOf e $ putParams returns of
                  Just p | p == topmonad -> 
                       do op <- varE$ mkName "runParDist" -- [e|\x->x|]
-			 return $ AppE op x
+--			 return $ AppE op x
+			 return $ x
                  Just p | p == eIO e -> return $ AppE (eLiftIO e) x
                  _ -> return $ AppE (eReturn e) x
      serialEncoder x = case topmonad of

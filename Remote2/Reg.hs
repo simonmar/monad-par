@@ -32,6 +32,7 @@ data Entry = Entry {
                entryName :: Identifier,
                entryFunRef :: Dynamic
              }
+  deriving Show
 
 -- | Creates a metadata lookup table based on compile-time metadata.
 -- You probably don't want to call this function yourself, but instead
@@ -46,6 +47,7 @@ makeEntry ident funref = Entry {entryName=ident, entryFunRef=toDyn funref}
 
 type IdentMap = Map.Map Identifier Entry
 data Lookup = Lookup { identMap :: IdentMap }
+  deriving Show
 
 putReg :: (Typeable a) => a -> Identifier -> Lookup -> Lookup
 putReg a i l = putEntry l a i
