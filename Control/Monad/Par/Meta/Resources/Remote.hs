@@ -29,6 +29,7 @@ import Control.Monad.Par.Meta.HotVar.IORef
 import Data.Unique (hashUnique, newUnique)
 import Data.Typeable (Typeable)
 import Data.IORef
+import qualified Data.IntMap as IntMap
 import Data.Int
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
@@ -58,7 +59,7 @@ import qualified Data.Binary as Bin
 
 
 import Remote2.Closure 
-import Remote2.Encoding (Payload, Serializable, serialDecode, getPayloadContent, getPayloadType)
+import Remote2.Encoding (Payload, Serializable, serialDecode, serialDecodePure, getPayloadContent, getPayloadType)
 -- import qualified Remote2.Reg (RemoteCallMetaData, getEntryByIdent, registerCalls)
 import qualified Remote2.Reg as Reg
 
@@ -167,6 +168,11 @@ myTransport = unsafePerformIO$ newIORef (error "global myTransport uninitialized
 myNodeID :: HotVar Int
 myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 
+{-# NOINLINE isMaster #-}
+isMaster :: HotVar Bool
+isMaster = unsafePerformIO$ newIORef False
+
+
 {-# NOINLINE globalRPCMetadata #-}
 globalRPCMetadata :: IORef Reg.Lookup
 globalRPCMetadata = unsafePerformIO$ newIORef (error "uninitialized 'globalRPCMetadata'")
@@ -177,6 +183,11 @@ globalRPCMetadata = unsafePerformIO$ newIORef (error "uninitialized 'globalRPCMe
 {-# NOINLINE mainThread #-}
 mainThread :: IORef ThreadId
 mainThread = unsafePerformIO$ newIORef (error "uninitialized global 'mainThread'")
+
+
+{-# NOINLINE remoteIvarTable #-}
+remoteIvarTable :: HotVar (IntMap.IntMap (Payload -> Par ()))
+remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 
 
 -- {-# NOINLINE resultQueue #-}
@@ -219,7 +230,7 @@ sendTo ndid msg = do
   T.send target [msg]
 
 -- Just for debugging, tracking global node as M (master) or S (slave):
-global_mode = unsafePerformIO$ newIORef "M"
+global_mode = unsafePerformIO$ newIORef "_M"
 taggedMsg s = do m <- readIORef global_mode
 		 putStrLn$ " [distmeta"++m++"] "++s
 
@@ -241,8 +252,7 @@ atomicWriteFile file contents = do
 deClosure :: Closure Payload -> IO (Par Payload)
 -- deClosure :: (Typeable a) => Closure a -> IO (Maybe a)
 deClosure pclo@(Closure ident payload) = do 
-  taggedMsg$ "Declosuring : "++ show ident ++ " type "++ 
-	    show (getPayloadType payload) ++" payload "++ show (getPayloadContent payload)
+  taggedMsg$ "Declosuring : "++ show ident ++ " type "++ show payload
   lkp <- readIORef globalRPCMetadata
   case Reg.getEntryByIdent lkp ident of 
     Nothing -> fail$ "deClosure: failed to deserialize closure identifier: "++show ident
@@ -267,6 +277,8 @@ errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
 -- (do errorExit str; return (error "Internal problem: This point should never be reached"))
 
+instance Show Payload where
+  show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "++ show (getPayloadContent payload) ++ ">"
     
 -- --------------------------------------------------------------------------------
 -- Initialize & Establish workers.
@@ -362,6 +374,8 @@ type MachineList = [BS.ByteString]
 
 type NodeID = Int
 
+showNodeID n = "<"++show n++">"
+
 -- Control messages are for starting the system up and communicating
 -- between slaves and the master.
 data ControlMessage = 
@@ -376,6 +390,9 @@ data WorkMessage =
      --   the sender:
      StealRequest NodeID
    | StealResponse NodeID (IVarId, Closure Payload)
+
+     -- The result of a parallel computation, evaluated remotely:
+   | WorkFinished NodeID IVarId Payload
   deriving (Show, Generic, Typeable)
 
 -- Use the GHC Generics mechanism to derive these:
@@ -434,6 +451,7 @@ initAction metadata (Master machineList) schedMap =
 			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
          myid = nameToID (BS.pack host) machineList
      writeIORef myNodeID myid
+     writeIORef isMaster True
 
      (sourceAddr, targetEnd) <- T.newConnection transport
      -- Clear files storing slave addresses:
@@ -496,20 +514,12 @@ initAction metadata (Master machineList) schedMap =
      taggedMsg$ "Master initAction returning control to scheduler..."
      return ()
 
-
 initAction metadata Slave schedMap = 
   do 
-     name <- hostName 
-     writeIORef global_mode "S"
+     host <- BS.pack <$> commonInit metadata work_port
+     writeIORef global_mode "_S"
 
-     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
-     taggedMsg "RPC metadata initialized."
-
-     let namebs = BS.pack name
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints name work_port
-     writeIORef myTransport transport
-     myThreadId >>= writeIORef mainThread
-
+     transport <- readIORef myTransport
      (mySourceAddr, fromMaster) <- T.newConnection transport
 
      taggedMsg$ "Init slave, source addr = " ++ BS.unpack (T.serialize mySourceAddr)
@@ -526,7 +536,7 @@ initAction metadata Slave schedMap =
    	       Just masterAddr -> do 
 		 toMaster <- T.connect masterAddr
 		 -- Convention: connect by sending name and reverse connection:
-		 T.send toMaster [encode$ AnnounceSlave namebs (T.serialize mySourceAddr)]
+		 T.send toMaster [encode$ AnnounceSlave host (T.serialize mySourceAddr)]
 
                  taggedMsg$ "Sent name and addr to master "
 	         _machines_bss <- T.receive fromMaster
@@ -534,7 +544,7 @@ initAction metadata Slave schedMap =
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 	         
-	         let id = nameToID namebs machines
+	         let id = nameToID host machines
 		 writeIORef myNodeID id
 		 return ()
 
@@ -549,6 +559,25 @@ initAction metadata Slave schedMap =
 --     taggedMsg$ "Slave initAction jumping directly into receiveDaemon loop..."
 --     receiveDaemon fromMaster
      return ()
+
+
+
+-- | Common pieces factored out from the master and slave initializations.
+commonInit metadata port = do 
+  
+     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
+     taggedMsg "RPC metadata initialized."
+
+     host <- hostName
+
+     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host port
+     writeIORef myTransport transport
+
+     -- ASSUME init action is called from main thread:
+     myThreadId >>= writeIORef mainThread
+
+     return host
+
 
 
 
@@ -579,11 +608,17 @@ stealAction Sched{no} _ = do
 
   -- First try a "provably good steal":
   x <- R.tryPopR longQueue
+
+  master <- readIORef isMaster 
+
   case x of 
     Just (LongWork{localver}) -> do
       taggedMsg$ "stealAction: worker number "++show no++" found work in own queue."
       return (Just localver)
-    Nothing -> raidPeer
+    Nothing -> if master 
+	       -- TEMP FIXME: Disabling stealing for the Master during DEBUGGING:
+	       then return Nothing 
+	       else raidPeer
  where 
   pickVictim myid = do
      pt   <- readHotVar peerTable
@@ -599,7 +634,7 @@ stealAction Sched{no} _ = do
   raidPeer = do
      myid <- readHotVar myNodeID
      ind  <- pickVictim myid
-     taggedMsg$ "["++ show myid++"] Attempting steal from Node ID "++show ind
+     taggedMsg$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
      (_,conn) <- connectNode ind 
      T.send conn [encode$ StealRequest myid]
      -- We have nothing to return immediately, but hopefully work will come back later.
@@ -622,9 +657,16 @@ longSpawn (local, clo@(Closure n pld)) = do
     -- rest of the current run:
     ivarid <- hashUnique <$> newUnique -- This is not actually safe.  Hashes may collide.
 
+    let ivarCont payl = case serialDecodePure payl of 
+			  Just x  -> put_ iv x
+			  Nothing -> errorExitPure$ "Could not decode payload: "++ show payl
+
+    -- Update the table with a Par computation that can write in the result.
+    modifyHotVar_ remoteIvarTable (IntMap.insert ivarid ivarCont)
+
     R.pushR longQueue 
        (LongWork{ stealver= (ivarid,pclo),
-		  localver= do x <- local; put iv x
+		  localver= do x <- local; put_ iv x
 		})
 
   return iv
@@ -670,7 +712,7 @@ receiveDaemon targetEnd = do
   taggedMsg$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
   case decode (BS.concat bss) of 
-    (StealRequest ndid) -> do
+    StealRequest ndid -> do
       taggedMsg$ "[rcvdmn] Received StealRequest from: "++ show ndid
       p <- R.tryPopL longQueue
       case p of 
@@ -679,19 +721,28 @@ receiveDaemon targetEnd = do
 	  taggedMsg$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
 	  sendTo ndid (encode$ StealResponse myid stealver)
 
-    (StealResponse fromNd pr@(ivar,pclo)) -> do
-      taggedMsg$ "[rcvdmn] Received Steal RESPONSE from ["++show fromNd++"] "++ show (ivar,pclo)
+    StealResponse fromNd pr@(ivarid,pclo) -> do
+      taggedMsg$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
       loc <- deClosure pclo
-      R.pushL longQueue (LongWork { stealver = pr, 
+      R.pushL longQueue (LongWork { stealver = error "StealResponse work can't be restolen", 
 				    localver = do 
                                                   liftIO$ putStrLn "[rcvdmn] RUNNING STOLEN PAR WORK "
                                                   payl <- loc
                                                   liftIO$ putStrLn "[rcvdmn]   DONE running stolen par work."
-				                  liftIO$ errorExit "[rcvdmn]  TODO: SEND MESSAGE BACK"
+				                  liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
                                                   return ()
 				  })
 
+    WorkFinished fromNd ivarid payload -> do
+      taggedMsg$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++" ivarID "++ show ivarid++" payload: "++show payload
+      table <- readHotVar remoteIvarTable
+      case IntMap.lookup ivarid table of 
+        Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
+        Just parFn -> 
+          R.pushL longQueue (LongWork { stealver = error "WorkFinished work can't be restolen", 
+			 	        localver = parFn payload
+				      })
       return ()
 
   receiveDaemon targetEnd
