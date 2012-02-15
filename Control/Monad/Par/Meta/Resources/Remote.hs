@@ -225,6 +225,7 @@ taggedMsg s = do m <- readIORef global_mode
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay msg = threadDelay (200*1000)
+-- dbgDelay msg = return ()
 
 
 -- | We don't want anyone to try to use a file that isn't completely written.
