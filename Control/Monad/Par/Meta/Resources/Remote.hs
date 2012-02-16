@@ -30,6 +30,7 @@ import Data.Unique (hashUnique, newUnique)
 import Data.Typeable (Typeable)
 import Data.IORef
 import qualified Data.IntMap as IntMap
+import qualified Data.Map    as M
 import Data.Int
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
@@ -64,9 +65,10 @@ import Remote2.Encoding (Payload, Serializable, serialDecode, serialDecodePure, 
 import qualified Remote2.Reg as Reg
 
 -- import qualified Remote.Process as P 
-import System.IO (hPutStr, hFlush, stdout)
+import System.IO (hPutStr, hPutStrLn, hFlush, stdout, stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process (readProcess)
+import System.Posix.Process (getProcessID)
 import System.Directory (removeFile, doesFileExist, renameFile)
 import System.Exit (exitFailure)
 import System.Random (randomIO)
@@ -117,11 +119,11 @@ type IVarId = Int
 type ParClosure a = (Par a, Closure (Par a))
 
 -- TODO: Make this configurable:
-control_port = "8099"
-work_port    = "8098"
-master_addr_file = mkAddrFile (BS.pack "master_control")
+control_port = "8098"
+work_base_port = 8099
+master_addr_file = "master_control.addr"
 
-mkAddrFile machine = "./" ++ BS.unpack machine  ++ "_source.addr" 
+mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -130,7 +132,7 @@ mkAddrFile machine = "./" ++ BS.unpack machine  ++ "_source.addr"
 -- through the network.
 data LongWork = LongWork {
      localver  :: Par (),
-     stealver  :: (IVarId, Closure Payload)
+     stealver  :: Maybe (IVarId, Closure Payload)
 --     writeback :: a -> 
   }
 
@@ -201,16 +203,6 @@ remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 
 -- forkDaemon = forkIO
 forkDaemon = forkOS
-
-nameToID :: BS.ByteString -> [BS.ByteString] -> Int
-nameToID bs1 bsls = 
-  case findIndex (\ bs2 -> bs1 == bs2 
-		  -- Hack: handle foo instead of foo.domain.com:
-	           || basename bs1 == basename bs2) bsls
-  of Nothing -> error$ "nameToID: host not included in machine list: "++BS.unpack bs1
-     Just x  -> x
- where 
-  basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 hostName = trim <$>
 --    readProcess "uname" ["-n"] ""
@@ -298,9 +290,9 @@ instance Show Payload where
 -- Initialize global state.
 initPeerTable ms = do
      writeIORef  machineList ms
-     taggedMsg$ "PeerTable:"
+     hPutStr stderr "PeerTable:\n"
      forM_ (zip [0..] ms) $ \ (i,m) -> 
-        putStrLn$ "  "++show i++": "++ BS.unpack m
+        hPutStrLn stderr $ "  "++show i++": "++ BS.unpack m
      writeHotVar peerTable (V.replicate (length ms) Nothing)
 
 
@@ -314,7 +306,7 @@ connectNode ind = do
     Nothing -> do 
       ml <- readIORef machineList
       let name  = ml !! ind
-          file = mkAddrFile name
+          file = mkAddrFile name ind
 
       toPeer <- waitReadAndConnect ind file
       let entry = (name, toPeer)
@@ -451,30 +443,32 @@ initAction metadata (Master machineList) topStealAction schedMap =
      initPeerTable machineList
 
      -- Initialize the transport layer:
-     host <- hostName
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
+     host <- BS.pack <$> hostName
+     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
      writeIORef myTransport transport
      myThreadId >>= writeIORef mainThread
         
-     let allButMe = if (elem (BS.pack host) machineList) 
-		    then delete (BS.pack host) machineList
-		    else error$ "Could not find master domain name "++host++
+     let allButMe = if (elem host machineList) 
+		    then delete host machineList
+		    else error$ "Could not find master domain name "++BS.unpack host++
 			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
-         myid = nameToID (BS.pack host) machineList
+         myid = nameToID host 0 machineList
      writeIORef myNodeID myid
      writeIORef isMaster True
 
+     taggedMsg$ "Master node id established as: "++showNodeID myid
+
      (sourceAddr, targetEnd) <- T.newConnection transport
-     -- Clear files storing slave addresses:
-     forM_ machineList $ \ machine -> do
-        let file = mkAddrFile machine
+     -- Hygiene: Clear files storing slave addresses:
+     forM_ (zip [0..] machineList) $ \ (ind,machine) -> do
+        let file = mkAddrFile machine ind
         b <- doesFileExist file
         when b $ removeFile file
 
      -- Write a file with our address enabling slaves to find us:
      atomicWriteFile master_addr_file $ T.serialize sourceAddr
      -- We are also a worker, so we write the file under our own name as well:
-     atomicWriteFile (mkAddrFile$ BS.pack host) $ T.serialize sourceAddr
+     atomicWriteFile (mkAddrFile host myid) $ T.serialize sourceAddr
 
 
      -- Connection Listening Loop:
@@ -482,8 +476,9 @@ initAction metadata (Master machineList) topStealAction schedMap =
      -- Every time we, the master, receive a connection on this port
      -- it indicates a new slave starting up.
      -- As the master we eagerly set up connections with everyone:
-     let slaveConnectLoop 0 = return ()
-	 slaveConnectLoop iter = do
+     let
+         slaveConnectLoop 0    alreadyConnected = return ()
+	 slaveConnectLoop iter alreadyConnected = do
 	  [str] <- T.receive targetEnd
           let AnnounceSlave{name,toAddr} = decode str
 	  taggedMsg$ "Master: register new slave, name: "++ BS.unpack name
@@ -494,15 +489,15 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	    Nothing         -> fail "Garbage message from slave!"
 	    Just sourceAddr -> do 
               srcEnd <- T.connect sourceAddr
-              let id = nameToID name machineList
+              let (id, alreadyConnected') = updateConnected name alreadyConnected machineList
               -- Convention: send slaves the machine list:
               T.send srcEnd [encode$ MachineListMsg id machineList]
 
-              taggedMsg$ "Sent machine list to slave: "++ unwords (map BS.unpack machineList)
+              taggedMsg$ "Sent machine list to slave "++showNodeID id++": "++ unwords (map BS.unpack machineList)
 
               -- Write the file to communicate that the machine is
               -- online and set up a way to contact it:
-              let filename = mkAddrFile name
+              let filename = mkAddrFile name id
 
               atomicWriteFile filename toAddr
 	      taggedMsg$ "  Wrote file to signify slave online: " ++ filename
@@ -513,27 +508,58 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	      taggedMsg$ "  Extending peerTable with node ID "++ show id
               modifyHotVar_ peerTable (\ pt -> V.modify (\v -> MV.write v id entry) pt)
 
-	  slaveConnectLoop (iter-1)
+	      slaveConnectLoop (iter-1) alreadyConnected' 
      ----------------------------------------
 --     forkIO slaveConnectLoop
 --     slaveConnectLoop (-1)  -- Loop forever
      taggedMsg$ "  ... waiting for slaves to connect."
-     slaveConnectLoop (length allButMe)
+     slaveConnectLoop (length allButMe) (M.singleton host 1)
      taggedMsg$ "  All slaves connected!  Launching receiveDaemon..."
      forkDaemon$ receiveDaemon targetEnd
 
      taggedMsg$ "Master initAction returning control to scheduler..."
      return ()
+ where 
+    -- Annoying book-keeping:  Keep track of how many we've seen
+    -- and make sure that the client that actually connect match
+    -- the machineList:
+    updateConnected name map machineList =  
+      let map' = M.insertWith' (+) name 1 map 
+	  cnt  = map' M.! name
+      in (nameToID name (cnt-1) machineList,
+	  map') 
 
+    -- Look up a host's position in the MachineList, skipping the first N
+    nameToID :: BS.ByteString -> Int -> [BS.ByteString] -> Int
+    nameToID bs1 skip bsls = 
+      let indices = findIndices (\ bs2 -> bs1 == bs2 
+    	 	                -- Hack: handle foo instead of foo.domain.com:
+				|| basename bs1 == basename bs2) bsls
+      in if length indices > skip 
+	 then indices !! skip
+	 else error$ "nameToID: hostname not in [or not included enough times] in machine list: "++BS.unpack bs1
+
+    basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
+
+
+
+-- | TODO - FACTOR OUT TCP-transport SPECIFIC CODE:
 initAction metadata Slave topStealAction schedMap = 
   do 
-     host <- BS.pack <$> commonInit metadata work_port
+     mypid <- getProcessID
+     -- Use the PID to break symmetry between multiple slaves on the same machine:
+     let port  = work_base_port + fromIntegral mypid
+	 port' = if port > 65535 
+                 then (port `mod` (65535-8000)) + 8000
+		 else port
+     taggedMsg$ "Init slave: creating connection on port " ++ show port'
+     host <- BS.pack <$> commonInit metadata (show port')
      writeIORef global_mode "_S"
 
      transport <- readIORef myTransport
      (mySourceAddr, fromMaster) <- T.newConnection transport
 
-     taggedMsg$ "Init slave, source addr = " ++ BS.unpack (T.serialize mySourceAddr)
+     taggedMsg$ "  Source addr created: " ++ BS.unpack (T.serialize mySourceAddr)
 
      -- For now: Assume shared filesystem:
      let masterloop = do  -- Loop until connected to master.
@@ -571,7 +597,7 @@ initAction metadata Slave topStealAction schedMap =
      return ()
 
 
-
+-- TODO - FACTOR OUT OF MASTER CASE AS WELL:
 -- | Common pieces factored out from the master and slave initializations.
 commonInit metadata port = do 
   
@@ -616,7 +642,7 @@ stealAction :: StealAction
 stealAction Sched{no} _ = do
   dbgDelay "stealAction"
 
-  -- First try a "provably good steal":
+  -- First try to pop local work:
   x <- R.tryPopR longQueue
 
 --  master <- readIORef isMaster 
@@ -674,7 +700,7 @@ longSpawn (local, clo@(Closure n pld)) = do
     modifyHotVar_ remoteIvarTable (IntMap.insert ivarid ivarCont)
 
     R.pushR longQueue 
-       (LongWork{ stealver= (ivarid,pclo),
+       (LongWork{ stealver= Just (ivarid,pclo),
 		  localver= do x <- local; put_ iv x
 		})
 
@@ -722,19 +748,21 @@ receiveDaemon targetEnd = do
 
   case decode (BS.concat bss) of 
     StealRequest ndid -> do
-      taggedMsg$ "[rcvdmn] Received StealRequest from: "++ show ndid
+      taggedMsg$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
       p <- R.tryPopL longQueue
       case p of 
-	Nothing -> return ()
-	Just (LongWork{stealver}) -> do 
+	Just (LongWork{stealver= Just stealme}) -> do 
 	  taggedMsg$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
-	  sendTo ndid (encode$ StealResponse myid stealver)
+	  sendTo ndid (encode$ StealResponse myid stealme)
+-- TODO: FIXME: Dig deeper into the queue to look for something stealable:
+	Just x -> R.pushL longQueue x
+        Nothing -> return ()
 
     StealResponse fromNd pr@(ivarid,pclo) -> do
       taggedMsg$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
       loc <- deClosure pclo
-      R.pushL longQueue (LongWork { stealver = error "StealResponse work can't be restolen", 
+      R.pushL longQueue (LongWork { stealver = Nothing,
 				    localver = do 
                                                   liftIO$ putStrLn "[rcvdmn] RUNNING STOLEN PAR WORK "
                                                   payl <- loc
@@ -749,7 +777,7 @@ receiveDaemon targetEnd = do
       case IntMap.lookup ivarid table of 
         Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
         Just parFn -> 
-          R.pushL longQueue (LongWork { stealver = error "WorkFinished work can't be restolen", 
+          R.pushL longQueue (LongWork { stealver = Nothing, 
 			 	        localver = parFn payload
 				      })
       return ()

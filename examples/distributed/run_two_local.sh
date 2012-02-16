@@ -12,7 +12,7 @@ set -x
 
 HOST=`hostname`
 
-export MACHINE_LIST="localhost $HOST"
+export MACHINE_LIST="$HOST $HOST"
 
 # Launch master asynchronously:
 ./parfib_dist.exe master $N +RTS -N2 -RTS &
