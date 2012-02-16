@@ -1,30 +1,23 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
-import Data.Int
-import System.Environment
-import GHC.Conc
-import Control.Applicative
+import Data.Int (Int64)
+import System.Environment (getArgs)
 import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get)
+import Control.Monad.IO.Class (liftIO)
+-- Tweaked version of CloudHaskell's closures:
+import Remote2.Call (mkClosureRec, remotable)
 
--- import Remote
-
--- necessary imports for remotable-generated code
-import Control.Monad.IO.Class
-import Remote2.Closure (Closure(..))
-import Remote2.Encoding (Payload, serialEncodePure, serialDecode, serialEncode)
-import Remote2.Reg (putReg, RemoteCallMetaData)
-import Remote2.Call (mkClosure2, mkClosureRec2, remotable)
+--------------------------------------------------------------------------------
 
 type FibType = Int64
---------------------------------------------------------------------------------
 
 -- Par monad version + distributed execution:
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
     liftIO $ putStrLn $ " PARFIB "++show n
-    xf <- longSpawn $ $(mkClosureRec2 'parfib1) (n-1)
+    xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
     return (x+y)
