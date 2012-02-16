@@ -231,13 +231,16 @@ sendTo ndid msg = do
 
 -- Just for debugging, tracking global node as M (master) or S (slave):
 global_mode = unsafePerformIO$ newIORef "_M"
-taggedMsg s = do m <- readIORef global_mode
-		 putStrLn$ " [distmeta"++m++"] "++s
+taggedMsg s = 
+   if dbg then 
+      do m <- readIORef global_mode
+	 putStrLn$ " [distmeta"++m++"] "++s
+   else return ()
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
-dbgDelay msg = threadDelay (200*1000)
--- dbgDelay msg = return ()
-
+dbgDelay msg = 
+  if dbg then threadDelay (200*1000)
+         else return ()
 
 -- | We don't want anyone to try to use a file that isn't completely written.
 --   Note, this needs further thought for use with NFS...
@@ -268,6 +271,7 @@ makePayloadClosure (Closure name arg) =
 
 -- | Try to exit the whole process and not just the thread.
 errorExit :: String -> IO a
+-- TODO: Might be better to just call "kill" on our own PID:
 errorExit str = do
       tid <- readIORef mainThread
       throwTo tid (ErrorCall$ "ERROR: "++str)
@@ -370,7 +374,8 @@ waitReadAndConnect ind file = do
 
 -- | For now it is the master's job to know the machine list:
 data InitMode = Master MachineList | Slave
-type MachineList = [BS.ByteString]
+-- | The MachineList may contain duplicates!!
+type MachineList = [BS.ByteString] 
 
 type NodeID = Int
 
@@ -381,7 +386,10 @@ showNodeID n = "<"++show n++">"
 data ControlMessage = 
      AnnounceSlave { name   :: BS.ByteString, 
 		     toAddr :: BS.ByteString }
-   | MachineListMsg MachineList
+  deriving (Show, Generic)
+
+-- | The master informs the slave of its index in the peerTable:
+data MachineListMsg = MachineListMsg Int MachineList
   deriving (Show, Generic)
 
 -- Work messages are for getting things done (stealing work, returning results).
@@ -401,6 +409,9 @@ instance Binary WorkMessage where
   put = derivePut 
   get = deriveGet
 instance Binary ControlMessage where
+  put = derivePut 
+  get = deriveGet
+instance Binary MachineListMsg where
   put = derivePut 
   get = deriveGet
 -- Note, these encodings of sums are not efficient!
@@ -483,15 +494,15 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	    Nothing         -> fail "Garbage message from slave!"
 	    Just sourceAddr -> do 
               srcEnd <- T.connect sourceAddr
+              let id = nameToID name machineList
               -- Convention: send slaves the machine list:
-              T.send srcEnd [encode machineList]
+              T.send srcEnd [encode$ MachineListMsg id machineList]
 
               taggedMsg$ "Sent machine list to slave: "++ unwords (map BS.unpack machineList)
 
               -- Write the file to communicate that the machine is
               -- online and set up a way to contact it:
               let filename = mkAddrFile name
-		  id = nameToID name machineList
 
               atomicWriteFile filename toAddr
 	      taggedMsg$ "  Wrote file to signify slave online: " ++ filename
@@ -540,11 +551,10 @@ initAction metadata Slave topStealAction schedMap =
 
                  taggedMsg$ "Sent name and addr to master "
 	         _machines_bss <- T.receive fromMaster
-                 let machines = decode (BS.concat _machines_bss)
+                 let MachineListMsg id machines = decode (BS.concat _machines_bss)
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 	         
-	         let id = nameToID host machines
 		 writeIORef myNodeID id
 		 return ()
 
@@ -609,16 +619,15 @@ stealAction Sched{no} _ = do
   -- First try a "provably good steal":
   x <- R.tryPopR longQueue
 
-  master <- readIORef isMaster 
+--  master <- readIORef isMaster 
 
   case x of 
     Just (LongWork{localver}) -> do
       taggedMsg$ "stealAction: worker number "++show no++" found work in own queue."
       return (Just localver)
-    Nothing -> if master 
+    Nothing -> -- if master then return Nothing else raidPeer
 	       -- TEMP FIXME: Disabling stealing for the Master during DEBUGGING:
-	       then return Nothing 
-	       else raidPeer
+	       raidPeer
  where 
   pickVictim myid = do
      pt   <- readHotVar peerTable
