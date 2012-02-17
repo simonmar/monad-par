@@ -376,7 +376,6 @@ initAction metadata (Master machineList) topStealAction schedMap =
      -- We are also a worker, so we write the file under our own name as well:
      atomicWriteFile (mkAddrFile host myid) $ T.serialize sourceAddr
 
-
      -- Connection Listening Loop:
      ----------------------------------------
      -- Every time we, the master, receive a connection on this port
@@ -423,7 +422,8 @@ initAction metadata (Master machineList) topStealAction schedMap =
      ----------------------------------------
      when eager_connections $ do 
        taggedMsg$ "  Waiting for slaves to bring up all N^2 mutual connections..."
-       forM_ (zip [0..] machineList) $ \ (ndid,name) -> do 
+       forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
+         unless (ndid == myid) $ do 
           ConnectedAllPeers <- decode <$> BS.concat <$> T.receive targetEnd 
           putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
        
@@ -504,6 +504,7 @@ initAction metadata Slave topStealAction schedMap =
                       unless (ndid == myid) $ do 
 			connectNode ndid
 --			taggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
+                        return ()
 		   taggedMsg$ "  Fully connected, notifying master."
 		   T.send toMaster [encode ConnectedAllPeers]
 
@@ -677,6 +678,12 @@ instance Binary MachineListMsg where
   put = derivePut 
   get = deriveGet
 instance Binary ConnectedAllPeers where
-  put = derivePut 
-  get = deriveGet
+  put _ = Bin.put magic_word
+  get = do n <- Bin.get
+           if (n == magic_word)
+             then return ConnectedAllPeers
+             else errorExitPure$ "Corrupt ConnectedAllPeers message: "++show n
+           
+magic_word :: Int64
+magic_word = 98989898989898989
 -- Note, these encodings of sums are not efficient!
