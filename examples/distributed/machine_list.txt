@@ -1,0 +1,17 @@
+breccia.cs.indiana.edu
+chert.cs.indiana.edu
+coal.cs.indiana.edu
+dacite.cs.indiana.edu
+gabbro.cs.indiana.edu
+gneiss.cs.indiana.edu
+granite.cs.indiana.edu
+limestone.cs.indiana.edu
+marble.cs.indiana.edu
+onyx.cs.indiana.edu
+quartzite.cs.indiana.edu
+sandstone.cs.indiana.edu
+schist.cs.indiana.edu
+shale.cs.indiana.edu
+siltstone.cs.indiana.edu
+slate.cs.indiana.edu
+travertine.cs.indiana.edu

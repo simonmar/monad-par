@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e 
+set -x
 
 # Comment to disable debug mode:
 if [ "$DEBUG" != "" ]; then 

@@ -44,7 +44,7 @@ runParDist metadata = runMetaParIO (ia metadata) sa
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
 runParSlave metadata = do
-  RemoteRsrc.taggedMsg "runParSlave invoked."
+  RemoteRsrc.taggedMsg 2 "runParSlave invoked."
 --  registerCalls metadata
 --  RemoteRsrc.taggedMsg "RPC metadata initialized."
 

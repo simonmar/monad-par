@@ -26,6 +26,6 @@ WORKERPID=$!
 
 # Now wait until the master is done.
 wait $MASTERPID
+echo "Done running master computation."
 
-echo "Done running master computation.  Killing worker if it's still running."
-kill -9 $WORKERPID
+wait $WORKERPID
