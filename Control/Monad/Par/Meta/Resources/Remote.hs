@@ -6,13 +6,16 @@
 -- | Resource for Remote execution.
 
 module Control.Monad.Par.Meta.Resources.Remote 
-  ( initAction, stealAction, longSpawn, 
+  ( initAction, stealAction, 
+    initiateShutdown, waitForShutdown, 
+    longSpawn, 
     taggedMsg, InitMode(..)  
   )  
  where
 
 import Control.Applicative    ((<$>))
 import Control.Concurrent     (myThreadId, threadDelay, throwTo, 
+			       writeChan, readChan, newChan, Chan,
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
 import Control.Exception      (ErrorCall(..))
@@ -31,20 +34,21 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
 import Data.List as L
-import Data.List.Split (splitOn)
+import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import Data.Binary        (encode,decode, Binary)
 import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
-import GHC.Generics     (Generic)
-import System.IO        (hPutStr, hPutStrLn, hFlush, stdout, stderr)
-import System.IO.Unsafe (unsafePerformIO)
-import System.Process   (readProcess)
+import GHC.Generics       (Generic)
+import System.IO          (hPutStr, hPutStrLn, hFlush, stdout, stderr)
+import System.IO.Unsafe   (unsafePerformIO)
+import System.Process     (readProcess, system)
+-- import System.Exit        (exitSuccess)
 import System.Posix.Process (getProcessID)
-import System.Directory (removeFile, doesFileExist, renameFile)
-import System.Random    (randomIO)
-import Text.Printf      (printf)
+import System.Directory   (removeFile, doesFileExist, renameFile)
+import System.Random      (randomIO)
+import Text.Printf        (printf)
 
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
@@ -60,6 +64,7 @@ import qualified Remote2.Reg as Reg
 
 --   * Make ivarid actually unique.  Per-thread incremented counters would be fine.
 --   * Add configurability for constants below.
+--   * Get rid of myTransport -- just use the peerTable
 
 -----------------------------------------------------------------------------------
 -- Global constants:
@@ -89,12 +94,16 @@ master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
--- eager_connections = True
-eager_connections = False
+eager_connections = True
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
 -----------------------------------------------------------------------------------
+
+-- TODO: Several of these things (myNodeID, masterID, etc) could
+-- become immutable, packaged in a config record, and be passed around
+-- to the relavant places.
+
 
 -- An item of work that can be executed either locally, or stolen
 -- through the network.
@@ -114,7 +123,7 @@ peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
 
 {-# NOINLINE machineList #-}
-machineList :: IORef [BS.ByteString]
+machineList :: IORef [PeerName]
 machineList = unsafePerformIO$ newIORef (error "global machineList uninitialized")
 
 {-# NOINLINE myTransport #-}
@@ -123,7 +132,12 @@ myTransport = unsafePerformIO$ newIORef (error "global myTransport uninitialized
 
 {-# NOINLINE myNodeID #-}
 myNodeID :: HotVar Int
-myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
+myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myNodeID'")
+
+{-# NOINLINE masterID #-}
+masterID :: HotVar Int
+masterID = unsafePerformIO$ newIORef (error "uninitialized global 'masterID'")
+
 
 {-# NOINLINE isMaster #-}
 isMaster :: HotVar Bool
@@ -148,6 +162,12 @@ remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 global_mode = unsafePerformIO$ newIORef "_M"
 
 
+type Token = Int64
+{-# NOINLINE shutdownChan #-}
+shutdownChan :: Chan Token
+shutdownChan = unsafePerformIO $ newChan
+
+
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
 -----------------------------------------------------------------------------------
@@ -168,9 +188,19 @@ hostName = trim <$>
 -- | Send to a particular node in the peerTable:
 sendTo :: NodeID -> BS.ByteString -> IO ()
 sendTo ndid msg = do
-  table <- readHotVar peerTable
-  let (Just (_,target)) = table V.! ndid
-  T.send target [msg]
+--  table <- readHotVar peerTable
+--  let (Just (_,target)) = table V.! ndid
+--  T.send target [msg]
+    (_,conn) <- connectNode ndid
+    T.send conn [msg]
+
+-- | Likewise for Receiving
+-- receiveFrom :: NodeID -> IO BS.ByteString
+-- receiveFrom ndid = do
+--   table <- readHotVar peerTable
+--   let (Just (_,conn, ??)) = table V.! ndid
+--   bss <- T.receive conn
+--   return (BS.concat bss)
 
 taggedMsg s = 
    if dbg then 
@@ -218,6 +248,17 @@ errorExit str = do
       throwTo tid (ErrorCall$ "ERROR: "++str)
       error$ "ERROR: "++str
 
+-- | Exit the process successfully.
+exitSuccess :: IO a
+exitSuccess = do
+      mypid <- getProcessID
+      system$ "kill "++ show mypid
+--      tid <- readIORef mainThread
+--      throwTo tid (ErrorCall "Exiting Successfully!")
+      return (error "Should not see this.")
+--      error$ "ERROR: "++str
+
+
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
 
@@ -247,7 +288,7 @@ initPeerTable ms = do
 
 -- | Connect to a node if there is not already a connection.  Return
 --   the name and active connection.
-connectNode :: Int -> IO (BS.ByteString, T.SourceEnd)
+connectNode :: Int -> IO (PeerName, T.SourceEnd)
 connectNode ind = do
   pt <- readHotVar peerTable
   let entry = pt V.! ind
@@ -286,6 +327,10 @@ waitReadAndConnect ind file = do
       taggedMsg$ "     ... Connected."
       return conn
 
+extendPeerTable :: Int -> (PeerName, T.SourceEnd) -> IO ()
+extendPeerTable id entry = 
+  modifyHotVar_ peerTable (V.modify (\v -> MV.write v id (Just entry)))
+
 -----------------------------------------------------------------------------------
 -- Data Types
 -----------------------------------------------------------------------------------
@@ -293,7 +338,7 @@ waitReadAndConnect ind file = do
 -- | For now it is the master's job to know the machine list:
 data InitMode = Master MachineList | Slave
 -- | The MachineList may contain duplicates!!
-type MachineList = [BS.ByteString] 
+type MachineList = [PeerName] 
 
 type NodeID = Int
 
@@ -308,11 +353,11 @@ showNodeID n = "<"++show n++">"
 data Message = 
    -- First CONTROL MESSAGES:   
    ----------------------------------------
-     AnnounceSlave { name   :: BS.ByteString, 
+     AnnounceSlave { name   :: PeerName,
 		     toAddr :: BS.ByteString }
 
      -- The master informs the slave of its index in the peerTable:
-   | MachineListMsg (Int,BS.ByteString) Int MachineList
+   | MachineListMsg (Int, PeerName) Int MachineList
 
      -- The worker informs the master that it has connected to all
      -- peers (eager connection mode only).
@@ -322,8 +367,9 @@ data Message =
      -- No one had better send the master steal requests before this goes out!!
    | StartStealing
 
-     -- A message from master to slave, "exit immediately":
-   | ShutDown
+     
+   | ShutDown Token -- A message from master to slave, "exit immediately":
+   | ShutDownACK    -- "I heard you, shutting down gracefully"
 
    -- Second, WORK MESSAGES:   
    ----------------------------------------
@@ -371,6 +417,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
 			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
          myid = nameToID host 0 machineList
      writeIORef myNodeID myid
+     writeIORef masterID myid
      writeIORef isMaster True
 
      taggedMsg$ "Master node id established as: "++showNodeID myid
@@ -422,10 +469,8 @@ initAction metadata (Master machineList) topStealAction schedMap =
 		  taggedMsg$ "  Wrote file to signify slave online: " ++ filename
 
 		  -- Keep track of the connection for future communications:
-		  let entry = Just (name, srcEnd)
-    --              modifyHotVar_ peerTable (\ pt -> V.cons entry pt)
 		  taggedMsg$ "  Extending peerTable with node ID "++ show id
-		  modifyHotVar_ peerTable (V.modify (\v -> MV.write v id entry))
+		  extendPeerTable id (name, srcEnd)
 
 		  slaveConnectLoop (iter-1) alreadyConnected' 
 
@@ -468,7 +513,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	  map') 
 
     -- Look up a host's position in the MachineList, skipping the first N
-    nameToID :: BS.ByteString -> Int -> [BS.ByteString] -> Int
+    nameToID :: PeerName -> Int -> [PeerName] -> Int
     nameToID bs1 skip bsls = 
       let indices = findIndices (\ bs2 -> bs1 == bs2 
     	 	                -- Hack: handle foo instead of foo.domain.com:
@@ -480,7 +525,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 
-
+------------------------------------------------------------------------------------------
 -- | TODO - FACTOR OUT TCP-transport SPECIFIC CODE:
 initAction metadata Slave topStealAction schedMap = 
   do 
@@ -495,7 +540,7 @@ initAction metadata Slave topStealAction schedMap =
      writeIORef global_mode "_S"
 
      transport <- readIORef myTransport
-     (mySourceAddr, fromMaster) <- T.newConnection transport
+     (mySourceAddr, myInbound) <- T.newConnection transport
 
      taggedMsg$ "  Source addr created: " ++ BS.unpack (T.serialize mySourceAddr)
 
@@ -519,14 +564,18 @@ initAction metadata Slave topStealAction schedMap =
 		 T.send toMaster [encode$ AnnounceSlave host (T.serialize mySourceAddr)]
 
                  taggedMsg$ "Sent name and addr to master "
-	         _machines_bss <- T.receive fromMaster
+	         _machines_bss <- T.receive myInbound
                  let MachineListMsg (masterId,masterName) myid machines = decode (BS.concat _machines_bss)
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 		 writeIORef myNodeID myid
+                 writeIORef masterID masterId
                  -- Since we already have a connection to the master we store this for later:
-		 modifyHotVar_ peerTable (V.modify (\v -> MV.write v masterId (Just (masterName, toMaster))))
-	         
+		 extendPeerTable masterId (masterName, toMaster)
+
+                 -- Further we already have our OWN connection, so we put this in the table for consistency:
+--		 extendPeerTable myid (host,myInbound)
+
                  return (masterId, machines)
          ----------------------------------------
          establishALLConections (masterId, machines) = do
@@ -542,7 +591,7 @@ initAction metadata Slave topStealAction schedMap =
          ----------------------------------------
          waitBarrier = do 
 	     -- Don't proceed till we get the go-message from the Master:
-	     msg <- T.receive fromMaster
+	     msg <- T.receive myInbound
 	     case decode (BS.concat msg) of 
 	       StartStealing -> taggedMsg$ "Received 'Go' message from master.  BEGIN STEALING."
 	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg
@@ -554,7 +603,7 @@ initAction metadata Slave topStealAction schedMap =
      when eager_connections (establishALLConections pr)
      waitBarrier
 
-     forkDaemon$ receiveDaemon fromMaster
+     forkDaemon$ receiveDaemon myInbound
      taggedMsg$ "Slave initAction returning control to scheduler..."
 
      return ()
@@ -576,6 +625,64 @@ commonInit metadata port = do
      myThreadId >>= writeIORef mainThread
 
      return host
+
+--------------------------------------------------------------------------------
+
+-- We initiate shutdown of the remote Monad par scheduling system by
+-- sending a message to our own receiveDaemon.  This can only be
+-- called on the master node.
+initiateShutdown :: Token -> IO ()
+initiateShutdown token = do 
+  master <- readHotVar isMaster  
+  myid   <- readIORef myNodeID
+  unless master $ errorExit$ "initiateShutdown called on non-master node!!"
+  sendTo myid (encode$ ShutDown token)
+  -- TODO: BLOCK Until shutdown is successful.
+
+-- Block until the shutdown process is successful.
+waitForShutdown :: Token -> IO ()
+waitForShutdown token = do 
+   t <- readChan shutdownChan 
+   unless (t == token) $ 
+     errorExit$ "Unlikely data race occured!  Two separet distributed Par instances tried to shutdown at the same time." 
+   return ()
+
+-- The master tells all workers to quit.
+masterShutdown :: Token -> T.TargetEnd -> IO ()
+masterShutdown token targetEnd = do
+   mLs  <- readIORef machineList
+   myid <- readIORef myNodeID
+   ----------------------------------------  
+   forM_ (zip [0..] mLs) $ \ (ndid,name) -> 
+     unless (ndid == myid) $ do 
+      sendTo ndid (encode$ ShutDown token)
+   ----------------------------------------  
+   -- Wait till we hear back that all nodes shut down successfully:
+   let loop 0 = return ()
+       loop n = do msg <- T.receive targetEnd
+		   case decode (BS.concat msg) of
+		     ShutDownACK -> loop (n-1)
+		     other -> do hPutStrLn stderr$ "Warning: received other msg while trying to shutdown.  Might be ok: "++show other
+			         loop n
+   loop (length mLs - 1)
+   taggedMsg$ "All nodes shut down successfully."
+   writeChan shutdownChan token
+
+-- TODO: Timeout.
+
+
+workerShutdown :: IO ()
+workerShutdown = do
+   taggedMsg$ "Shudown initiated.  Exiting worker."
+   mid <- readIORef masterID
+   sendTo mid (encode ShutDownACK)
+   -- On the slave node the receiveDaemon is running on the main
+   -- thread, so this should work:
+   exitSuccess
+
+-- Kill own pid:
+-- shutDownSelf
+
 
 --------------------------------------------------------------------------------
 
@@ -607,8 +714,11 @@ stealAction Sched{no} _ = do
      myid <- readHotVar myNodeID
      ind  <- pickVictim myid
      taggedMsg$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
-     (_,conn) <- connectNode ind 
-     T.send conn [encode$ StealRequest myid]
+
+--     (_,conn) <- connectNode ind 
+--     T.send conn [encode$ StealRequest myid]
+     sendTo ind (encode$ StealRequest myid)
+
      -- We have nothing to return immediately, but hopefully work will come back later.
      return Nothing
 
@@ -649,7 +759,6 @@ longSpawn (local, clo@(Closure n pld)) = do
 receiveDaemon :: T.TargetEnd -> IO ()
 receiveDaemon targetEnd = do
   dbgDelay "receiveDaemon"
-
   myid <- readIORef myNodeID
   bss  <- T.receive targetEnd
   taggedMsg$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
@@ -665,6 +774,7 @@ receiveDaemon targetEnd = do
 -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
 	Just x -> R.pushL longQueue x
         Nothing -> return ()
+      receiveDaemon targetEnd
 
     StealResponse fromNd pr@(ivarid,pclo) -> do
       taggedMsg$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
@@ -678,6 +788,7 @@ receiveDaemon targetEnd = do
 				                  liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
                                                   return ()
 				  })
+      receiveDaemon targetEnd
 
     WorkFinished fromNd ivarid payload -> do
       taggedMsg$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
@@ -690,8 +801,18 @@ receiveDaemon targetEnd = do
 			 	        localver = parFn payload
 				      })
       return ()
+      receiveDaemon targetEnd
 
-  receiveDaemon targetEnd
+    -- This case EXITS the receive loop peacefully:
+    ShutDown token -> do
+      taggedMsg$ "-== RECEIVED SHUTDOWN MESSAGE ==-"
+      master <- readHotVar isMaster
+      if master then masterShutdown token targetEnd
+                else workerShutdown 
+
+    msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ show msg
+
+
 
 
 --------------------------------------------------------------------------------

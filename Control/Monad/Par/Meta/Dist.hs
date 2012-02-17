@@ -3,6 +3,7 @@ module Control.Monad.Par.Meta.Dist (
 --  , runParIO
     runParDist
   , runParSlave
+  , shutdownDist
   , RemoteRsrc.longSpawn
   , module Control.Monad.Par.Meta
 ) where
@@ -15,6 +16,7 @@ import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 
+import System.Random (randomIO)
 import Remote2.Reg (registerCalls)
 
 import GHC.Conc
@@ -52,22 +54,11 @@ runParSlave metadata = do
 	       RemoteRsrc.stealAction
 	       (new >>= get)
 
-  fail "RETURNED FROM RUNMETAPARIO - THIS SHOULD NOT HAPPEN"
+  fail "RETURNED FROM runMetaParIO - THIS SHOULD NOT HAPPEN"
 
---   schedmap <- readHotVar globalScheds
---   RemoteRsrc.initAction RemoteRsrc.Slave globalScheds
---   tid      <- myThreadId
---   (cap, _) <- threadCapability tid
--- --  mysched  <- getSchedForCap cap
---   mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
-
---   RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
---   let schedloop = do work <- RemoteRsrc.stealAction mysched globalScheds
-		     
--- 		     schedloop
---   schedloop
-
-
-          -- defaultMetaData = [Remote.Task.__remoteCallMetaData]
-          -- lookup = registerCalls (defaultMetaData ++ metadata)
-
+-- This is a blocking operation that waits until shutdown is complete.
+shutdownDist :: IO ()
+shutdownDist = do 
+   uniqueTok <- randomIO
+   RemoteRsrc.initiateShutdown uniqueTok
+   RemoteRsrc.waitForShutdown  uniqueTok

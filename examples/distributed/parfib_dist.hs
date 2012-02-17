@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import Data.Int (Int64)
 import System.Environment (getArgs)
-import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get)
+import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get, shutdownDist)
 import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
@@ -55,5 +55,9 @@ main = do
 		       putStrLn "Using non-thresholded version:"
 		       ans <- (runParDist [__remoteCallMetaData] (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
+		       putStrLn $ "Calling SHUTDOWN..."
+                       shutdownDist
+		       putStrLn $ "... returned from shutdown, apparently successful."
+
         str -> error$"Unhandled mode: " ++ str
 
