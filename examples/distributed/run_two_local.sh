@@ -18,7 +18,7 @@ export MACHINE_LIST="$HOST $HOST"
 ./parfib_dist.exe master $N +RTS -N2 -RTS &
 
 MASTERPID=$!
-sleep 1
+sleep 0.4
 
 # Launch worker asynchronously:
 ./parfib_dist.exe slave +RTS -N2 -RTS  & 

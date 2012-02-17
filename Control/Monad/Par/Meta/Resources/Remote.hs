@@ -11,21 +11,22 @@ module Control.Monad.Par.Meta.Resources.Remote
   )  
  where
 
-import Control.Applicative ((<$>))
-import Control.Concurrent
-import Control.DeepSeq
-import Control.Exception (ErrorCall(..))
-import Control.Monad     (forM_, when)
+import Control.Applicative    ((<$>))
+import Control.Concurrent     (myThreadId, threadDelay, throwTo, 
+			       forkOS, threadCapability, ThreadId)
+import Control.DeepSeq        (NFData)
+import Control.Exception      (ErrorCall(..))
+import Control.Monad          (forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
-import Data.Unique   (hashUnique, newUnique)
-import Data.Typeable (Typeable)
-import Data.IORef
+import Data.Unique            (hashUnique, newUnique)
+import Data.Typeable          (Typeable)
+import Data.IORef             (writeIORef, readIORef, newIORef, IORef)
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as M
-import Data.Int
-import Data.Maybe (fromMaybe)
-import Data.Char (isSpace)
+import Data.Int               (Int64)
+import Data.Maybe             (fromMaybe)
+import Data.Char              (isSpace)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
@@ -36,20 +37,20 @@ import qualified Data.Vector.Mutable as MV
 import Data.Binary        (encode,decode, Binary)
 import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
-import GHC.Generics (Generic)
-import System.IO (hPutStr, hPutStrLn, hFlush, stdout, stderr)
+import GHC.Generics     (Generic)
+import System.IO        (hPutStr, hPutStrLn, hFlush, stdout, stderr)
 import System.IO.Unsafe (unsafePerformIO)
-import System.Process (readProcess)
+import System.Process   (readProcess)
 import System.Posix.Process (getProcessID)
 import System.Directory (removeFile, doesFileExist, renameFile)
-import System.Random (randomIO)
-import Text.Printf
+import System.Random    (randomIO)
+import Text.Printf      (printf)
 
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
-import Remote2.Closure 
+import Remote2.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
 import qualified Remote2.Reg as Reg
 
@@ -87,6 +88,8 @@ master_addr_file :: String
 master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
+
+eager_connections = True
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -139,6 +142,11 @@ mainThread = unsafePerformIO$ newIORef (error "uninitialized global 'mainThread'
 remoteIvarTable :: HotVar (IntMap.IntMap (Payload -> Par ()))
 remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 
+{-# NOINLINE global_mode #-}
+-- Just for debugging, tracking global node as M (master) or S (slave):
+global_mode = unsafePerformIO$ newIORef "_M"
+
+
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
 -----------------------------------------------------------------------------------
@@ -163,8 +171,6 @@ sendTo ndid msg = do
   let (Just (_,target)) = table V.! ndid
   T.send target [msg]
 
--- Just for debugging, tracking global node as M (master) or S (slave):
-global_mode = unsafePerformIO$ newIORef "_M"
 taggedMsg s = 
    if dbg then 
       do m <- readIORef global_mode
@@ -229,7 +235,7 @@ instance Show Payload where
 -- (However, these connections may or may not actually be connected.
 -- Lazy connection is permissable.)
 
--- Initialize global state.
+-- | Initialize one part of the global state.
 initPeerTable ms = do
      writeIORef  machineList ms
      hPutStr stderr "PeerTable:\n"
@@ -240,6 +246,7 @@ initPeerTable ms = do
 
 -- | Connect to a node if there is not already a connection.  Return
 --   the name and active connection.
+connectNode :: Int -> IO (BS.ByteString, T.SourceEnd)
 connectNode ind = do
   pt <- readHotVar peerTable
   let entry = pt V.! ind
@@ -257,7 +264,7 @@ connectNode ind = do
 
 -- | Wait until a file appears, read an addr from it, and connect.
 waitReadAndConnect ind file = do 
-      taggedMsg$ "Establishing connection to node by reading file: "++file
+      taggedMsg$ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
       let 
           loop bool = do
@@ -275,7 +282,7 @@ waitReadAndConnect ind file = do
  	        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
 		Just a  -> return a
       conn <- T.connect addr
-      taggedMsg$ "  ... Connected."
+      taggedMsg$ "     ... Connected."
       return conn
 
 -----------------------------------------------------------------------------------
@@ -292,7 +299,11 @@ type NodeID = Int
 showNodeID n = "<"++show n++">"
 
 -- Control messages are for starting the system up and communicating
--- between slaves and the master.
+-- between slaves and the master.  
+
+-- We group all Control messages under one datatype, though often
+-- these messages are used in disjoint phases and could be separate
+-- datatypes.
 data ControlMessage = 
      AnnounceSlave { name   :: BS.ByteString, 
 		     toAddr :: BS.ByteString }
@@ -300,6 +311,9 @@ data ControlMessage =
 
 -- | The master informs the slave of its index in the peerTable:
 data MachineListMsg = MachineListMsg Int MachineList
+  deriving (Show, Generic)
+
+data ConnectedAllPeers = ConnectedAllPeers
   deriving (Show, Generic)
 
 -- Work messages are for getting things done (stealing work, returning results).
@@ -311,20 +325,11 @@ data WorkMessage =
 
      -- The result of a parallel computation, evaluated remotely:
    | WorkFinished NodeID IVarId Payload
+
+     -- A message from master to slave to quit it.
+   | ShutDown
   deriving (Show, Generic, Typeable)
 
--- Use the GHC Generics mechanism to derive these:
--- (default methods would make this easier)
-instance Binary WorkMessage where
-  put = derivePut 
-  get = deriveGet
-instance Binary ControlMessage where
-  put = derivePut 
-  get = deriveGet
-instance Binary MachineListMsg where
-  put = derivePut 
-  get = deriveGet
--- Note, these encodings of sums are not efficient!
 
 -----------------------------------------------------------------------------------
 -- Main scheduler components (init & steal)
@@ -380,8 +385,9 @@ initAction metadata (Master machineList) topStealAction schedMap =
      let
          slaveConnectLoop 0    alreadyConnected = return ()
 	 slaveConnectLoop iter alreadyConnected = do
-	  [str] <- T.receive targetEnd
-          let AnnounceSlave{name,toAddr} = decode str
+          strs <- T.receive targetEnd 
+          let str = BS.concat strs
+              AnnounceSlave{name,toAddr} = decode str
 	  taggedMsg$ "Master: register new slave, name: "++ BS.unpack name
           taggedMsg$ "  Full message received from slave: "++ (BS.unpack str)
 
@@ -413,7 +419,16 @@ initAction metadata (Master machineList) topStealAction schedMap =
      ----------------------------------------
      taggedMsg$ "  ... waiting for slaves to connect."
      slaveConnectLoop (length allButMe) (M.singleton host 1)
-     taggedMsg$ "  All slaves connected!  Launching receiveDaemon..."
+
+     ----------------------------------------
+     when eager_connections $ do 
+       taggedMsg$ "  Waiting for slaves to bring up all N^2 mutual connections..."
+       forM_ (zip [0..] machineList) $ \ (ndid,name) -> do 
+          ConnectedAllPeers <- decode <$> BS.concat <$> T.receive targetEnd 
+          putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
+       
+     ----------------------------------------
+     taggedMsg$ "  All slaves ready!  Launching receiveDaemon..."
      forkDaemon$ receiveDaemon targetEnd
 
      taggedMsg$ "Master initAction returning control to scheduler..."
@@ -476,12 +491,21 @@ initAction metadata Slave topStealAction schedMap =
 
                  taggedMsg$ "Sent name and addr to master "
 	         _machines_bss <- T.receive fromMaster
-                 let MachineListMsg id machines = decode (BS.concat _machines_bss)
+                 let MachineListMsg myid machines = decode (BS.concat _machines_bss)
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 	         
-		 writeIORef myNodeID id
+		 writeIORef myNodeID myid
 		 return ()
+
+		 when eager_connections $ do 
+		   taggedMsg$ "  Proactively connecting to all peers..."
+		   forM_ (zip [0..] machines) $ \ (ndid,name) -> 
+                      unless (ndid == myid) $ do 
+			connectNode ndid
+--			taggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
+		   taggedMsg$ "  Fully connected, notifying master."
+		   T.send toMaster [encode ConnectedAllPeers]
 
 	     return ()
             else do threadDelay (10*1000) -- Wait between checking filesystem.
@@ -626,7 +650,6 @@ receiveDaemon targetEnd = do
       return ()
 
   receiveDaemon targetEnd
- where 
 
 
 --------------------------------------------------------------------------------
@@ -642,3 +665,18 @@ longSpawn  :: (NFData a, Serializable a)
 
 #endif
 
+-- Use the GHC Generics mechanism to derive these:
+-- (default methods would make this easier)
+instance Binary WorkMessage where
+  put = derivePut 
+  get = deriveGet
+instance Binary ControlMessage where
+  put = derivePut 
+  get = deriveGet
+instance Binary MachineListMsg where
+  put = derivePut 
+  get = deriveGet
+instance Binary ConnectedAllPeers where
+  put = derivePut 
+  get = deriveGet
+-- Note, these encodings of sums are not efficient!
