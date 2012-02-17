@@ -1,32 +1,24 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 
-{-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 -- | Resource for Remote execution.
 
 module Control.Monad.Par.Meta.Resources.Remote 
---   (
---     initAction
---   , stealAction
--- --  , spawnAcc
---   )  
+  ( initAction, stealAction, longSpawn, 
+    taggedMsg, InitMode(..)  
+  )  
  where
 
 import Control.Applicative ((<$>))
 import Control.Concurrent
 import Control.DeepSeq
-import Control.Exception.Base (evaluate)
-import Control.Exception (throwTo, ErrorCall(..))
-import Control.Monad
-import Control.Monad.IO.Class
+import Control.Exception (ErrorCall(..))
+import Control.Monad     (forM_, when)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
-
--- import Remote (ProcessM, Payload, MatchM, ProcessId, Serializable, RemoteCallMetaData,
--- 	       matchIf, send, match, receiveTimeout, receiveWait, matchUnknownThrow, 
--- 	       findPeerByRole, getPeers, spawnLocal, nameQueryOrStart, remoteInit)
-
-import Data.Unique (hashUnique, newUnique)
+import Data.Unique   (hashUnique, newUnique)
 import Data.Typeable (Typeable)
 import Data.IORef
 import qualified Data.IntMap as IntMap
@@ -34,66 +26,32 @@ import qualified Data.Map    as M
 import Data.Int
 import Data.Maybe (fromMaybe)
 import Data.Char (isSpace)
---import qualified Data.ByteString.Lazy       as BS
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
 import Data.List as L
 import Data.List.Split (splitOn)
-
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
-import GHC.Generics (Generic)
-
--- import Data.Serialize (encode,encodeLazy,decode)
--- import Data.Serialize.Derive
--- Cloud Haskell is in the "binary" rather than "cereal" camp presently:
-import Data.Binary (encode,decode, Binary)
-import Data.Binary.Derive
+import Data.Binary        (encode,decode, Binary)
+import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
-
--- import qualified Data.Serialize as Bin
--- import Data.Serialize.Put (runPut)
-
--- import Data.DeriveTH
--- $( derive makeBinary ''WorkMessage )
-
-
-import Remote2.Closure 
-import Remote2.Encoding (Payload, Serializable, serialDecode, serialDecodePure, getPayloadContent, getPayloadType)
--- import qualified Remote2.Reg (RemoteCallMetaData, getEntryByIdent, registerCalls)
-import qualified Remote2.Reg as Reg
-
--- import qualified Remote.Process as P 
+import GHC.Generics (Generic)
 import System.IO (hPutStr, hPutStrLn, hFlush, stdout, stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Process (readProcess)
 import System.Posix.Process (getProcessID)
 import System.Directory (removeFile, doesFileExist, renameFile)
-import System.Exit (exitFailure)
 import System.Random (randomIO)
-
 import Text.Printf
 
-import qualified Network.Transport     as T
-import qualified Network.Transport.TCP as TCP
-
-
--- import Data.Array.Accelerate
--- #ifdef ACCELERATE_CUDA_BACKEND
--- import qualified Data.Array.Accelerate.CUDA as Acc
--- #else
--- import qualified Data.Array.Accelerate.Interpreter as Acc
--- #endif
-
--- import Data.Concurrent.Deque.Class (WSDeque)
--- import Data.Concurrent.Deque.Reference as R
-
--- import System.IO.Unsafe
-
--- import Text.Printf
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import qualified Network.Transport     as T
+import qualified Network.Transport.TCP as TCP
+import Remote2.Closure 
+import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
+import qualified Remote2.Reg as Reg
 
 ----------------------------------------------------------------------------------------------------
 --                                              TODO                                              --
@@ -102,9 +60,9 @@ import Control.Monad.Par.Meta hiding (dbg, stealAction)
 --   * Make ivarid actually unique.  Per-thread incremented counters would be fine.
 --   * Add configurability for constants below.
 
-----------------------------------------------------------------------------------------------------
-
+-----------------------------------------------------------------------------------
 -- Global constants:
+-----------------------------------------------------------------------------------
 
 dbg :: Bool
 #ifdef DEBUG
@@ -119,44 +77,37 @@ type IVarId = Int
 type ParClosure a = (Par a, Closure (Par a))
 
 -- TODO: Make this configurable:
+control_port :: String
 control_port = "8098"
+
+work_base_port :: Int
 work_base_port = 8099
+
+master_addr_file :: String
 master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
+-----------------------------------------------------------------------------------
 
 -- An item of work that can be executed either locally, or stolen
 -- through the network.
 data LongWork = LongWork {
      localver  :: Par (),
      stealver  :: Maybe (IVarId, Closure Payload)
---     writeback :: a -> 
   }
 
 {-# NOINLINE longQueue #-}
--- | Long-stealing queue is pushed to by 'Par' workers, and popped
---   both by par workers and by remote processes.
--- longQueue :: Chan (IO ())
--- longQueue = unsafePerformIO newChan
---longQueue :: HotVar (Deque (IVarId, Closure Payload))
---longQueue :: HotVar (DQ.Queue LongWork)
---longQueue = unsafePerformIO $ R.newQ >>= newHotVar 
-
 longQueue :: DQ.Queue LongWork
 longQueue = unsafePerformIO $ R.newQ
-
 
 {-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
 type PeerName = BS.ByteString
--- peerTable :: HotVar (V.Vector (PeerName, Maybe T.SourceEnd))
 peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
--- peerTable = unsafePerformIO $ newHotVar V.empty
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
-
 
 {-# NOINLINE machineList #-}
 machineList :: IORef [BS.ByteString]
@@ -174,11 +125,9 @@ myNodeID = unsafePerformIO$ newIORef (error "uninitialized global 'myid'")
 isMaster :: HotVar Bool
 isMaster = unsafePerformIO$ newIORef False
 
-
 {-# NOINLINE globalRPCMetadata #-}
 globalRPCMetadata :: IORef Reg.Lookup
 globalRPCMetadata = unsafePerformIO$ newIORef (error "uninitialized 'globalRPCMetadata'")
-
 
 -- HACK: Assume the init action is invoked from the main program thread.
 -- We use this to throw exceptions that will really exit the process.
@@ -186,20 +135,13 @@ globalRPCMetadata = unsafePerformIO$ newIORef (error "uninitialized 'globalRPCMe
 mainThread :: IORef ThreadId
 mainThread = unsafePerformIO$ newIORef (error "uninitialized global 'mainThread'")
 
-
 {-# NOINLINE remoteIvarTable #-}
 remoteIvarTable :: HotVar (IntMap.IntMap (Payload -> Par ()))
 remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 
-
--- {-# NOINLINE resultQueue #-}
--- | Result queue is pushed to by the GPU daemon, and popped by the
--- 'Par' workers, meaning the 'WSDeque' is appropriate.
--- resultQueue :: WSDeque (Par ())
--- resultQueue = unsafePerformIO R.newQ
-
--- --------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
 -- Misc Helpers:
+-----------------------------------------------------------------------------------
 
 -- forkDaemon = forkIO
 forkDaemon = forkOS
@@ -230,7 +172,7 @@ taggedMsg s =
    else return ()
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
-dbgDelay msg = 
+dbgDelay _ = 
   if dbg then threadDelay (200*1000)
          else return ()
 
@@ -271,13 +213,13 @@ errorExit str = do
 
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
--- (do errorExit str; return (error "Internal problem: This point should never be reached"))
 
 instance Show Payload where
   show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "++ show (getPayloadContent payload) ++ ">"
     
--- --------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
 -- Initialize & Establish workers.
+-----------------------------------------------------------------------------------
 --
 -- This initialization and discovery phase could be factored into a
 -- separate module.  At the end of the discovery process the global
@@ -317,9 +259,7 @@ connectNode ind = do
 waitReadAndConnect ind file = do 
       taggedMsg$ "Establishing connection to node by reading file: "++file
       transport <- readIORef myTransport
---      ml        <- readIORef machineList
       let 
---          name  = ml !! ind
           loop bool = do
 	  b <- doesFileExist file 
 	  if b then BS.readFile file
@@ -338,31 +278,9 @@ waitReadAndConnect ind file = do
       taggedMsg$ "  ... Connected."
       return conn
 
-
-
-
--- --------------------------------------------------------------------------------
--- -- spawnAcc operator and init/steal definitions to export
-
--- spawnAcc :: (Arrays a) => Acc a -> Par (IVar a)
--- spawnAcc comp = do 
---     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
---     iv <- new
---     let wrappedComp = do
---           when dbg $ printf "running Accelerate computation\n"
---           ans <- evaluate $ Acc.run comp
---           R.pushL resultQueue $ do
---             when dbg $ liftIO $ printf "Accelerate computation finished\n"
---             put_ iv ans
---     liftIO $ writeChan gpuQueue wrappedComp
---     return iv               
-
--- -- | Loop for the GPU daemon; repeatedly takes work off the 'gpuQueue'
--- -- and runs it.
--- gpuDaemon :: IO ()
--- gpuDaemon = do
---   when dbg $ printf "gpu daemon entering loop\n" 
---   join (readChan gpuQueue) >> gpuDaemon
+-----------------------------------------------------------------------------------
+-- Data Types
+-----------------------------------------------------------------------------------
 
 -- | For now it is the master's job to know the machine list:
 data InitMode = Master MachineList | Slave
@@ -408,26 +326,9 @@ instance Binary MachineListMsg where
   get = deriveGet
 -- Note, these encodings of sums are not efficient!
 
-
--- data StealRequest = StealRequest NodeID
---   deriving (Show)
-
--- data StealResponse = 
---   StealResponse (IVarId, Closure Payload)
--- --  StealResponse (Maybe (IVarId, Closure Payload))
--- --  deriving (Typeable)
-
--- instance Binary StealRequest where
---   get = do n <- Bin.get
--- 	   return (StealRequest n)
---   put (StealRequest n) = Bin.put n
-
--- instance Binary StealResponse where
---   get = StealResponse <$> Bin.get 
---   put (StealResponse pld) = Bin.put pld
-
-
-------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------
+-- Main scheduler components (init & steal)
+-----------------------------------------------------------------------------------
 
 initAction :: [Reg.RemoteCallMetaData] -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
@@ -510,8 +411,6 @@ initAction metadata (Master machineList) topStealAction schedMap =
 
 	      slaveConnectLoop (iter-1) alreadyConnected' 
      ----------------------------------------
---     forkIO slaveConnectLoop
---     slaveConnectLoop (-1)  -- Loop forever
      taggedMsg$ "  ... waiting for slaves to connect."
      slaveConnectLoop (length allButMe) (M.singleton host 1)
      taggedMsg$ "  All slaves connected!  Launching receiveDaemon..."
@@ -592,8 +491,6 @@ initAction metadata Slave topStealAction schedMap =
      forkDaemon$ receiveDaemon fromMaster
      taggedMsg$ "Slave initAction returning control to scheduler..."
 
---     taggedMsg$ "Slave initAction jumping directly into receiveDaemon loop..."
---     receiveDaemon fromMaster
      return ()
 
 
@@ -614,29 +511,7 @@ commonInit metadata port = do
 
      return host
 
-
-
-
--- TODO: ShutDown function:
-{-
-
-     (slaveSourceEnds, masterTargetEnd) <- return (sourceEnds, targetEnd)
-
-     zipWithM_
-       (\slaveSourceEnd slaveId -> send slaveSourceEnd [BS.pack . show $ slaveId])
-       slaveSourceEnds [0 .. numSlaves-1]
-     replicateM_ numSlaves $ do
-       [slaveMessage] <- receive masterTargetEnd
-       print slaveMessage
-	     
-     closeTargetEnd masterTargetEnd
-     putStrLn "master: close connections"
--}
-
-
--- type StealAction =  Sched                 -- ^ 'Sched' for the current thread
---                  -> HotVar (IntMap Sched) -- ^ Map of all 'Sched's
---                  -> IO (Maybe (Par ()))
+--------------------------------------------------------------------------------
 
 stealAction :: StealAction
 stealAction Sched{no} _ = do
@@ -645,15 +520,11 @@ stealAction Sched{no} _ = do
   -- First try to pop local work:
   x <- R.tryPopR longQueue
 
---  master <- readIORef isMaster 
-
   case x of 
     Just (LongWork{localver}) -> do
       taggedMsg$ "stealAction: worker number "++show no++" found work in own queue."
       return (Just localver)
-    Nothing -> -- if master then return Nothing else raidPeer
-	       -- TEMP FIXME: Disabling stealing for the Master during DEBUGGING:
-	       raidPeer
+    Nothing -> raidPeer
  where 
   pickVictim myid = do
      pt   <- readHotVar peerTable
@@ -680,7 +551,6 @@ stealAction Sched{no} _ = do
 longSpawn (local, clo@(Closure n pld)) = do
   let pclo = fromMaybe (errorExitPure "Could not find Payload closure")
                      $ makePayloadClosure clo
-
   iv <- new
   liftIO$ do
     taggedMsg$ " Serialized closure: " ++ show clo
@@ -705,34 +575,6 @@ longSpawn (local, clo@(Closure n pld)) = do
 		})
 
   return iv
-
-
-
---   liftIO $ do 
-
-
---     let pred (WorkFinished iid _)      = iid == ivarid
---         -- the "continuation" to be invoked when receiving a
---         -- 'WorkFinished' message for our 'IVarId'
---         matchThis (WorkFinished _ pld) = liftIO $ do
---           (cap, _) <- threadCapability =<< myThreadId
---           when dbgR $ printf " [%d] Receive answer from longSpawn\n" cap
---           putResult pld
---         putResult pld = do
---           (cap, _) <- threadCapability =<< myThreadId
---           dpld <- fromMaybe (error "failed to decode payload") 
---                         <$> serialDecode pld
---           when dbgR $ printf " [%d] Pushing computation to put remote result into local IVar...\n" cap
---           pushWork cap $ put_ iv dpld
---           modifyHotVar_ matchIVars (IntMap.delete ivarid)
---     modifyHotVar_ matchIVars (IntMap.insert ivarid 
---                                             (matchIf pred matchThis, putResult))
---     when dbgR$ do (no, _) <- threadCapability =<< myThreadId
---                   printf " [%d] Pushing work %s on longQueue\n" no n
---     modifyHotVar_ longQueue (addback (ivarid, pclo))
--- --    when dbg $ do q <- readHotVar longQueue
--- --                  printf " lq: %s\n" (show (dqToList q))
---   return iv
 
 
 --------------------------------------------------------------------------------
@@ -772,7 +614,8 @@ receiveDaemon targetEnd = do
 				  })
 
     WorkFinished fromNd ivarid payload -> do
-      taggedMsg$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++" ivarID "++ show ivarid++" payload: "++show payload
+      taggedMsg$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
+		 " ivarID "++ show ivarid++" payload: "++show payload
       table <- readHotVar remoteIvarTable
       case IntMap.lookup ivarid table of 
         Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
@@ -785,94 +628,17 @@ receiveDaemon targetEnd = do
   receiveDaemon targetEnd
  where 
 
--- receiveDaemon :: ProcessM ()
--- receiveDaemon = do
--- --    when dbg $ liftIO $ do iids <- map fst <$> readHotVar matchIVars
--- --                           printf "IVars %s\n" (show iids)
---     matchIVars <- IntMap.foldr' ((:) . fst) 
---                     [matchPeerList, matchUnknownThrow] -- fallthrough cases
---                     <$> liftIO (readHotVar matchIVars)
---     liftIO$ printf "[PID %s] receiveDaemon: Starting receiveTimeout\n" ospid
---     receiveTimeout 10000 $ (matchSteal:matchIVars)
---     liftIO$ printf "[PID %s] receiveDaemon: receive timed out, looping..\n" ospid
---     receiveDaemon
---   where
---     matchPeerList = match $ \(PeerList pids) -> liftIO $
---                       modifyHotVar_ parWorkerPids (const $ V.fromList pids)
---     matchSteal = P.roundtripResponse $ \StealRequest -> do
---                    when dbgR $ liftIO $ printf "[PID %s] Got StealRequest message!! \n" ospid
---                    p <- liftIO $ modifyHotVar longQueue takefront
---                    case p of
---                      Just _ -> do
---                        when dbgR $ liftIO $ printf "[PID %s] Sending work to remote thief\n" ospid
---                        return (StealResponse p, ())
---                      Nothing -> return (StealResponse Nothing, ())
-
-
-
 
 --------------------------------------------------------------------------------
 -- <boilerplate>
 
 -- In Debug mode we require that IVar contents be Show-able:
 #ifdef DEBUG
--- put    :: (Show a, NFData a) => IVar a -> a -> Par ()
--- spawn  :: (Show a, NFData a) => Par a -> Par (IVar a)
--- spawn_ :: Show a => Par a -> Par (IVar a)
--- spawnP :: (Show a, NFData a) => a -> Par (IVar a)
--- put_   :: Show a => IVar a -> a -> Par ()
--- get    :: Show a => IVar a -> Par a
--- newFull :: (Show a, NFData a) => a -> Par (IVar a)
--- newFull_ ::  Show a => a -> Par (IVar a)
--- runPar   :: Show a => Par a -> a
--- runParIO :: Show a => Par a -> IO a
 longSpawn  :: (Show a, NFData a, Serializable a) 
            => ParClosure a -> Par (IVar a)
 #else
--- spawn      :: NFData a => Par a -> Par (IVar a)
--- spawn_     :: Par a -> Par (IVar a)
--- spawnP     :: NFData a => a -> Par (IVar a)
--- put_       :: IVar a -> a -> Par ()
--- put        :: NFData a => IVar a -> a -> Par ()
--- get        :: IVar a -> Par a
--- runPar     :: Par a -> a
--- runParIO   :: Par a -> IO a
-
--- TODO: Figure out the type signature for this. Should it be a
--- wrapper around CH's remoteInit? How much flexibility should we
--- offer with args?
 longSpawn  :: (NFData a, Serializable a) 
            => ParClosure a -> Par (IVar a)
--- newFull    :: NFData a => a -> Par (IVar a)
--- newFull_   :: a -> Par (IVar a)
-
-
--- instance PC.ParFuture Par IVar where
---   get    = get
---   spawn  = spawn
---   spawn_ = spawn_
---   spawnP = spawnP
-
--- instance PC.ParIVar Par IVar where
---   fork = fork
---   new  = new
---   put_ = put_
---   newFull = newFull
---   newFull_ = newFull_
 
 #endif
-
-
-
-----------------------------------------------------------------------------------------------------
--- SCRAP
-
-
--- This uses a byte per bit:
--- test = runPut$ 
---        do Bin.put True
--- 	  Bin.put False
--- 	  Bin.put True
--- 	  Bin.put False
--- 	  Bin.put True
 

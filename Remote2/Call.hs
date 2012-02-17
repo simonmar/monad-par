@@ -206,7 +206,7 @@ restOf e r = r
 -- Strip off applications of monads which we recognize (and convert to IO):
 wrapMonad :: Env -> Type -> Type -> Type
 wrapMonad e monad val =
-  trace (" ** WRAPMONAD " ++ show monad ++ " / " ++ show val ++ "\n\t  => " ++ show res) $
+--   trace (" ** WRAPMONAD " ++ show monad ++ " / " ++ show val ++ "\n\t  => " ++ show res) $
   res 
  where 
   outputM = monad
