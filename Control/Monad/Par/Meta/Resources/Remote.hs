@@ -301,33 +301,39 @@ showNodeID n = "<"++show n++">"
 -- Control messages are for starting the system up and communicating
 -- between slaves and the master.  
 
--- We group all Control messages under one datatype, though often
--- these messages are used in disjoint phases and could be separate
+-- We group all messages under one datatype, though often these
+-- messages are used in disjoint phases and could be separate
 -- datatypes.
-data ControlMessage = 
+data Message = 
+   -- First CONTROL MESSAGES:   
+   ----------------------------------------
      AnnounceSlave { name   :: BS.ByteString, 
 		     toAddr :: BS.ByteString }
-  deriving (Show, Generic)
 
--- | The master informs the slave of its index in the peerTable:
-data MachineListMsg = MachineListMsg Int MachineList
-  deriving (Show, Generic)
+     -- The master informs the slave of its index in the peerTable:
+   | MachineListMsg Int MachineList
 
-data ConnectedAllPeers = ConnectedAllPeers
-  deriving (Show, Generic)
+     -- The worker informs the master that it has connected to all
+     -- peers (eager connection mode only).
+   | ConnectedAllPeers
 
--- Work messages are for getting things done (stealing work, returning results).
-data WorkMessage = 
+     -- A message from master to slave, "exit immediately":
+   | ShutDown
+
+   -- Second, WORK MESSAGES:   
+   ----------------------------------------
+   -- Work messages are for getting things done (stealing work,
+   -- returning results).
+   ----------------------------------------
+
      -- | A message signifying a steal request and including the NodeID of
      --   the sender:
-     StealRequest NodeID
+   | StealRequest NodeID
    | StealResponse NodeID (IVarId, Closure Payload)
 
      -- The result of a parallel computation, evaluated remotely:
    | WorkFinished NodeID IVarId Payload
 
-     -- A message from master to slave to quit it.
-   | ShutDown
   deriving (Show, Generic, Typeable)
 
 
@@ -424,8 +430,10 @@ initAction metadata (Master machineList) topStealAction schedMap =
        taggedMsg$ "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
          unless (ndid == myid) $ do 
-          ConnectedAllPeers <- decode <$> BS.concat <$> T.receive targetEnd 
-          putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
+          msg <- decode <$> BS.concat <$> T.receive targetEnd 
+          case msg of 
+	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
+	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
        
      ----------------------------------------
      taggedMsg$ "  All slaves ready!  Launching receiveDaemon..."
@@ -668,21 +676,9 @@ longSpawn  :: (NFData a, Serializable a)
 
 -- Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
-instance Binary WorkMessage where
+instance Binary Message where
   put = derivePut 
   get = deriveGet
-instance Binary ControlMessage where
-  put = derivePut 
-  get = deriveGet
-instance Binary MachineListMsg where
-  put = derivePut 
-  get = deriveGet
-instance Binary ConnectedAllPeers where
-  put _ = Bin.put magic_word
-  get = do n <- Bin.get
-           if (n == magic_word)
-             then return ConnectedAllPeers
-             else errorExitPure$ "Corrupt ConnectedAllPeers message: "++show n
            
 magic_word :: Int64
 magic_word = 98989898989898989
