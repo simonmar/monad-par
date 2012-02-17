@@ -89,7 +89,8 @@ master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
-eager_connections = True
+-- eager_connections = True
+eager_connections = False
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -311,11 +312,15 @@ data Message =
 		     toAddr :: BS.ByteString }
 
      -- The master informs the slave of its index in the peerTable:
-   | MachineListMsg Int MachineList
+   | MachineListMsg (Int,BS.ByteString) Int MachineList
 
      -- The worker informs the master that it has connected to all
      -- peers (eager connection mode only).
    | ConnectedAllPeers
+
+     -- The master grants permission to start stealing.
+     -- No one had better send the master steal requests before this goes out!!
+   | StartStealing
 
      -- A message from master to slave, "exit immediately":
    | ShutDown
@@ -392,40 +397,45 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	 slaveConnectLoop iter alreadyConnected = do
           strs <- T.receive targetEnd 
           let str = BS.concat strs
-              AnnounceSlave{name,toAddr} = decode str
-	  taggedMsg$ "Master: register new slave, name: "++ BS.unpack name
-          taggedMsg$ "  Full message received from slave: "++ (BS.unpack str)
+              msg = decode str
+          case msg of
+            AnnounceSlave{name,toAddr} -> do 
+	      taggedMsg$ "Master: register new slave, name: "++ BS.unpack name
+	      taggedMsg$ "  Full message received from slave: "++ (BS.unpack str)
 
-          -- Deserialize each of the sourceEnds received by the slaves:
-	  case T.deserialize transport toAddr of
-	    Nothing         -> fail "Garbage message from slave!"
-	    Just sourceAddr -> do 
-              srcEnd <- T.connect sourceAddr
-              let (id, alreadyConnected') = updateConnected name alreadyConnected machineList
-              -- Convention: send slaves the machine list:
-              T.send srcEnd [encode$ MachineListMsg id machineList]
+	      -- Deserialize each of the sourceEnds received by the slaves:
+	      case T.deserialize transport toAddr of
+		Nothing         -> fail "Garbage message from slave!"
+		Just sourceAddr -> do 
+		  srcEnd <- T.connect sourceAddr
+		  let (id, alreadyConnected') = updateConnected name alreadyConnected machineList
+		  -- Convention: send slaves the machine list, and tell it what its ID is:
+		  T.send srcEnd [encode$ MachineListMsg (myid,host) id machineList]
 
-              taggedMsg$ "Sent machine list to slave "++showNodeID id++": "++ unwords (map BS.unpack machineList)
+		  taggedMsg$ "Sent machine list to slave "++showNodeID id++": "++ unwords (map BS.unpack machineList)
 
-              -- Write the file to communicate that the machine is
-              -- online and set up a way to contact it:
-              let filename = mkAddrFile name id
+		  -- Write the file to communicate that the machine is
+		  -- online and set up a way to contact it:
+		  let filename = mkAddrFile name id
 
-              atomicWriteFile filename toAddr
-	      taggedMsg$ "  Wrote file to signify slave online: " ++ filename
+		  atomicWriteFile filename toAddr
+		  taggedMsg$ "  Wrote file to signify slave online: " ++ filename
 
-              -- Keep track of the connection for future communications:
-	      let entry = Just (name, srcEnd)
---              modifyHotVar_ peerTable (\ pt -> V.cons entry pt)
-	      taggedMsg$ "  Extending peerTable with node ID "++ show id
-              modifyHotVar_ peerTable (\ pt -> V.modify (\v -> MV.write v id entry) pt)
+		  -- Keep track of the connection for future communications:
+		  let entry = Just (name, srcEnd)
+    --              modifyHotVar_ peerTable (\ pt -> V.cons entry pt)
+		  taggedMsg$ "  Extending peerTable with node ID "++ show id
+		  modifyHotVar_ peerTable (V.modify (\v -> MV.write v id entry))
 
-	      slaveConnectLoop (iter-1) alreadyConnected' 
+		  slaveConnectLoop (iter-1) alreadyConnected' 
+
+            othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg
      ----------------------------------------
      taggedMsg$ "  ... waiting for slaves to connect."
      slaveConnectLoop (length allButMe) (M.singleton host 1)
 
      ----------------------------------------
+     -- Possibly wait for slaves to get all their peer connections up:
      when eager_connections $ do 
        taggedMsg$ "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
@@ -434,11 +444,17 @@ initAction metadata (Master machineList) topStealAction schedMap =
           case msg of 
 	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
 	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
-       
-     ----------------------------------------
+
      taggedMsg$ "  All slaves ready!  Launching receiveDaemon..."
      forkDaemon$ receiveDaemon targetEnd
+       
+     ----------------------------------------
+     -- Allow slaves to proceed past the barrier:     
+     forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
+       unless (ndid == myid) $ 
+	 sendTo ndid (encode StartStealing)
 
+     ----------------------------------------
      taggedMsg$ "Master initAction returning control to scheduler..."
      return ()
  where 
@@ -483,11 +499,16 @@ initAction metadata Slave topStealAction schedMap =
 
      taggedMsg$ "  Source addr created: " ++ BS.unpack (T.serialize mySourceAddr)
 
-     -- For now: Assume shared filesystem:
-     let masterloop = do  -- Loop until connected to master.
+     let 
+         waitMasterFile = do  
+           -- Loop until we see the master's file.
+           -- For now: Assume shared filesystem:
            e <- doesFileExist master_addr_file
-           if e then do
-
+           if e then return ()
+                else do threadDelay (10*1000) -- Wait between checking filesystem.
+		        waitMasterFile
+         ----------------------------------------
+         doMasterConnection = do
              taggedMsg$ "Found master's address in file: "++ master_addr_file
              bstr <- BS.readFile master_addr_file
 	     case T.deserialize transport bstr of 
@@ -499,27 +520,39 @@ initAction metadata Slave topStealAction schedMap =
 
                  taggedMsg$ "Sent name and addr to master "
 	         _machines_bss <- T.receive fromMaster
-                 let MachineListMsg myid machines = decode (BS.concat _machines_bss)
+                 let MachineListMsg (masterId,masterName) myid machines = decode (BS.concat _machines_bss)
                  taggedMsg$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
-	         
 		 writeIORef myNodeID myid
-		 return ()
+                 -- Since we already have a connection to the master we store this for later:
+		 modifyHotVar_ peerTable (V.modify (\v -> MV.write v masterId (Just (masterName, toMaster))))
+	         
+                 return (masterId, machines)
+         ----------------------------------------
+         establishALLConections (masterId, machines) = do
+	     taggedMsg$ "  Proactively connecting to all peers..."
+	     myid <- readIORef myNodeID 
+	     forM_ (zip [0..] machines) $ \ (ndid,name) -> 
+		unless (ndid == myid) $ do 
+		  connectNode ndid
+ --			taggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
+		  return ()
+	     taggedMsg$ "  Fully connected, notifying master."
+	     sendTo masterId (encode ConnectedAllPeers)
+         ----------------------------------------
+         waitBarrier = do 
+	     -- Don't proceed till we get the go-message from the Master:
+	     msg <- T.receive fromMaster
+	     case decode (BS.concat msg) of 
+	       StartStealing -> taggedMsg$ "Received 'Go' message from master.  BEGIN STEALING."
+	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg
+              
 
-		 when eager_connections $ do 
-		   taggedMsg$ "  Proactively connecting to all peers..."
-		   forM_ (zip [0..] machines) $ \ (ndid,name) -> 
-                      unless (ndid == myid) $ do 
-			connectNode ndid
---			taggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
-                        return ()
-		   taggedMsg$ "  Fully connected, notifying master."
-		   T.send toMaster [encode ConnectedAllPeers]
-
-	     return ()
-            else do threadDelay (10*1000) -- Wait between checking filesystem.
-		    masterloop 
-     masterloop
+     -- These are the key steps:
+     waitMasterFile
+     pr <- doMasterConnection
+     when eager_connections (establishALLConections pr)
+     waitBarrier
 
      forkDaemon$ receiveDaemon fromMaster
      taggedMsg$ "Slave initAction returning control to scheduler..."
