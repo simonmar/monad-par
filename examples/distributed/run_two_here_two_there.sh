@@ -8,7 +8,7 @@ if [ "$THERE" == "" ]; then
    exit 1
 fi
 
-OPTS="-xc"
+# OPTS="-xc"
 
 # Error if any command fails:
 set -e 

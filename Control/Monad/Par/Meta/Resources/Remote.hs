@@ -38,7 +38,7 @@ import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import Data.Binary        (encode,decode, Binary)
-import Data.Binary.Derive (deriveGet, derivePut)
+-- import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
 import GHC.Generics       (Generic)
 import System.IO          (hPutStr, hPutStrLn, hFlush, stdout, stderr)
@@ -363,7 +363,7 @@ data Message =
 		     toAddr :: BS.ByteString }
 
      -- The master informs the slave of its index in the peerTable:
-   | MachineListMsg (Int, PeerName) Int MachineList
+   | MachineListMsg (Int, PeerName) !Int MachineList
 
      -- The worker informs the master that it has connected to all
      -- peers (eager connection mode only).
@@ -372,9 +372,8 @@ data Message =
      -- The master grants permission to start stealing.
      -- No one had better send the master steal requests before this goes out!!
    | StartStealing
-
      
-   | ShutDown Token -- A message from master to slave, "exit immediately":
+   | ShutDown !Token -- A message from master to slave, "exit immediately":
    | ShutDownACK    -- "I heard you, shutting down gracefully"
 
    -- Second, WORK MESSAGES:   
@@ -385,11 +384,11 @@ data Message =
 
      -- | A message signifying a steal request and including the NodeID of
      --   the sender:
-   | StealRequest NodeID
-   | StealResponse NodeID (IVarId, Closure Payload)
+   | StealRequest !NodeID
+   | StealResponse !NodeID (IVarId, Closure Payload)
 
      -- The result of a parallel computation, evaluated remotely:
-   | WorkFinished NodeID IVarId Payload
+   | WorkFinished !NodeID !IVarId Payload
 
   deriving (Show, Generic, Typeable)
 
@@ -836,12 +835,72 @@ longSpawn  :: (NFData a, Serializable a)
 
 #endif
 
+#if 0 
 -- Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
 instance Binary Message where
   put = derivePut 
   get = deriveGet
-           
+#else 
+
+-- Even though this is tedious, because I was running into (toEnum)
+-- exceptions with the above I'm going to write this out longhand
+-- [2012.02.17]:
+type TagTy = Bin.Word8
+instance Binary Message where
+ put AnnounceSlave{name,toAddr} = do Bin.put (1::TagTy)
+				     Bin.put name
+				     Bin.put toAddr
+ put (MachineListMsg (n1,bs) n2 ml) = 
+                                  do 
+                                     Bin.put (2::TagTy)
+				     Bin.put n1
+				     Bin.put bs
+				     Bin.put n2
+				     Bin.put ml
+ put ConnectedAllPeers =    Bin.put (3::TagTy)
+ put StartStealing     =    Bin.put (4::TagTy)
+ put (ShutDown tok)    = do Bin.put (5::TagTy)
+			    Bin.put tok
+ put ShutDownACK       =    Bin.put (6::TagTy)
+ put (StealRequest id) = do Bin.put (7::TagTy)
+			    Bin.put id
+ put (StealResponse id (iv,pay)) = 
+                         do Bin.put (8::TagTy)
+			    Bin.put id
+			    Bin.put iv
+			    Bin.put pay
+ put (WorkFinished nd iv pay) = 
+                         do Bin.put (9::TagTy)
+			    Bin.put nd
+			    Bin.put iv
+			    Bin.put pay
+ get = do tag <- Bin.get 
+          case tag :: TagTy of 
+	    1 -> do name   <- Bin.get 
+		    toAddr <- Bin.get
+		    return (AnnounceSlave{name,toAddr})
+            2 -> do n1 <- Bin.get 
+		    bs <- Bin.get 
+		    n2 <- Bin.get 
+		    ml <- Bin.get 
+		    return (MachineListMsg (n1,bs) n2 ml) 
+	    3 -> return ConnectedAllPeers
+	    4 -> return StartStealing
+	    5 -> ShutDown <$> Bin.get
+	    6 -> return ShutDownACK
+	    7 -> StealRequest <$> Bin.get
+	    8 -> do id <- Bin.get
+		    iv <- Bin.get
+		    pay <- Bin.get
+		    return (StealResponse id (iv,pay))
+	    9 -> do nd <- Bin.get
+		    iv <- Bin.get
+		    pay <- Bin.get
+		    return (WorkFinished nd iv pay)
+#endif      
+
+     
 magic_word :: Int64
 magic_word = 98989898989898989
 -- Note, these encodings of sums are not efficient!
