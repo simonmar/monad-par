@@ -14,7 +14,7 @@ module Control.Monad.Par.Meta.Resources.Remote
  where
 
 import Control.Applicative    ((<$>))
-import Control.Concurrent     (myThreadId, threadDelay, throwTo, 
+import Control.Concurrent     (myThreadId, threadDelay, throwTo, killThread,
 			       writeChan, readChan, newChan, Chan,
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
@@ -37,6 +37,7 @@ import Data.List as L
 import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
+import qualified Data.Set    as Set
 import Data.Binary        (encode,decode, Binary)
 -- import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
@@ -167,6 +168,8 @@ remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 global_mode = unsafePerformIO$ newIORef "_M"
 
 
+
+
 type Token = Int64
 {-# NOINLINE shutdownChan #-}
 shutdownChan :: Chan Token
@@ -267,29 +270,33 @@ foreign import ccall "exit" c_exit :: Int -> IO ()
 -- | Exit the process successfully.
 exitSuccess :: IO a
 exitSuccess = do 
-   taggedMsg 1$ "EXITING process with success exit code."
+   taggedMsg 1$ "  EXITING process with success exit code."
    closeAllConnections
    -- TODO: Close connections.
-   taggedMsg 1$ " (Connections closed, now exiting for real)"
+   taggedMsg 1$ "   (Connections closed, now exiting for real)"
    exitProcess 0
 
 exitProcess :: Int -> IO a
 exitProcess code = do
-      -- Option 1: Async exception
-      --      tid <- readIORef mainThread
-      --      throwTo tid (ErrorCall "Exiting Successfully!")
-      -- Option 2: kill:
-      --      mypid <- getProcessID
-      --      system$ "kill "++ show mypid
-      -- Option 3: FFI call:
-      hFlush stdout
-      hFlush stderr
-      -- Hack... pause for a bit...
-      threadDelay (100*1000)
+   -- Cleanup: 
+   hFlush stdout
+   hFlush stderr
+   -- Hack... pause for a bit...
+   threadDelay (100*1000)
+   ----------------------------------------
+   -- Option 1: Async exception
+   -- tid <- readIORef mainThread
+   -- throwTo tid (ErrorCall$ "Exiting with code: "++show code)
 
-      c_exit code
-      putStrLn$ "SHOULD NOT SEE this... process should have exited already."
-      return (error "Should not see this.")
+   -- Option 2: kill:
+   --      mypid <- getProcessID
+   --      system$ "kill "++ show mypid
+
+   -- Option 3: FFI call:
+   c_exit code
+
+   putStrLn$ "SHOULD NOT SEE this... process should have exited already."
+   return (error "Should not see this.")
 
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
@@ -533,7 +540,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
 
      taggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
-     forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd
+     forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
        
      ----------------------------------------
      -- Allow slaves to proceed past the barrier:     
@@ -645,7 +652,7 @@ initAction metadata Slave topStealAction schedMap =
      when eager_connections (establishALLConections pr)
      waitBarrier
 
-     forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound
+     forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound schedMap
      taggedMsg 3$ "Slave initAction returning control to scheduler..."
 
      return ()
@@ -699,6 +706,7 @@ masterShutdown token targetEnd = do
      unless (ndid == myid) $ do 
       sendTo ndid (encode$ ShutDown token)
    ----------------------------------------  
+#ifdef SHUTDOWNACK
    taggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
    let loop 0 = return ()
        loop n = do msg <- T.receive targetEnd
@@ -709,19 +717,27 @@ masterShutdown token targetEnd = do
 			         loop n
    loop (length mLs - 1)
    taggedMsg 1$ "All nodes shut down successfully."
+#endif
    writeChan shutdownChan token
 
 -- TODO: Timeout.
 
 
-workerShutdown :: IO ()
-workerShutdown = do
+workerShutdown :: (IntMap.IntMap Sched) -> IO ()
+workerShutdown schedMap = do
    taggedMsg 1$ "Shutdown initiated for worker."
+#ifdef SHUTDOWNACK
    mid <- readIORef masterID
    sendTo mid (encode ShutDownACK)
+#endif
+   -- Because we are completely shutting down the process we are at
+   -- liberty to kill all worker threads here:
+   forM_ (IntMap.elems schedMap) $ \ Sched{tids} -> do
+--     set <- readHotVar tids
+     set <- modifyHotVar tids (\set -> (Set.empty,set))
+     mapM_ killThread (Set.toList set) 
 
-   -- On the slave node the receiveDaemon is running on the main
-   -- thread, so this should work:
+   taggedMsg 1$ "  Killed all Par worker threads."
    exitSuccess
 
 -- Kill own pid:
@@ -800,71 +816,71 @@ longSpawn (local, clo@(Closure n pld)) = do
 --------------------------------------------------------------------------------
 
 -- | Receive steal requests from other nodes.
-receiveDaemon :: T.TargetEnd -> IO ()
-receiveDaemon targetEnd = do
-  dbgDelay "receiveDaemon"
-  myid <- readIORef myNodeID
+receiveDaemon :: T.TargetEnd -> HotVar (IntMap.IntMap Sched) -> IO ()
+receiveDaemon targetEnd schedMap = 
+  do myid <- readIORef myNodeID
+     rcvLoop myid
+ where 
+  rcvLoop myid = do
+   dbgDelay "receiveDaemon"
+ --  bss  <- if dbg
+   bss  <- if False
+	   then catch (T.receive targetEnd)
+		      (\ (e::SomeException) -> do
+		       hPutStrLn stderr "Exception while attempting to receive message in receive loop."
+		       exitSuccess
+		      )
+	   else T.receive targetEnd
+   taggedMsg 3$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
---  bss  <- if dbg
-  bss  <- if True
-          then catch (T.receive targetEnd)
-	             (\ (e::SomeException) -> do
-		      hPutStrLn stderr "Exception while attempting to receive message in receive loop."
-		      exitSuccess
-		     )
-	  else T.receive targetEnd
+   case decode (BS.concat bss) of 
+     StealRequest ndid -> do
+       taggedMsg 2$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
+       p <- R.tryPopL longQueue
+       case p of 
+	 Just (LongWork{stealver= Just stealme}) -> do 
+	   taggedMsg 2$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
+	   sendTo ndid (encode$ StealResponse myid stealme)
+ -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
+	 Just x -> R.pushL longQueue x
+	 Nothing -> return ()
+       rcvLoop myid
 
+     StealResponse fromNd pr@(ivarid,pclo) -> do
+       taggedMsg 2$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
-  taggedMsg 3$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
+       loc <- deClosure pclo
+       R.pushL longQueue (LongWork { stealver = Nothing,
+				     localver = do 
+						   liftIO$ putStrLn "[rcvdmn] RUNNING STOLEN PAR WORK "
+						   payl <- loc
+						   liftIO$ putStrLn "[rcvdmn]   DONE running stolen par work."
+						   liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
+						   return ()
+				   })
+       rcvLoop myid
 
-  case decode (BS.concat bss) of 
-    StealRequest ndid -> do
-      taggedMsg 2$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
-      p <- R.tryPopL longQueue
-      case p of 
-	Just (LongWork{stealver= Just stealme}) -> do 
-	  taggedMsg 2$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
-	  sendTo ndid (encode$ StealResponse myid stealme)
--- TODO: FIXME: Dig deeper into the queue to look for something stealable:
-	Just x -> R.pushL longQueue x
-        Nothing -> return ()
-      receiveDaemon targetEnd
+     WorkFinished fromNd ivarid payload -> do
+       taggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
+		    " ivarID "++ show ivarid++" payload: "++show payload
+       table <- readHotVar remoteIvarTable
+       case IntMap.lookup ivarid table of 
+	 Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
+	 Just parFn -> 
+	   R.pushL longQueue (LongWork { stealver = Nothing, 
+					 localver = parFn payload
+				       })
+       rcvLoop myid
 
-    StealResponse fromNd pr@(ivarid,pclo) -> do
-      taggedMsg 2$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
+     -- This case EXITS the receive loop peacefully:
+     ShutDown token -> do
+       taggedMsg 1$ "-== RECEIVED SHUTDOWN MESSAGE ==-"
+       master    <- readHotVar isMaster
+       schedMap' <- readHotVar schedMap
+       if master then masterShutdown token targetEnd
+		 else workerShutdown schedMap'
 
-      loc <- deClosure pclo
-      R.pushL longQueue (LongWork { stealver = Nothing,
-				    localver = do 
-                                                  liftIO$ putStrLn "[rcvdmn] RUNNING STOLEN PAR WORK "
-                                                  payl <- loc
-                                                  liftIO$ putStrLn "[rcvdmn]   DONE running stolen par work."
-				                  liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
-                                                  return ()
-				  })
-      receiveDaemon targetEnd
-
-    WorkFinished fromNd ivarid payload -> do
-      taggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
-		   " ivarID "++ show ivarid++" payload: "++show payload
-      table <- readHotVar remoteIvarTable
-      case IntMap.lookup ivarid table of 
-        Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
-        Just parFn -> 
-          R.pushL longQueue (LongWork { stealver = Nothing, 
-			 	        localver = parFn payload
-				      })
-      return ()
-      receiveDaemon targetEnd
-
-    -- This case EXITS the receive loop peacefully:
-    ShutDown token -> do
-      taggedMsg 1$ "-== RECEIVED SHUTDOWN MESSAGE ==-"
-      master <- readHotVar isMaster
-      if master then masterShutdown token targetEnd
-                else workerShutdown 
-
-    msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ show msg
+     msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ show msg
 
 
 

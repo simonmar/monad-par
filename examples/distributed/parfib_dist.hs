@@ -8,9 +8,10 @@ import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
 
-import System.Process   (readProcess)
+import Control.Concurrent   (myThreadId)
+import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
-import Data.Char              (isSpace)
+import Data.Char            (isSpace)
 
 --------------------------------------------------------------------------------
 
@@ -22,9 +23,10 @@ parfib1 n | n < 2 = return 1
 parfib1 n = do 
     liftIO $ do 
        mypid <- getProcessID
+       mytid <- myThreadId
 --       host  <- hostName
        let host = ""
-       putStrLn $ " [host "++host++" pid "++show mypid++"] PARFIB "++show n
+       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
