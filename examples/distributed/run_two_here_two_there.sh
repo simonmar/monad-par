@@ -8,6 +8,8 @@ if [ "$THERE" == "" ]; then
    exit 1
 fi
 
+OPTS="-xc"
+
 # Error if any command fails:
 set -e 
 set -x
@@ -18,18 +20,18 @@ HERE=`hostname`
 export MACHINE_LIST="$HERE $HERE $THERE $THERE"
 
 # Launch master asynchronously:
-./parfib_dist.exe master 10 +RTS -N2 -RTS &
+./parfib_dist.exe master 10 +RTS -N2 $OPTS -RTS &
 MASTERPID=$!
 
 sleep 0.3
 # Launch 1st worker asynchronously:
-./parfib_dist.exe slave +RTS -N2 -RTS  & 
+./parfib_dist.exe slave +RTS -N2 $OPTS -RTS &> worker1.log & 
 WORKER1PID=$!
 
 # Launch 2nd and 3rd remotely (asynchronously):
-ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 -RTS)" & 
+ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 $OPTS -RTS)" &> worker2.log & 
 WORKER2PID=$!
-ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 -RTS)" & 
+ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 $OPTS -RTS)" &> worker3.log & 
 WORKER3PID=$!
 
 # Now wait until the master is done.

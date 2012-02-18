@@ -2,6 +2,7 @@ Name:                monad-par
 Version:             0.2.2
 Synopsis:            A library for parallel programming based on a monad
 
+
 -- Version history:
 --  0.1      : First release
 --  0.1.0.1  : 
@@ -35,9 +36,8 @@ Description:         This library offers an alternative parallel programming
                      data structures, and other added capabilities
                      layered on top of the 'Par' monad.
 
-                       * Foo
-                       * Bar
-
+                       * Finish These
+                       * Module Descriptions
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
@@ -49,6 +49,8 @@ Stability:           Experimental
 Category:            Control,Parallelism,Monads
 Build-type:          Simple
 Cabal-version:       >=1.8
+
+
 
 extra-source-files:
      examples/benchlist.txt
@@ -126,9 +128,12 @@ Library
                  , Control.Monad.Par.Meta
                  , Control.Monad.Par.Meta.SharedMemoryOnly
                  , Control.Monad.Par.Meta.Resources.SharedMemory
-                 , Control.Monad.Par.Meta.SharedMemoryAccelerate
-                 , Control.Monad.Par.Meta.Resources.Accelerate
 
+  if !flag(NoGPU) {
+     Exposed-modules: 
+                   Control.Monad.Par.Meta.SharedMemoryAccelerate
+                 , Control.Monad.Par.Meta.Resources.Accelerate
+  }
 
   Build-depends: base >= 4 && < 5
 -- The parallel package currently requires deepseq 1.1:
@@ -149,7 +154,13 @@ Library
                , mtl >= 2.0.1.0
                , parallel >= 3.1
                , abstract-deque >= 0.1.4
-               , accelerate >= 0.9.0.1
+  if !flag(NoGPU) {
+    Build-depends: accelerate >= 0.9.0.1
+  }
+  if !flag(NoDist) {
+    Build-depends: network
+                 , binary-derive
+  }
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
@@ -224,3 +235,12 @@ Test-Suite test-monad-par
                  , QuickCheck, HUnit, time
                  , test-framework, test-framework-th
                  , test-framework-hunit, test-framework-quickcheck2
+
+
+Flag NoGPU
+  Description: Turn of GPU support and therefore accelerate dependencies.
+  Default:     False
+
+Flag NoDist
+  Description: Turn of Distributed support and therefore certain dependencies.
+  Default:     False

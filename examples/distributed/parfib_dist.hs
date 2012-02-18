@@ -22,7 +22,8 @@ parfib1 n | n < 2 = return 1
 parfib1 n = do 
     liftIO $ do 
        mypid <- getProcessID
-       host  <- hostName
+--       host  <- hostName
+       let host = ""
        putStrLn $ " [host "++host++" pid "++show mypid++"] PARFIB "++show n
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
