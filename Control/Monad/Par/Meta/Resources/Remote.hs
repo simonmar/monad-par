@@ -18,7 +18,7 @@ import Control.Concurrent     (myThreadId, threadDelay, throwTo,
 			       writeChan, readChan, newChan, Chan,
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
-import Control.Exception      (ErrorCall(..))
+import Control.Exception      (ErrorCall(..), catch, SomeException)
 import Control.Monad          (forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
@@ -41,15 +41,15 @@ import Data.Binary        (encode,decode, Binary)
 -- import Data.Binary.Derive (deriveGet, derivePut)
 import qualified Data.Binary as Bin
 import GHC.Generics       (Generic)
+import Prelude     hiding (catch)
+import qualified Prelude as P
 import System.IO          (hPutStr, hPutStrLn, hFlush, stdout, stderr)
 import System.IO.Unsafe   (unsafePerformIO)
-import System.Process     (readProcess, system)
--- import System.Exit        (exitSuccess)
+import System.Process     (readProcess)
 import System.Posix.Process (getProcessID)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
 import Text.Printf        (printf)
-
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import qualified Network.Transport     as T
@@ -178,7 +178,11 @@ shutdownChan = unsafePerformIO $ newChan
 -----------------------------------------------------------------------------------
 
 -- forkDaemon = forkIO
-forkDaemon = forkOS
+forkDaemon name action = do   
+  forkOS $ catch action
+		 (\ (e :: SomeException) -> do
+		  hPutStrLn stderr $ "Caught Error in Daemon thread ("++name++"): " ++ show e
+		 )
 
 hostName = trim <$>
 --    readProcess "uname" ["-n"] ""
@@ -250,23 +254,55 @@ makePayloadClosure (Closure name arg) =
 errorExit :: String -> IO a
 -- TODO: Might be better to just call "kill" on our own PID:
 errorExit str = do
-      tid <- readIORef mainThread
-      throwTo tid (ErrorCall$ "ERROR: "++str)
-      error$ "ERROR: "++str
+--       tid <- readIORef mainThread
+--       throwTo tid (ErrorCall$ "ERROR: "++str)
+--       error$ "ERROR: "++str
+   hPutStrLn stderr $ "ERROR: "++str 
+   closeAllConnections
+   hPutStrLn stderr $ "Connections closed, now exiting process."
+   exitProcess 1
+
+foreign import ccall "exit" c_exit :: Int -> IO ()
 
 -- | Exit the process successfully.
 exitSuccess :: IO a
-exitSuccess = do
-      mypid <- getProcessID
-      system$ "kill "++ show mypid
---      tid <- readIORef mainThread
---      throwTo tid (ErrorCall "Exiting Successfully!")
-      return (error "Should not see this.")
---      error$ "ERROR: "++str
+exitSuccess = do 
+   taggedMsg 1$ "EXITING process with success exit code."
+   closeAllConnections
+   -- TODO: Close connections.
+   taggedMsg 1$ " (Connections closed, now exiting for real)"
+   exitProcess 0
 
+exitProcess :: Int -> IO a
+exitProcess code = do
+      -- Option 1: Async exception
+      --      tid <- readIORef mainThread
+      --      throwTo tid (ErrorCall "Exiting Successfully!")
+      -- Option 2: kill:
+      --      mypid <- getProcessID
+      --      system$ "kill "++ show mypid
+      -- Option 3: FFI call:
+      hFlush stdout
+      hFlush stderr
+      -- Hack... pause for a bit...
+      threadDelay (100*1000)
+
+      c_exit code
+      putStrLn$ "SHOULD NOT SEE this... process should have exited already."
+      return (error "Should not see this.")
 
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
+
+-- TODO:
+closeAllConnections = do
+  pt <- readHotVar peerTable
+  V.forM_ pt $ \ entry -> 
+    case entry of 
+      Nothing -> return ()
+      Just (_,targ) -> T.closeSourceEnd targ
+  trans <- readIORef myTransport
+  T.closeTransport trans
 
 instance Show Payload where
   show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "++ show (getPayloadContent payload) ++ ">"
@@ -497,7 +533,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
 	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
 
      taggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
-     forkDaemon$ receiveDaemon targetEnd
+     forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd
        
      ----------------------------------------
      -- Allow slaves to proceed past the barrier:     
@@ -609,7 +645,7 @@ initAction metadata Slave topStealAction schedMap =
      when eager_connections (establishALLConections pr)
      waitBarrier
 
-     forkDaemon$ receiveDaemon myInbound
+     forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound
      taggedMsg 3$ "Slave initAction returning control to scheduler..."
 
      return ()
@@ -663,7 +699,7 @@ masterShutdown token targetEnd = do
      unless (ndid == myid) $ do 
       sendTo ndid (encode$ ShutDown token)
    ----------------------------------------  
-   -- Wait till we hear back that all nodes shut down successfully:
+   taggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
    let loop 0 = return ()
        loop n = do msg <- T.receive targetEnd
 		   case decode (BS.concat msg) of
@@ -680,9 +716,10 @@ masterShutdown token targetEnd = do
 
 workerShutdown :: IO ()
 workerShutdown = do
-   taggedMsg 1$ "Shudown initiated.  Exiting worker."
+   taggedMsg 1$ "Shutdown initiated for worker."
    mid <- readIORef masterID
    sendTo mid (encode ShutDownACK)
+
    -- On the slave node the receiveDaemon is running on the main
    -- thread, so this should work:
    exitSuccess
@@ -767,7 +804,17 @@ receiveDaemon :: T.TargetEnd -> IO ()
 receiveDaemon targetEnd = do
   dbgDelay "receiveDaemon"
   myid <- readIORef myNodeID
-  bss  <- T.receive targetEnd
+
+--  bss  <- if dbg
+  bss  <- if True
+          then catch (T.receive targetEnd)
+	             (\ (e::SomeException) -> do
+		      hPutStrLn stderr "Exception while attempting to receive message in receive loop."
+		      exitSuccess
+		     )
+	  else T.receive targetEnd
+
+
   taggedMsg 3$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
   case decode (BS.concat bss) of 
@@ -898,6 +945,7 @@ instance Binary Message where
 		    iv <- Bin.get
 		    pay <- Bin.get
 		    return (WorkFinished nd iv pay)
+            _ -> errorExitPure$ "Corrupt message: tag header = "++show tag
 #endif      
 
      
