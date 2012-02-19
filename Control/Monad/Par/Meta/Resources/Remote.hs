@@ -77,7 +77,8 @@ verbosity :: Int
 #ifdef DEBUG
 verbosity = 5
 #else
-verbosity = 1
+-- This should be 1 by default but temporarily upping to 2:
+verbosity = 2
 #endif
 
 dbg :: Bool
@@ -100,7 +101,13 @@ master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
-eager_connections = False
+eager_connections = True
+-- Other temporary toggles:
+-- define SHUTDOWNACK
+#define KILL_WORKERS_ON_SHUTDOWN
+
+-- printErr = hPutStrLn stderr
+printErr = putStrLn
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -181,11 +188,12 @@ shutdownChan = unsafePerformIO $ newChan
 -----------------------------------------------------------------------------------
 
 -- forkDaemon = forkIO
-forkDaemon name action = do   
-  forkOS $ catch action
-		 (\ (e :: SomeException) -> do
-		  hPutStrLn stderr $ "Caught Error in Daemon thread ("++name++"): " ++ show e
-		 )
+forkDaemon name action = 
+   forkWithExceptions forkOS ("Daemon thread ("++name++")") action
+--   forkOS $ catch action
+-- 		 (\ (e :: SomeException) -> do
+-- 		  hPutStrLn stderr $ "Caught Error in Daemon thread ("++name++"): " ++ show e
+-- 		 )
 
 hostName = trim <$>
 --    readProcess "uname" ["-n"] ""
@@ -217,7 +225,7 @@ sendTo ndid msg = do
 taggedMsg lvl s = 
    if verbosity >= lvl then 
       do m <- readIORef global_mode
-	 hPutStrLn stderr$ " [distmeta"++m++"] "++s
+	 printErr$ " [distmeta"++m++"] "++s
    else return ()
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
@@ -260,9 +268,9 @@ errorExit str = do
 --       tid <- readIORef mainThread
 --       throwTo tid (ErrorCall$ "ERROR: "++str)
 --       error$ "ERROR: "++str
-   hPutStrLn stderr $ "ERROR: "++str 
+   printErr$ "ERROR: "++str 
    closeAllConnections
-   hPutStrLn stderr $ "Connections closed, now exiting process."
+   printErr$ "Connections closed, now exiting process."
    exitProcess 1
 
 foreign import ccall "exit" c_exit :: Int -> IO ()
@@ -329,9 +337,9 @@ instance Show Payload where
 -- | Initialize one part of the global state.
 initPeerTable ms = do
      writeIORef  machineList ms
-     hPutStr stderr "PeerTable:\n"
+     printErr$ "PeerTable:\n"
      forM_ (zip [0..] ms) $ \ (i,m) -> 
-        hPutStrLn stderr $ "  "++show i++": "++ BS.unpack m
+        printErr$ "  "++show i++": "++ BS.unpack m
      writeHotVar peerTable (V.replicate (length ms) Nothing)
 
 
@@ -732,12 +740,13 @@ workerShutdown schedMap = do
 #endif
    -- Because we are completely shutting down the process we are at
    -- liberty to kill all worker threads here:
+#ifdef KILL_WORKERS_ON_SHUTDOWN
    forM_ (IntMap.elems schedMap) $ \ Sched{tids} -> do
 --     set <- readHotVar tids
      set <- modifyHotVar tids (\set -> (Set.empty,set))
      mapM_ killThread (Set.toList set) 
-
    taggedMsg 1$ "  Killed all Par worker threads."
+#endif
    exitSuccess
 
 -- Kill own pid:
@@ -827,19 +836,19 @@ receiveDaemon targetEnd schedMap =
    bss  <- if False
 	   then catch (T.receive targetEnd)
 		      (\ (e::SomeException) -> do
-		       hPutStrLn stderr "Exception while attempting to receive message in receive loop."
+		       printErr$ "Exception while attempting to receive message in receive loop."
 		       exitSuccess
 		      )
 	   else T.receive targetEnd
-   taggedMsg 3$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
+   taggedMsg 4$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
    case decode (BS.concat bss) of 
      StealRequest ndid -> do
-       taggedMsg 2$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
+       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
-	   taggedMsg 2$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
+	   taggedMsg 3$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
 	   sendTo ndid (encode$ StealResponse myid stealme)
  -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
 	 Just x -> R.pushL longQueue x
@@ -847,7 +856,7 @@ receiveDaemon targetEnd schedMap =
        rcvLoop myid
 
      StealResponse fromNd pr@(ivarid,pclo) -> do
-       taggedMsg 2$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
+       taggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
        loc <- deClosure pclo
        R.pushL longQueue (LongWork { stealver = Nothing,
