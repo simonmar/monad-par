@@ -67,6 +67,63 @@ import qualified Remote2.Reg as Reg
 --   * Add configurability for constants below.
 --   * Get rid of myTransport -- just use the peerTable
 
+
+-----------------------------------------------------------------------------------
+-- Data Types
+-----------------------------------------------------------------------------------
+
+-- | For now it is the master's job to know the machine list:
+data InitMode = Master MachineList | Slave
+-- | The MachineList may contain duplicates!!
+type MachineList = [PeerName] 
+
+type NodeID = Int
+
+showNodeID n = "<"++show n++">"
+
+-- Control messages are for starting the system up and communicating
+-- between slaves and the master.  
+
+-- We group all messages under one datatype, though often these
+-- messages are used in disjoint phases and could be separate
+-- datatypes.
+data Message = 
+   -- First CONTROL MESSAGES:   
+   ----------------------------------------
+     AnnounceSlave { name   :: PeerName,
+		     toAddr :: BS.ByteString }
+
+     -- The master informs the slave of its index in the peerTable:
+   | MachineListMsg (Int, PeerName) !Int MachineList
+
+     -- The worker informs the master that it has connected to all
+     -- peers (eager connection mode only).
+   | ConnectedAllPeers
+
+     -- The master grants permission to start stealing.
+     -- No one had better send the master steal requests before this goes out!!
+   | StartStealing
+     
+   | ShutDown !Token -- A message from master to slave, "exit immediately":
+   | ShutDownACK    -- "I heard you, shutting down gracefully"
+
+   -- Second, WORK MESSAGES:   
+   ----------------------------------------
+   -- Work messages are for getting things done (stealing work,
+   -- returning results).
+   ----------------------------------------
+
+     -- | A message signifying a steal request and including the NodeID of
+     --   the sender:
+   | StealRequest !NodeID
+   | StealResponse !NodeID (IVarId, Closure Payload)
+
+     -- The result of a parallel computation, evaluated remotely:
+   | WorkFinished !NodeID !IVarId Payload
+
+  deriving (Show, Generic, Typeable)
+
+
 -----------------------------------------------------------------------------------
 -- Global constants:
 -----------------------------------------------------------------------------------
@@ -101,17 +158,17 @@ master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
-eager_connections = True
+eager_connections = False
 -- Other temporary toggles:
 -- define SHUTDOWNACK
-#define KILL_WORKERS_ON_SHUTDOWN
+-- define KILL_WORKERS_ON_SHUTDOWN
 
 -- printErr = hPutStrLn stderr
 printErr = putStrLn
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- TODO: Several of these things (myNodeID, masterID, etc) could
 -- become immutable, packaged in a config record, and be passed around
@@ -175,8 +232,6 @@ remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 global_mode = unsafePerformIO$ newIORef "_M"
 
 
-
-
 type Token = Int64
 {-# NOINLINE shutdownChan #-}
 shutdownChan :: Chan Token
@@ -208,19 +263,8 @@ hostName = trim <$>
 -- | Send to a particular node in the peerTable:
 sendTo :: NodeID -> BS.ByteString -> IO ()
 sendTo ndid msg = do
---  table <- readHotVar peerTable
---  let (Just (_,target)) = table V.! ndid
---  T.send target [msg]
     (_,conn) <- connectNode ndid
     T.send conn [msg]
-
--- | Likewise for Receiving
--- receiveFrom :: NodeID -> IO BS.ByteString
--- receiveFrom ndid = do
---   table <- readHotVar peerTable
---   let (Just (_,conn, ??)) = table V.! ndid
---   bss <- T.receive conn
---   return (BS.concat bss)
 
 taggedMsg lvl s = 
    if verbosity >= lvl then 
@@ -388,60 +432,10 @@ extendPeerTable :: Int -> (PeerName, T.SourceEnd) -> IO ()
 extendPeerTable id entry = 
   modifyHotVar_ peerTable (V.modify (\v -> MV.write v id (Just entry)))
 
------------------------------------------------------------------------------------
--- Data Types
------------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+-- Factored Transport-related inititialization:
+--------------------------------------------------------------------------------
 
--- | For now it is the master's job to know the machine list:
-data InitMode = Master MachineList | Slave
--- | The MachineList may contain duplicates!!
-type MachineList = [PeerName] 
-
-type NodeID = Int
-
-showNodeID n = "<"++show n++">"
-
--- Control messages are for starting the system up and communicating
--- between slaves and the master.  
-
--- We group all messages under one datatype, though often these
--- messages are used in disjoint phases and could be separate
--- datatypes.
-data Message = 
-   -- First CONTROL MESSAGES:   
-   ----------------------------------------
-     AnnounceSlave { name   :: PeerName,
-		     toAddr :: BS.ByteString }
-
-     -- The master informs the slave of its index in the peerTable:
-   | MachineListMsg (Int, PeerName) !Int MachineList
-
-     -- The worker informs the master that it has connected to all
-     -- peers (eager connection mode only).
-   | ConnectedAllPeers
-
-     -- The master grants permission to start stealing.
-     -- No one had better send the master steal requests before this goes out!!
-   | StartStealing
-     
-   | ShutDown !Token -- A message from master to slave, "exit immediately":
-   | ShutDownACK    -- "I heard you, shutting down gracefully"
-
-   -- Second, WORK MESSAGES:   
-   ----------------------------------------
-   -- Work messages are for getting things done (stealing work,
-   -- returning results).
-   ----------------------------------------
-
-     -- | A message signifying a steal request and including the NodeID of
-     --   the sender:
-   | StealRequest !NodeID
-   | StealResponse !NodeID (IVarId, Closure Payload)
-
-     -- The result of a parallel computation, evaluated remotely:
-   | WorkFinished !NodeID !IVarId Payload
-
-  deriving (Show, Generic, Typeable)
 
 
 -----------------------------------------------------------------------------------
