@@ -18,12 +18,13 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent
+import Control.Concurrent (forkOn, newEmptyMVar, putMVar, takeMVar)
 import Control.DeepSeq
 import Control.Monad
 import "mtl" Control.Monad.Cont (ContT(..), MonadCont, callCC, runContT)
 import "mtl" Control.Monad.Reader (ReaderT, MonadReader, runReaderT, ask)
 import Control.Monad.IO.Class
+import Control.Exception (catch, throwTo, SomeException)
 import GHC.Conc
 
 import Data.Concurrent.Deque.Class (WSDeque)
@@ -35,7 +36,9 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 
+import Prelude hiding (catch)
 import System.IO.Unsafe (unsafePerformIO)
+import System.IO (hPutStrLn, stderr)
 import System.Random.MWC
 
 import Text.Printf
@@ -147,12 +150,23 @@ makeOrGetSched sa cap = do
 -- appropriately. It is the caller's responsibility to manage things
 -- like mortal counts.
 spawnWorkerOnCap :: StealAction -> Int -> IO ThreadId
-spawnWorkerOnCap sa cap = forkOn cap $ do
-  me <- myThreadId
-  sched@Sched{ tids } <- makeOrGetSched sa cap
-  modifyHotVar_ tids (Set.insert me)
-  when dbg $ printf "[%d] spawning new worker\n" cap
-  runReaderT (workerLoop errK) sched
+spawnWorkerOnCap sa cap = 
+  forkWithExceptions (forkOn cap)  "spawned Par worker" $ do 
+    me <- myThreadId
+    sched@Sched{ tids } <- makeOrGetSched sa cap
+    modifyHotVar_ tids (Set.insert me)
+    when dbg $ printf "[%d] spawning new worker\n" cap
+    runReaderT (workerLoop errK) sched
+
+forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
+forkWithExceptions forkit descr action = do 
+   parent <- myThreadId
+   forkit $ 
+      catch action
+	 (\ e -> do
+	  hPutStrLn stderr $ "Exception inside "++descr++": "++show e
+	  throwTo parent (e::SomeException)
+	 )
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
 -- just before the new worker enters the 'workerLoop'.

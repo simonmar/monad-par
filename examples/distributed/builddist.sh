@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -e 
+set -x
 
 # Comment to disable debug mode:
 if [ "$DEBUG" != "" ]; then 
@@ -9,7 +10,12 @@ else
   OPTS=""
 fi
 
-ghc -i../.. -hide-package remote --make parfib_dist.hs -o parfib_dist.exe -O2 -threaded -rtsopts $OPTS $@
+if [ "$GHC" = "" ]; then 
+  GHC=ghc
+fi
+
+# -hide-package remote
+$GHC -i../..  --make parfib_dist.hs -o parfib_dist.exe -O2 -threaded -rtsopts $OPTS $@
 
 echo "  Next run this command here:"
 echo "MACHINE_LIST=... ./parfib_dist.exe master 10 +RTS -N2"

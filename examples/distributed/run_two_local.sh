@@ -12,20 +12,27 @@ set -x
 
 HOST=`hostname`
 
+# Use -xc here under profiling mode:
+OPTS="-N2 $*"
+
 export MACHINE_LIST="$HOST $HOST"
 
 # Launch master asynchronously:
-./parfib_dist.exe master $N +RTS -N2 -RTS &
+./parfib_dist.exe master $N +RTS $OPTS -RTS &
 
 MASTERPID=$!
-sleep 1
+sleep 0.3
 
 # Launch worker asynchronously:
-./parfib_dist.exe slave +RTS -N2 -RTS  & 
+./parfib_dist.exe slave +RTS $OPTS -RTS &> worker.log & 
 WORKERPID=$!
 
 # Now wait until the master is done.
 wait $MASTERPID
+echo "Done running master computation."
 
-echo "Done running master computation.  Killing worker if it's still running."
-kill -9 $WORKERPID
+# Don't worry about errors in the slave process.
+set +e
+wait $WORKERPID
+
+exit 0 

@@ -3,6 +3,7 @@ module Control.Monad.Par.Meta.Dist (
 --  , runParIO
     runParDist
   , runParSlave
+  , shutdownDist
   , RemoteRsrc.longSpawn
   , module Control.Monad.Par.Meta
 ) where
@@ -15,6 +16,10 @@ import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 
+import Control.Exception (catch, throw, SomeException)
+import Prelude hiding (catch)
+import System.Random (randomIO)
+import System.IO (hPutStrLn, stderr)
 import Remote2.Reg (registerCalls)
 
 import GHC.Conc
@@ -36,38 +41,34 @@ sa :: StealAction
 sa = RemoteRsrc.stealAction 
 
 --runPar   = runMetaPar   ia sa
-runParDist metadata = runMetaParIO (ia metadata) sa
+runParDist metadata comp = 
+   catch (runMetaParIO (ia metadata) sa comp)
+	 (\ e -> do
+	  hPutStrLn stderr $ "Exception inside runParDist: "++show e
+	  throw (e::SomeException)
+	 )
 
 -- When global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
 runParSlave metadata = do
-  RemoteRsrc.taggedMsg "runParSlave invoked."
+  RemoteRsrc.taggedMsg 2 "runParSlave invoked."
 --  registerCalls metadata
 --  RemoteRsrc.taggedMsg "RPC metadata initialized."
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
   runMetaParIO (RemoteRsrc.initAction metadata RemoteRsrc.Slave)
-	       RemoteRsrc.stealAction
+	       (\ x y -> do res <- RemoteRsrc.stealAction x y; 
+		            threadDelay (10 * 1000);
+	                    return res)
 	       (new >>= get)
 
-  fail "RETURNED FROM RUNMETAPARIO - THIS SHOULD NOT HAPPEN"
+  fail "RETURNED FROM runMetaParIO - THIS SHOULD NOT HAPPEN"
 
---   schedmap <- readHotVar globalScheds
---   RemoteRsrc.initAction RemoteRsrc.Slave globalScheds
---   tid      <- myThreadId
---   (cap, _) <- threadCapability tid
--- --  mysched  <- getSchedForCap cap
---   mysched  <- makeOrGetSched RemoteRsrc.stealAction cap
-
---   RemoteRsrc.taggedMsg "Slave running simple stealAction loop until shutdown..."
---   let schedloop = do work <- RemoteRsrc.stealAction mysched globalScheds
-		     
--- 		     schedloop
---   schedloop
-
-
-          -- defaultMetaData = [Remote.Task.__remoteCallMetaData]
-          -- lookup = registerCalls (defaultMetaData ++ metadata)
-
+-- This is a blocking operation that waits until shutdown is complete.
+shutdownDist :: IO ()
+shutdownDist = do 
+   uniqueTok <- randomIO
+   RemoteRsrc.initiateShutdown uniqueTok
+   RemoteRsrc.waitForShutdown  uniqueTok

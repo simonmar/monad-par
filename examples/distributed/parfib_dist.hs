@@ -3,10 +3,15 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import Data.Int (Int64)
 import System.Environment (getArgs)
-import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get)
+import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get, shutdownDist)
 import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
+
+import Control.Concurrent   (myThreadId)
+import System.Process       (readProcess)
+import System.Posix.Process (getProcessID)
+import Data.Char            (isSpace)
 
 --------------------------------------------------------------------------------
 
@@ -16,11 +21,25 @@ type FibType = Int64
 parfib1 :: FibType -> Par FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
-    liftIO $ putStrLn $ " PARFIB "++show n
+    liftIO $ do 
+       mypid <- getProcessID
+       mytid <- myThreadId
+--       host  <- hostName
+       let host = ""
+       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
     return (x+y)
+
+hostName = do s <- readProcess "hostname" [] ""
+	      return (trim s)
+ where 
+  -- | Trim whitespace from both ends of a string.
+  trim :: String -> String
+  trim = f . f
+     where f = reverse . dropWhile isSpace
+
 
 -- Generate stub code for RPC:
 remotable ['parfib1]
@@ -39,5 +58,9 @@ main = do
 		       putStrLn "Using non-thresholded version:"
 		       ans <- (runParDist [__remoteCallMetaData] (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
+		       putStrLn $ "Calling SHUTDOWN..."
+                       shutdownDist
+		       putStrLn $ "... returned from shutdown, apparently successful."
+
         str -> error$"Unhandled mode: " ++ str
 
