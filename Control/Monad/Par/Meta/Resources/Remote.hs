@@ -55,6 +55,7 @@ import Text.Printf        (printf)
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
+import qualified Network.Transport.MVar as MT
 import Remote2.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
 import qualified Remote2.Reg as Reg
@@ -66,7 +67,7 @@ import qualified Remote2.Reg as Reg
 --   * Make ivarid actually unique.  Per-thread incremented counters would be fine.
 --   * Add configurability for constants below.
 --   * Get rid of myTransport -- just use the peerTable
-
+--   * Rewrite serialization using putWordhost
 
 -----------------------------------------------------------------------------------
 -- Data Types
@@ -145,13 +146,6 @@ dbg = (verbosity>=5)
 type IVarId = Int
 
 type ParClosure a = (Par a, Closure (Par a))
-
--- TODO: Make this configurable:
-control_port :: String
-control_port = "8098"
-
-work_base_port :: Int
-work_base_port = 8099
 
 master_addr_file :: String
 master_addr_file = "master_control.addr"
@@ -266,11 +260,12 @@ sendTo ndid msg = do
     (_,conn) <- connectNode ndid
     T.send conn [msg]
 
-taggedMsg lvl s = 
+taggedMsg lvl s = do 
+   tid <- myThreadId
    if verbosity >= lvl then 
       do m <- readIORef global_mode
-	 printErr$ " [distmeta"++m++"] "++s
-   else return ()
+	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
+    else return ()
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay _ = 
@@ -436,6 +431,28 @@ extendPeerTable id entry =
 -- Factored Transport-related inititialization:
 --------------------------------------------------------------------------------
 
+initTransport port = do 
+    host <- hostName        
+--    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
+    TCP.mkTransport $ TCP.TCPConfig T.defaultHints host port
+
+-- TODO: Make this configurable:
+control_port :: String
+control_port = "8098"
+
+work_base_port :: Int
+work_base_port = 8099
+
+
+breakSymmetry :: IO Int
+breakSymmetry =
+  do mypid <- getProcessID
+     -- Use the PID to break symmetry between multiple slaves on the same machine:
+     let port  = work_base_port + fromIntegral mypid
+	 port' = if port > 65535 
+                 then (port `mod` (65535-8000)) + 8000
+		 else port
+     return port'
 
 
 -----------------------------------------------------------------------------------
@@ -449,28 +466,26 @@ initAction metadata (Master machineList) topStealAction schedMap =
   do 
      taggedMsg 2$ "Initializing master..."
 
-     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
-     taggedMsg 3$ "RPC metadata initialized."
-
      -- Initialize the peerTable now that we know how many nodes there are:
      initPeerTable machineList
 
      -- Initialize the transport layer:
-     host <- BS.pack <$> hostName
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
-     writeIORef myTransport transport
-     myThreadId >>= writeIORef mainThread
-        
-     let allButMe = if (elem host machineList) 
-		    then delete host machineList
-		    else error$ "Could not find master domain name "++BS.unpack host++
-			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
-         myid = nameToID host 0 machineList
+     transport <- initTransport control_port
+
+     -- Write global mutable variables:
+     ----------------------------------------
+     host <- BS.pack <$> hostName        
+     let myid = nameToID host 0 machineList
+     taggedMsg 3$ "Master node id established as: "++showNodeID myid
      writeIORef myNodeID myid
      writeIORef masterID myid
      writeIORef isMaster True
+     writeIORef myTransport transport
+     myThreadId >>= writeIORef mainThread
+     writeIORef globalRPCMetadata (Reg.registerCalls metadata)
+     taggedMsg 3$ "RPC metadata initialized."
+     ----------------------------------------
 
-     taggedMsg 3$ "Master node id established as: "++showNodeID myid
 
      (sourceAddr, targetEnd) <- T.newConnection transport
      -- Hygiene: Clear files storing slave addresses:
@@ -480,9 +495,12 @@ initAction metadata (Master machineList) topStealAction schedMap =
         when b $ removeFile file
 
      -- Write a file with our address enabling slaves to find us:
-     atomicWriteFile master_addr_file $ T.serialize sourceAddr
+     atomicWriteFile master_addr_file       $ T.serialize sourceAddr
      -- We are also a worker, so we write the file under our own name as well:
      atomicWriteFile (mkAddrFile host myid) $ T.serialize sourceAddr
+
+     -- Remember how to talk to ourselves (as a worker):
+     -- extendPeerTable myid (host, sourceAddr)
 
      -- Connection Listening Loop:
      ----------------------------------------
@@ -527,6 +545,10 @@ initAction metadata (Master machineList) topStealAction schedMap =
             othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg
      ----------------------------------------
      taggedMsg 3$ "  ... waiting for slaves to connect."
+     let allButMe = if (elem host machineList) 
+		    then delete host machineList
+		    else error$ "Could not find master domain name "++BS.unpack host++
+			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
      slaveConnectLoop (length allButMe) (M.singleton host 1)
      taggedMsg 2$ "  ... All slaves announced themselves."
 
@@ -575,19 +597,12 @@ initAction metadata (Master machineList) topStealAction schedMap =
 
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
-
 ------------------------------------------------------------------------------------------
--- | TODO - FACTOR OUT TCP-transport SPECIFIC CODE:
 initAction metadata Slave topStealAction schedMap = 
   do 
-     mypid <- getProcessID
-     -- Use the PID to break symmetry between multiple slaves on the same machine:
-     let port  = work_base_port + fromIntegral mypid
-	 port' = if port > 65535 
-                 then (port `mod` (65535-8000)) + 8000
-		 else port
-     taggedMsg 2$ "Init slave: creating connection on port " ++ show port'
-     host <- BS.pack <$> commonInit metadata (show port')
+     port <- breakSymmetry
+     taggedMsg 2$ "Init slave: creating connection on port " ++ show port
+     host <- BS.pack <$> commonInit metadata (show port)
      writeIORef global_mode "_S"
 
      transport <- readIORef myTransport
@@ -669,7 +684,7 @@ commonInit metadata port = do
 
      host <- hostName
 
-     transport <- TCP.mkTransport $ TCP.TCPConfig T.defaultHints host port
+     transport <- initTransport port
      writeIORef myTransport transport
 
      -- ASSUME init action is called from main thread:
@@ -838,7 +853,8 @@ receiveDaemon targetEnd schedMap =
 
    case decode (BS.concat bss) of 
      StealRequest ndid -> do
-       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
+--       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
+       when (verbosity>=3) $ do hPutStr stderr "!"; hFlush stderr
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
@@ -877,7 +893,7 @@ receiveDaemon targetEnd schedMap =
 
      -- This case EXITS the receive loop peacefully:
      ShutDown token -> do
-       taggedMsg 1$ "-== RECEIVED SHUTDOWN MESSAGE ==-"
+       taggedMsg 1$ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd
@@ -907,6 +923,9 @@ longSpawn  :: (NFData a, Serializable a)
 instance Binary Message where
   put = derivePut 
   get = deriveGet
+magic_word :: Int64
+magic_word = 98989898989898989
+-- Note, these encodings of sums are not efficient!
 #else 
 
 -- Even though this is tedious, because I was running into (toEnum)
@@ -966,8 +985,3 @@ instance Binary Message where
 		    return (WorkFinished nd iv pay)
             _ -> errorExitPure$ "Corrupt message: tag header = "++show tag
 #endif      
-
-     
-magic_word :: Int64
-magic_word = 98989898989898989
--- Note, these encodings of sums are not efficient!

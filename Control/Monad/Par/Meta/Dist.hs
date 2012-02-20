@@ -59,7 +59,9 @@ runParSlave metadata = do
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
   runMetaParIO (RemoteRsrc.initAction metadata RemoteRsrc.Slave)
-	       RemoteRsrc.stealAction
+	       (\ x y -> do res <- RemoteRsrc.stealAction x y; 
+		            threadDelay (10 * 1000);
+	                    return res)
 	       (new >>= get)
 
   fail "RETURNED FROM runMetaParIO - THIS SHOULD NOT HAPPEN"
