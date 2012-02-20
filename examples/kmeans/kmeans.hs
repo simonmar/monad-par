@@ -23,7 +23,6 @@ import Data.Array
 import Text.Printf
 import Data.List
 import Data.Function
-import Data.Binary (decodeFile)
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
 import Control.Monad.Par as Par
@@ -42,14 +41,13 @@ main = do
   t0 <- getCurrentTime
   let points = case args of
                 [_, _, npts] -> genPoints rs (read npts)
-                [_]      -> genPoints rs 21
-                _        -> error "Need strategy, n-threads, and n-points"
+                _        -> genPoints rs 21
   evaluate (length points)
   printf "%d points generated\n" (length points)
   final_clusters <- case args of
    ["strat",n, _] -> kmeans_strat (read n) nclusters points clusters
    ["par",n, _] -> kmeans_par (read n) nclusters points clusters
-   _other -> kmeans_seq nclusters points clusters
+   _other -> kmeans_par 5 nclusters points clusters
   t1 <- getCurrentTime
   print final_clusters
   printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
