@@ -10,6 +10,7 @@ module Control.Monad.Par.Meta.Dist (
 
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
+import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Lazy.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.List (lookup)
@@ -27,7 +28,7 @@ import GHC.Conc
 -- tries = 20
 -- caps  = numCapabilities
 
-ia metadata sa scheds = 
+masterInitAction metadata sa scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -37,12 +38,22 @@ ia metadata sa scheds =
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
         RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) sa scheds
+        Single.initAction sa scheds
+
+slaveInitAction metadata sa scheds =
+    do RemoteRsrc.initAction metadata RemoteRsrc.Slave sa scheds
+       Single.initAction sa scheds
+
 sa :: StealAction
-sa = RemoteRsrc.stealAction 
+sa sched schedMap = do
+  mtask <- Single.stealAction sched schedMap
+  case mtask of
+    Nothing -> RemoteRsrc.stealAction sched schedMap
+    jtask -> return jtask
 
 --runPar   = runMetaPar   ia sa
 runParDist metadata comp = 
-   catch (runMetaParIO (ia metadata) sa comp)
+   catch (runMetaParIO (masterInitAction metadata) sa comp)
 	 (\ e -> do
 	  hPutStrLn stderr $ "Exception inside runParDist: "++show e
 	  throw (e::SomeException)
@@ -58,8 +69,8 @@ runParSlave metadata = do
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (RemoteRsrc.initAction metadata RemoteRsrc.Slave)
-	       (\ x y -> do res <- RemoteRsrc.stealAction x y; 
+  runMetaParIO (slaveInitAction metadata)
+	       (\ x y -> do res <- sa x y; 
 		            threadDelay (10 * 1000);
 	                    return res)
 	       (new >>= get)

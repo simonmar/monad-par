@@ -18,7 +18,8 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent (forkOn, newEmptyMVar, putMVar, takeMVar)
+import Control.Concurrent ( forkOn, newEmptyMVar, putMVar, takeMVar
+                          , QSem, signalQSem)
 import Control.DeepSeq
 import Control.Monad
 import "mtl" Control.Monad.Cont (ContT(..), MonadCont, callCC, runContT)
@@ -158,6 +159,18 @@ spawnWorkerOnCap sa cap =
     when dbg $ printf "[%d] spawning new worker\n" cap
     runReaderT (workerLoop errK) sched
 
+-- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
+-- just before the new worker enters the 'workerLoop'.
+spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
+spawnWorkerOnCap' qsem sa cap = 
+  forkWithExceptions (forkOn cap) "spawned Par worker" $ do
+    me <- myThreadId
+    sched@Sched{ tids } <- makeOrGetSched sa cap
+    modifyHotVar_ tids (Set.insert me)
+    when dbg $ printf "[%d] spawning new worker\n" cap
+    signalQSem qsem
+    runReaderT (workerLoop errK) sched
+
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
 forkWithExceptions forkit descr action = do 
    parent <- myThreadId
@@ -167,17 +180,6 @@ forkWithExceptions forkit descr action = do
 	  hPutStrLn stderr $ "Exception inside "++descr++": "++show e
 	  throwTo parent (e::SomeException)
 	 )
-
--- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
--- just before the new worker enters the 'workerLoop'.
-spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
-spawnWorkerOnCap' qsem sa cap = forkOn cap $ do
-  me <- myThreadId
-  sched@Sched{ tids } <- makeOrGetSched sa cap
-  modifyHotVar_ tids (Set.insert me)
-  when dbg $ printf "[%d] spawning new worker\n" cap
-  signalQSem qsem
-  runReaderT (workerLoop errK) sched
 
 errK = error "this closure shouldn't be used"
 
