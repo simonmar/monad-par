@@ -3,6 +3,7 @@
 *~
 *#
 .#*
+cabal-dev/
 dist/
 .DS_Store
 results/*/*/bench_*.log

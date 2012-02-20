@@ -154,6 +154,17 @@ spawnWorkerOnCap sa cap = forkOn cap $ do
   when dbg $ printf "[%d] spawning new worker\n" cap
   runReaderT (workerLoop errK) sched
 
+-- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
+-- just before the new worker enters the 'workerLoop'.
+spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
+spawnWorkerOnCap' qsem sa cap = forkOn cap $ do
+  me <- myThreadId
+  sched@Sched{ tids } <- makeOrGetSched sa cap
+  modifyHotVar_ tids (Set.insert me)
+  when dbg $ printf "[%d] spawning new worker\n" cap
+  signalQSem qsem
+  runReaderT (workerLoop errK) sched
+
 errK = error "this closure shouldn't be used"
 
 reschedule :: Par a
@@ -259,8 +270,7 @@ runMetaParIO ia sa work = do
   -- if it's not, we need to run the init action
   unless isNested (ia sa globalScheds)
   -- if it is, we need to spawn a replacement worker while we wait on ansMVar
-  -- FIXME: need a barrier before par work starts, for init methods to finish
-  when True (void $ spawnWorkerOnCap sa cap)
+  when isNested $ void $ spawnWorkerOnCap sa cap
   -- push the work, and then wait for the answer
   pushWork sched wrappedComp
   ans <- takeMVar ansMVar

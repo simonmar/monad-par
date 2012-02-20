@@ -45,9 +45,14 @@ initActionForCaps caps sa _ = do
   when dbg $ do
     printf "spawning worker threads for shared memory on caps:\n"
     printf "\t%s\n" (show caps)
-  (cap, _) <- threadCapability =<< myThreadId
-  forM_ (nub caps) $ \n ->
-    when (n /= cap) $ void $ spawnWorkerOnCap sa n       
+  -- create a semaphore so that we only return once all the workers
+  -- have been spawned
+  qsem <- newQSem 0
+  let caps' = nub caps
+  forM_ caps' $ \n ->
+    void $ spawnWorkerOnCap' qsem sa n
+  forM_ caps' $ const (waitQSem qsem)
+  
 
 {-# INLINE randModN #-}
 randModN :: Int -> HotVar GenIO -> IO Int
