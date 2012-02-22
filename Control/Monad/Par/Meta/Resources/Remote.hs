@@ -9,7 +9,8 @@ module Control.Monad.Par.Meta.Resources.Remote
   ( initAction, stealAction, 
     initiateShutdown, waitForShutdown, 
     longSpawn, 
-    taggedMsg, InitMode(..)  
+    taggedMsg, InitMode(..),
+    hostName
   )  
  where
 
@@ -47,15 +48,12 @@ import qualified Prelude as P
 import System.IO          (hPutStr, hPutStrLn, hFlush, stdout, stderr)
 import System.IO.Unsafe   (unsafePerformIO)
 import System.Process     (readProcess)
-import System.Posix.Process (getProcessID)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
 import Text.Printf        (printf)
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import qualified Network.Transport     as T
-import qualified Network.Transport.TCP as TCP
-import qualified Network.Transport.MVar as MT
 import Remote2.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
 import qualified Remote2.Reg as Reg
@@ -428,41 +426,16 @@ extendPeerTable id entry =
   modifyHotVar_ peerTable (V.modify (\v -> MV.write v id (Just entry)))
 
 --------------------------------------------------------------------------------
--- Factored Transport-related inititialization:
---------------------------------------------------------------------------------
-
-initTransport port = do 
-    host <- hostName        
---    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
-    TCP.mkTransport $ TCP.TCPConfig T.defaultHints host port
-
--- TODO: Make this configurable:
-control_port :: String
-control_port = "8098"
-
-work_base_port :: Int
-work_base_port = 8099
-
-
-breakSymmetry :: IO Int
-breakSymmetry =
-  do mypid <- getProcessID
-     -- Use the PID to break symmetry between multiple slaves on the same machine:
-     let port  = work_base_port + fromIntegral mypid
-	 port' = if port > 65535 
-                 then (port `mod` (65535-8000)) + 8000
-		 else port
-     return port'
 
 
 -----------------------------------------------------------------------------------
 -- Main scheduler components (init & steal)
 -----------------------------------------------------------------------------------
 
-initAction :: [Reg.RemoteCallMetaData] -> InitMode -> InitAction
+initAction :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction metadata (Master machineList) topStealAction schedMap = 
+initAction metadata initTransport (Master machineList) topStealAction schedMap = 
   do 
      taggedMsg 2$ "Initializing master..."
 
@@ -470,7 +443,7 @@ initAction metadata (Master machineList) topStealAction schedMap =
      initPeerTable machineList
 
      -- Initialize the transport layer:
-     transport <- initTransport control_port
+     transport <- initTransport (Master machineList)
 
      -- Write global mutable variables:
      ----------------------------------------
@@ -598,11 +571,10 @@ initAction metadata (Master machineList) topStealAction schedMap =
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-initAction metadata Slave topStealAction schedMap = 
+initAction metadata initTransport Slave topStealAction schedMap = 
   do 
-     port <- breakSymmetry
-     taggedMsg 2$ "Init slave: creating connection on port " ++ show port
-     host <- BS.pack <$> commonInit metadata (show port)
+     taggedMsg 2$ "Init slave: creating connection... " 
+     host <- BS.pack <$> commonInit metadata initTransport
      writeIORef global_mode "_S"
 
      transport <- readIORef myTransport
@@ -677,14 +649,13 @@ initAction metadata Slave topStealAction schedMap =
 
 -- TODO - FACTOR OUT OF MASTER CASE AS WELL:
 -- | Common pieces factored out from the master and slave initializations.
-commonInit metadata port = do 
+commonInit metadata initTransport = do 
   
      writeIORef globalRPCMetadata (Reg.registerCalls metadata)
      taggedMsg 3$ "RPC metadata initialized."
 
      host <- hostName
-
-     transport <- initTransport port
+     transport <- initTransport Slave
      writeIORef myTransport transport
 
      -- ASSUME init action is called from main thread:
@@ -983,5 +954,5 @@ instance Binary Message where
 		    iv <- Bin.get
 		    pay <- Bin.get
 		    return (WorkFinished nd iv pay)
-            _ -> errorExitPure$ "Corrupt message: tag header = "++show tag
+            _ -> errorExitPure$ "Remote.hs: Corrupt message: tag header = "++show tag
 #endif      

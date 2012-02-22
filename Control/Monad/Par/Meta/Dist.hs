@@ -4,22 +4,27 @@ module Control.Monad.Par.Meta.Dist (
     runParDist
   , runParSlave
   , shutdownDist
-  , RemoteRsrc.longSpawn
+  , Rem.longSpawn
   , module Control.Monad.Par.Meta
 ) where
 
 import Control.Monad.Par.Meta
-import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
+import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
 import qualified Data.ByteString.Lazy.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
-
 import Control.Exception (catch, throw, SomeException)
+
+import qualified Network.Transport     as T
+import qualified Network.Transport.TCP as TCP
+import qualified Network.Transport.Pipes as PT
+
 import Prelude hiding (catch)
 import System.Random (randomIO)
 import System.IO (hPutStrLn, stderr)
+import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
 
 import GHC.Conc
@@ -36,11 +41,10 @@ ia metadata sa scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) sa scheds
+        Rem.initAction metadata initPipes (Rem.Master$ map BS.pack ml) sa scheds
 sa :: StealAction
-sa = RemoteRsrc.stealAction 
+sa = Rem.stealAction 
 
---runPar   = runMetaPar   ia sa
 runParDist metadata comp = 
    catch (runMetaParIO (ia metadata) sa comp)
 	 (\ e -> do
@@ -52,14 +56,12 @@ runParDist metadata comp =
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
 runParSlave metadata = do
-  RemoteRsrc.taggedMsg 2 "runParSlave invoked."
---  registerCalls metadata
---  RemoteRsrc.taggedMsg "RPC metadata initialized."
+  Rem.taggedMsg 2 "runParSlave invoked."
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (RemoteRsrc.initAction metadata RemoteRsrc.Slave)
-	       (\ x y -> do res <- RemoteRsrc.stealAction x y; 
+  runMetaParIO (Rem.initAction metadata initPipes Rem.Slave)
+	       (\ x y -> do res <- Rem.stealAction x y; 
 		            threadDelay (10 * 1000);
 	                    return res)
 	       (new >>= get)
@@ -70,5 +72,40 @@ runParSlave metadata = do
 shutdownDist :: IO ()
 shutdownDist = do 
    uniqueTok <- randomIO
-   RemoteRsrc.initiateShutdown uniqueTok
-   RemoteRsrc.waitForShutdown  uniqueTok
+   Rem.initiateShutdown uniqueTok
+   Rem.waitForShutdown  uniqueTok
+
+--------------------------------------------------------------------------------
+-- Transport-related inititialization:
+--------------------------------------------------------------------------------
+
+initTCP :: Rem.InitMode -> IO T.Transport
+initTCP mode = do 
+    host <- Rem.hostName        
+--    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
+    case mode of 
+      Rem.Slave   -> do port <- breakSymmetry
+                        TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show port)
+      (Rem.Master _) -> TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
+
+
+initPipes :: Rem.InitMode -> IO T.Transport
+initPipes _ = PT.mkTransport
+
+-- TODO: Make this configurable:
+control_port :: String
+control_port = "8098"
+
+work_base_port :: Int
+work_base_port = 8099
+
+
+breakSymmetry :: IO Int
+breakSymmetry =
+  do mypid <- getProcessID
+     -- Use the PID to break symmetry between multiple slaves on the same machine:
+     let port  = work_base_port + fromIntegral mypid
+	 port' = if port > 65535 
+                 then (port `mod` (65535-8000)) + 8000
+		 else port
+     return port'
