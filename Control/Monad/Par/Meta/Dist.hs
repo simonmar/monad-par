@@ -3,8 +3,11 @@ module Control.Monad.Par.Meta.Dist (
 --  , runParIO
     runParDist
   , runParSlave
+  , runParDistWithTransport
+  , runParSlaveWithTransport
   , shutdownDist
   , Rem.longSpawn
+  , WhichTransport(..)
   , module Control.Monad.Par.Meta
 ) where
 
@@ -29,10 +32,21 @@ import Remote2.Reg (registerCalls)
 
 import GHC.Conc
 
+-- | Select from available transports or provide your own.  A custom
+--   implementation is required to create a transport for each node
+--   given only an indication of master or slave.  Notably, it is told
+--   nothing about WHICH slave is being instantiated and must
+--   determine that on its own.
+data WhichTransport = 
+    TCP 
+  | Pipes 
+--  | MPI 
+  | Custom (Rem.InitMode -> IO T.Transport)
+
 -- tries = 20
 -- caps  = numCapabilities
 
-ia metadata sa scheds = 
+ia metadata trans sa scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -41,26 +55,32 @@ ia metadata sa scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        Rem.initAction metadata initPipes (Rem.Master$ map BS.pack ml) sa scheds
+        Rem.initAction metadata trans (Rem.Master$ map BS.pack ml) sa scheds
 sa :: StealAction
 sa = Rem.stealAction 
 
-runParDist metadata comp = 
-   catch (runMetaParIO (ia metadata) sa comp)
-	 (\ e -> do
-	  hPutStrLn stderr $ "Exception inside runParDist: "++show e
-	  throw (e::SomeException)
-	 )
+-- The default Transport is TCP:
+runParDist mt = runParDistWithTransport mt TCP
+
+runParDistWithTransport metadata trans comp = catch main hndlr 
+ where 
+   main = runMetaParIO (ia metadata (pickTrans trans)) sa comp
+   hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
+		throw (e::SomeException)
+
+
 
 -- When global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
-runParSlave metadata = do
+runParSlave meta = runParSlaveWithTransport meta TCP
+
+runParSlaveWithTransport metadata trans = do
   Rem.taggedMsg 2 "runParSlave invoked."
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (Rem.initAction metadata initPipes Rem.Slave)
+  runMetaParIO (Rem.initAction metadata (pickTrans trans) Rem.Slave)
 	       (\ x y -> do res <- Rem.stealAction x y; 
 		            threadDelay (10 * 1000);
 	                    return res)
@@ -78,6 +98,13 @@ shutdownDist = do
 --------------------------------------------------------------------------------
 -- Transport-related inititialization:
 --------------------------------------------------------------------------------
+
+pickTrans trans = 
+     case trans of 
+       TCP   -> initTCP
+       Pipes -> initPipes
+--       MPI   ->
+       Custom fn -> fn
 
 initTCP :: Rem.InitMode -> IO T.Transport
 initTCP mode = do 
