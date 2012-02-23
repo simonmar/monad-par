@@ -11,8 +11,9 @@ module Control.Monad.Par.Meta.Dist (
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
-import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
+import Data.Char (ord)
 import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
@@ -83,3 +84,4 @@ shutdownDist = do
    uniqueTok <- randomIO
    RemoteRsrc.initiateShutdown uniqueTok
    RemoteRsrc.waitForShutdown  uniqueTok
+

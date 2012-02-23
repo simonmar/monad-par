@@ -9,7 +9,7 @@ module Remote2.Closure (
                        Closure(..)
                        ) where
 
-import Data.Binary (Binary,get,put)
+import Data.Serialize (Serialize,get,put)
 import Data.Typeable (Typeable)
 import Remote2.Encoding (Payload)
 
@@ -30,7 +30,7 @@ instance Show (Closure a) where
      show a = case a of
                 (Closure fn _pl) -> show fn
 
-instance Binary (Closure a) where
+instance Serialize (Closure a) where
      get = do s <- get
               v <- get
               return $ Closure s v 

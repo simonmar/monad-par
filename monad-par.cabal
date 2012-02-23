@@ -159,7 +159,18 @@ Library
   }
   if !flag(NoDist) {
     Build-depends: network
-                 , binary-derive
+                 , bytestring >= 0.9
+                 , cereal >= 0.3
+                 , cereal-derive
+                 , directory >= 1.1
+                 , ghc-prim
+                 , network-transport
+                 , process >= 1.1
+                 , syb >= 0.3
+                 , unix >= 2.5
+
+    Exposed-modules: Control.Monad.Par.Meta.Dist,
+                     Control.Monad.Par.Meta.Resources.Remote
   }
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
