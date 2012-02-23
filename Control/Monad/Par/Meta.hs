@@ -177,7 +177,7 @@ forkWithExceptions forkit descr action = do
    forkit $ 
       catch action
 	 (\ e -> do
-	  hPutStrLn stderr $ "Exception inside "++descr++": "++show e
+	  hPutStrLn stderr $ "Exception inside child thread "++descr++": "++show e
 	  throwTo parent (e::SomeException)
 	 )
 

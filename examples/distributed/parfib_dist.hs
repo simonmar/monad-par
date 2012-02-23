@@ -3,7 +3,8 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import Data.Int (Int64)
 import System.Environment (getArgs)
-import Control.Monad.Par.Meta.Dist (longSpawn, runParDist, runParSlave, Par, get, shutdownDist)
+import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes),
+				   runParDistWithTransport, runParSlaveWithTransport)
 import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
@@ -53,10 +54,11 @@ main = do
             [v,n,c] -> (v, read n, read c)
 
     case version of 
-        "slave" -> runParSlave [__remoteCallMetaData]
+        "slave" -> runParSlaveWithTransport [__remoteCallMetaData] Pipes
         "master" -> do 
 		       putStrLn "Using non-thresholded version:"
-		       ans <- (runParDist [__remoteCallMetaData] (parfib1 size) :: IO FibType)
+		       ans <- (runParDistWithTransport [__remoteCallMetaData] Pipes
+			       (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
 		       putStrLn $ "Calling SHUTDOWN..."
                        shutdownDist

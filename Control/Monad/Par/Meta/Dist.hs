@@ -3,12 +3,16 @@ module Control.Monad.Par.Meta.Dist (
 --  , runParIO
     runParDist
   , runParSlave
+  , runParDistWithTransport
+  , runParSlaveWithTransport
   , shutdownDist
-  , RemoteRsrc.longSpawn
+  , Rem.longSpawn
+  , WhichTransport(..)
   , module Control.Monad.Par.Meta
 ) where
 
 import Control.Monad.Par.Meta
+import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
 import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Char8 as BS
@@ -17,19 +21,35 @@ import Data.Char (ord)
 import Data.List (lookup)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
-
 import Control.Exception (catch, throw, SomeException)
+
+import qualified Network.Transport     as T
+import qualified Network.Transport.TCP as TCP
+import qualified Network.Transport.Pipes as PT
+
 import Prelude hiding (catch)
 import System.Random (randomIO)
 import System.IO (hPutStrLn, stderr)
+import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
 
 import GHC.Conc
 
+-- | Select from available transports or provide your own.  A custom
+--   implementation is required to create a transport for each node
+--   given only an indication of master or slave.  Notably, it is told
+--   nothing about WHICH slave is being instantiated and must
+--   determine that on its own.
+data WhichTransport = 
+    TCP 
+  | Pipes 
+--  | MPI 
+  | Custom (Rem.InitMode -> IO T.Transport)
+
 -- tries = 20
 -- caps  = numCapabilities
 
-masterInitAction metadata sa scheds = 
+masterInitAction metadata trans sa scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -38,39 +58,43 @@ masterInitAction metadata sa scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        RemoteRsrc.initAction metadata (RemoteRsrc.Master$ map BS.pack ml) sa scheds
+        Rem.initAction metadata trans (Rem.Master$ map BS.pack ml) sa scheds
         Single.initAction sa scheds
 
-slaveInitAction metadata sa scheds =
-    do RemoteRsrc.initAction metadata RemoteRsrc.Slave sa scheds
+slaveInitAction metadata trans sa scheds =
+    do Rem.initAction metadata trans Rem.Slave sa scheds
        Single.initAction sa scheds
 
 sa :: StealAction
 sa sched schedMap = do
   mtask <- Single.stealAction sched schedMap
   case mtask of
-    Nothing -> RemoteRsrc.stealAction sched schedMap
+    Nothing -> Rem.stealAction sched schedMap
     jtask -> return jtask
 
---runPar   = runMetaPar   ia sa
-runParDist metadata comp = 
-   catch (runMetaParIO (masterInitAction metadata) sa comp)
-	 (\ e -> do
-	  hPutStrLn stderr $ "Exception inside runParDist: "++show e
-	  throw (e::SomeException)
-	 )
+--------------------------------------------------------------------------------
+
+-- The default Transport is TCP:
+runParDist mt = runParDistWithTransport mt TCP
+
+runParDistWithTransport metadata trans comp = catch main hndlr 
+ where 
+   main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
+   hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
+		throw (e::SomeException)
+
 
 -- When global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
-runParSlave metadata = do
-  RemoteRsrc.taggedMsg 2 "runParSlave invoked."
---  registerCalls metadata
---  RemoteRsrc.taggedMsg "RPC metadata initialized."
+runParSlave meta = runParSlaveWithTransport meta TCP
+
+runParSlaveWithTransport metadata trans = do
+  Rem.taggedMsg 2 "runParSlave invoked."
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (slaveInitAction metadata)
+  runMetaParIO (slaveInitAction metadata (pickTrans trans))
 	       (\ x y -> do res <- sa x y; 
 		            threadDelay (10 * 1000);
 	                    return res)
@@ -82,6 +106,47 @@ runParSlave metadata = do
 shutdownDist :: IO ()
 shutdownDist = do 
    uniqueTok <- randomIO
-   RemoteRsrc.initiateShutdown uniqueTok
-   RemoteRsrc.waitForShutdown  uniqueTok
+   Rem.initiateShutdown uniqueTok
+   Rem.waitForShutdown  uniqueTok
 
+--------------------------------------------------------------------------------
+-- Transport-related inititialization:
+--------------------------------------------------------------------------------
+
+pickTrans trans = 
+     case trans of 
+       TCP   -> initTCP
+       Pipes -> initPipes
+--       MPI   ->
+       Custom fn -> fn
+
+initTCP :: Rem.InitMode -> IO T.Transport
+initTCP mode = do 
+    host <- Rem.hostName        
+--    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
+    case mode of 
+      Rem.Slave   -> do port <- breakSymmetry
+                        TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show port)
+      (Rem.Master _) -> TCP.mkTransport $ TCP.TCPConfig T.defaultHints host control_port
+
+
+initPipes :: Rem.InitMode -> IO T.Transport
+initPipes _ = PT.mkTransport
+
+-- TODO: Make this configurable:
+control_port :: String
+control_port = "8098"
+
+work_base_port :: Int
+work_base_port = 8099
+
+
+breakSymmetry :: IO Int
+breakSymmetry =
+  do mypid <- getProcessID
+     -- Use the PID to break symmetry between multiple slaves on the same machine:
+     let port  = work_base_port + fromIntegral mypid
+	 port' = if port > 65535 
+                 then (port `mod` (65535-8000)) + 8000
+		 else port
+     return port'
