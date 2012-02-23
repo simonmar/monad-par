@@ -13,6 +13,8 @@ module Control.Monad.Par.Meta.Dist (
 
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
+import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
+import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Lazy.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.List (lookup)
@@ -46,7 +48,7 @@ data WhichTransport =
 -- tries = 20
 -- caps  = numCapabilities
 
-ia metadata trans sa scheds = 
+masterInitAction metadata trans sa scheds = 
      do env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
@@ -56,18 +58,29 @@ ia metadata trans sa scheds =
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
         Rem.initAction metadata trans (Rem.Master$ map BS.pack ml) sa scheds
+        Single.initAction sa scheds
+
+slaveInitAction metadata trans sa scheds =
+    do Rem.initAction metadata trans Rem.Slave sa scheds
+       Single.initAction sa scheds
+
 sa :: StealAction
-sa = Rem.stealAction 
+sa sched schedMap = do
+  mtask <- Single.stealAction sched schedMap
+  case mtask of
+    Nothing -> Rem.stealAction sched schedMap
+    jtask -> return jtask
+
+--------------------------------------------------------------------------------
 
 -- The default Transport is TCP:
 runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = catch main hndlr 
  where 
-   main = runMetaParIO (ia metadata (pickTrans trans)) sa comp
+   main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
    hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
 		throw (e::SomeException)
-
 
 
 -- When global initialization has already happened:
@@ -80,8 +93,8 @@ runParSlaveWithTransport metadata trans = do
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (Rem.initAction metadata (pickTrans trans) Rem.Slave)
-	       (\ x y -> do res <- Rem.stealAction x y; 
+  runMetaParIO (slaveInitAction metadata (pickTrans trans))
+	       (\ x y -> do res <- sa x y; 
 		            threadDelay (10 * 1000);
 	                    return res)
 	       (new >>= get)
