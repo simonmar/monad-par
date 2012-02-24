@@ -165,6 +165,7 @@ Library
                  , directory >= 1.1
                  , ghc-prim
                  , network-transport
+                 , network-transport-pipes
                  , process >= 1.1
                  , syb >= 0.3
                  , unix >= 2.5
@@ -188,7 +189,7 @@ Library
                  Control.Monad.Par.Scheds.Direct
 
                -- Strawman scheduler that forks IO threads:
-               , Control.Monad.Par.Scheds.ContFree
+--               , Control.Monad.Par.Scheds.ContFree
 
                -- Internal logging framework:
                , Control.Monad.Par.Logging
