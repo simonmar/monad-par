@@ -54,12 +54,12 @@
  * log factor in the critical path (left as homework).
  */
 
-#include <cilk.h>
-#include <cilk-lib.h>
+#include <cilk/cilk.h>
+// #include <cilk-lib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <getoptions.h>
+// #include <getoptions.h>
 
 typedef long ELM;
 
@@ -292,7 +292,8 @@ ELM *binsplit(ELM val, ELM *low, ELM *high)
 	  return low;
 }
 
-cilk void cilkmerge(ELM *low1, ELM *high1, ELM *low2,
+// cilk 
+void cilkmerge(ELM *low1, ELM *high1, ELM *low2,
 		    ELM *high2, ELM *lowdest)
 {
      /*
@@ -345,16 +346,17 @@ cilk void cilkmerge(ELM *low1, ELM *high1, ELM *low2,
       * the appropriate location
       */
      *(lowdest + lowsize + 1) = *split1;
-     spawn cilkmerge(low1, split1 - 1, low2, split2, lowdest);
+     cilk_spawn cilkmerge(low1, split1 - 1, low2, split2, lowdest);
 
-     spawn cilkmerge(split1 + 1, high1, split2 + 1, high2,
+     cilk_spawn cilkmerge(split1 + 1, high1, split2 + 1, high2,
 		     lowdest + lowsize + 2);
 
-     sync;
+     cilk_sync;
      return;
 }
 
-cilk void cilksort(ELM *low, ELM *tmp, long size)
+// cilk 
+void cilksort(ELM *low, ELM *tmp, long size)
 {
      /*
       * divide the input in four parts of the same size (A, B, C, D)
@@ -380,18 +382,18 @@ cilk void cilksort(ELM *low, ELM *tmp, long size)
      D = C + quarter;
      tmpD = tmpC + quarter;
 
-     spawn cilksort(A, tmpA, quarter);
-     spawn cilksort(B, tmpB, quarter);
-     spawn cilksort(C, tmpC, quarter);
-     spawn cilksort(D, tmpD, size - 3 * quarter);
-     sync;
+     cilk_spawn cilksort(A, tmpA, quarter);
+     cilk_spawn cilksort(B, tmpB, quarter);
+     cilk_spawn cilksort(C, tmpC, quarter);
+     cilk_spawn cilksort(D, tmpD, size - 3 * quarter);
+     cilk_sync;
 
-     spawn cilkmerge(A, A + quarter - 1, B, B + quarter - 1, tmpA);
-     spawn cilkmerge(C, C + quarter - 1, D, low + size - 1, tmpC);
-     sync;
+     cilk_spawn cilkmerge(A, A + quarter - 1, B, B + quarter - 1, tmpA);
+     cilk_spawn cilkmerge(C, C + quarter - 1, D, low + size - 1, tmpC);
+     cilk_sync;
 
-     spawn cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
-     sync;
+     cilk_spawn cilkmerge(tmpA, tmpC - 1, tmpC, tmpA + size - 1, A);
+     cilk_sync;
 }
 
 void scramble_array(ELM *arr, unsigned long size)
@@ -406,7 +408,8 @@ void scramble_array(ELM *arr, unsigned long size)
      }
 }
 
-cilk void fill_array(ELM *arr, unsigned long size)
+// cilk 
+void fill_array(ELM *arr, unsigned long size)
 {
      unsigned long i;
 
@@ -434,23 +437,27 @@ int usage(void)
 
 char *specifiers[] =
 {"-n", "-benchmark", "-h", 0};
-int opt_types[] =
-{LONGARG, BENCHMARK, BOOLARG, 0};
+// int opt_types[] =
+// {LONGARG, BENCHMARK, BOOLARG, 0};
 
-cilk int main(int argc, char **argv)
+// cilk 
+int main(int argc, char **argv)
 {
      long size;
      ELM *array, *tmp;
      long i;
      int success, benchmark, help;
-     Cilk_time tm_begin, tm_elapsed;
-     Cilk_time wk_begin, wk_elapsed;
-     Cilk_time cp_begin, cp_elapsed;
+     /* Cilk_time tm_begin, tm_elapsed; */
+     /* Cilk_time wk_begin, wk_elapsed; */
+     /* Cilk_time cp_begin, cp_elapsed; */
 
      /* standard benchmark options */
      size = 3000000;
 
-     get_options(argc, argv, specifiers, opt_types, &size, &benchmark, &help);
+//     get_options(argc, argv, specifiers, opt_types, &size, &benchmark, &help);
+     size = 3000000;
+     help = 0; 
+     benchmark = 0;
 
      if (help)
 	  return usage();
@@ -471,22 +478,22 @@ cilk int main(int argc, char **argv)
      array = (ELM *) malloc(size * sizeof(ELM));
      tmp = (ELM *) malloc(size * sizeof(ELM));
 
-     spawn fill_array(array, size);
-     sync;
+     cilk_spawn fill_array(array, size);
+     cilk_sync;
 
      /* Timing. "Start" timers */
-     sync;
-     cp_begin = Cilk_user_critical_path;
-     wk_begin = Cilk_user_work;
-     tm_begin = Cilk_get_wall_time();
+     cilk_sync;
+     /* cp_begin = Cilk_user_critical_path; */
+     /* wk_begin = Cilk_user_work; */
+     /* tm_begin = Cilk_get_wall_time(); */
 
-     spawn cilksort(array, tmp, size);
-     sync;
+     cilk_spawn cilksort(array, tmp, size);
+     cilk_sync;
 
      /* Timing. "Stop" timers */
-     tm_elapsed = Cilk_get_wall_time() - tm_begin;
-     wk_elapsed = Cilk_user_work - wk_begin;
-     cp_elapsed = Cilk_user_critical_path - cp_begin;
+     /* tm_elapsed = Cilk_get_wall_time() - tm_begin; */
+     /* wk_elapsed = Cilk_user_work - wk_begin; */
+     /* cp_elapsed = Cilk_user_critical_path - cp_begin; */
 
      success = 1;
      for (i = 0; i < size; ++i)
@@ -497,14 +504,19 @@ cilk int main(int argc, char **argv)
 	  printf("SORTING FAILURE");
      else {
 	  printf("\nCilk Example: cilksort\n");
-	  printf("	      running on %d processor%s\n\n", Cilk_active_size, Cilk_active_size > 1 ? "s" : "");
+//	  printf("	      running on %d processor%s\n\n", Cilk_active_size, Cilk_active_size > 1 ? "s" : "");
 	  printf("options: number of elements = %ld\n\n", size);
-	  printf("Running time  = %4f s\n", Cilk_wall_time_to_sec(tm_elapsed));
-	  printf("Work          = %4f s\n", Cilk_time_to_sec(wk_elapsed));
-	  printf("Critical path = %4f s\n\n", Cilk_time_to_sec(cp_elapsed));
+	  /* printf("Running time  = %4f s\n", Cilk_wall_time_to_sec(tm_elapsed)); */
+	  /* printf("Work          = %4f s\n", Cilk_time_to_sec(wk_elapsed)); */
+	  /* printf("Critical path = %4f s\n\n", Cilk_time_to_sec(cp_elapsed)); */
      }
 
      free(array);
      free(tmp);
+     printf("Done sorting.  Successful.\n");
      return 0;
 }
+
+
+// HOWTO: build with GCC-4.7/Cilk:
+// $ gcc -lm -lcilkrts cilksort.c -o cilksort_gcc.exe
