@@ -17,7 +17,7 @@ import Control.Exception.Base (evaluate)
 import Control.Monad
 import Control.Monad.IO.Class
 
-import Data.Array.Accelerate
+import Data.Array.Accelerate (Acc, Arrays)
 import Data.Array.Accelerate.Array.Sugar
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA as Acc
@@ -30,7 +30,7 @@ import qualified Data.Array.IArray as IArray
 
 import qualified Data.Vector.Unboxed as Vector
 
-import Data.Concurrent.Deque.Class (WSDeque)
+import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
 import Data.Concurrent.Deque.Reference as R
 
 import System.IO.Unsafe
@@ -50,11 +50,18 @@ dbg = False
 -- Global structures for communicating between Par threads and GPU
 -- daemon threads
 
-{-# NOINLINE gpuQueue #-}
--- | GPU queue is pushed to by 'Par' workers, and popped by the GPU
--- daemon. TODO: figure out which Deque class is appropriate here.
-gpuQueue :: Chan (IO ())
-gpuQueue = unsafePerformIO newChan
+{-# NOINLINE gpuOnlyQueue #-}
+-- | GPU-only queue is pushed to by 'Par' workers on the right, and
+-- popped by the GPU daemon on the left. No backstealing is possible
+-- from this queue.
+gpuOnlyQueue :: WSDeque (IO ())
+gpuOnlyQueue = unsafePerformIO R.newQ
+
+{-# NOINLINE gpuBackstealQueue #-}
+-- | GPU-only queue is pushed to by 'Par' workers on the right, and
+-- popped by the GPU daemon and 'Par' workers on the left.
+gpuBackstealQueue :: ConcQueue (Par (), IO ())
+gpuBackstealQueue = unsafePerformIO R.newQ
 
 {-# NOINLINE resultQueue #-}
 -- | Result queue is pushed to by the GPU daemon, and popped by the
@@ -75,7 +82,7 @@ spawnAcc comp = do
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
             put_ iv ans
-    liftIO $ writeChan gpuQueue wrappedComp
+    liftIO $ R.pushR gpuOnlyQueue wrappedComp
     return iv               
 
 -- Backstealing variants
@@ -89,16 +96,20 @@ spawnAccIArray :: ( EltRepr ix ~ EltRepr sh
                   , Shape sh, Elt ix, Elt e )
                => (Par (a ix e), Acc (Array sh e))
                -> Par (IVar (a ix e))               
-spawnAccIArray (_, comp) = do 
+spawnAccIArray (parComp, accComp) = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
     iv <- new
-    let wrappedComp = do
+    let wrappedParComp :: Par ()
+        wrappedParComp = do
+          when dbg $ liftIO $ printf "running backstolen computation\n"
+          put_ iv =<< parComp          
+        wrappedAccComp = do
           when dbg $ printf "running Accelerate computation\n"
-          ans <- evaluate $ Acc.run comp
+          ans <- evaluate $ Acc.run accComp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
             put_ iv (toIArray ans)
-    liftIO $ writeChan gpuQueue wrappedComp
+    liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
     return iv
 
 -- | Backstealing spawn where the result is converted to a
@@ -110,16 +121,20 @@ spawnAccIArray (_, comp) = do
 spawnAccVector :: (Vector.Unbox a, Elt a)
                => (Par (Vector.Vector a), Acc (Array DIM1 a))
                -> Par (IVar (Vector.Vector a))
-spawnAccVector (_, comp) = do 
+spawnAccVector (parComp, accComp) = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
     iv <- new
-    let wrappedComp = do
+    let wrappedParComp :: Par ()
+        wrappedParComp = do
+          when dbg $ liftIO $ printf "running backstolen computation\n"
+          put_ iv =<< parComp          
+        wrappedAccComp = do
           when dbg $ printf "running Accelerate computation\n"
-          ans <- evaluate $ Acc.run comp
+          ans <- evaluate $ Acc.run accComp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
             put_ iv (arrToVector ans)
-    liftIO $ writeChan gpuQueue wrappedComp
+    liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
     return iv
 
 arrToVector :: Vector.Unbox a => Array DIM1 a -> Vector.Vector a
@@ -133,11 +148,24 @@ arrToVector arr = Vector.fromList (toList arr)
 gpuDaemon :: IO ()
 gpuDaemon = do
   when dbg $ printf "gpu daemon entering loop\n" 
-  join (readChan gpuQueue) >> gpuDaemon
+  mwork <- R.tryPopL gpuOnlyQueue
+  case mwork of
+    Just work -> work
+    Nothing -> do
+      mwork2 <- R.tryPopL gpuBackstealQueue
+      case mwork2 of
+        Just (_, work) -> work 
+        Nothing -> return ()
+  gpuDaemon
 
 initAction :: InitAction
 initAction _ _ = do
   void $ forkIO gpuDaemon
 
 stealAction :: StealAction
-stealAction _ _ = R.tryPopR resultQueue
+stealAction _ _ = do
+  mfinished <- R.tryPopR resultQueue
+  case mfinished of
+    finished@(Just _) -> return finished
+    Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue
+    
