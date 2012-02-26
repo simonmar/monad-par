@@ -3,7 +3,7 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import Data.Int (Int64)
 import System.Environment (getArgs)
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes),
+import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
 				   runParDistWithTransport, runParSlaveWithTransport)
 import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
@@ -27,7 +27,10 @@ parfib1 n = do
        mytid <- myThreadId
 --       host  <- hostName
        let host = ""
+#if 0
        putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
+#endif
+       return ()
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
     y  <-             parfib1 (n-2)
     x  <- get xf
@@ -45,6 +48,9 @@ hostName = do s <- readProcess "hostname" [] ""
 -- Generate stub code for RPC:
 remotable ['parfib1]
 
+-- transport = Pipes
+transport = TCP
+
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 
@@ -54,10 +60,10 @@ main = do
             [v,n,c] -> (v, read n, read c)
 
     case version of 
-        "slave" -> runParSlaveWithTransport [__remoteCallMetaData] Pipes
+        "slave" -> runParSlaveWithTransport [__remoteCallMetaData] TCP
         "master" -> do 
 		       putStrLn "Using non-thresholded version:"
-		       ans <- (runParDistWithTransport [__remoteCallMetaData] Pipes
+		       ans <- (runParDistWithTransport [__remoteCallMetaData] TCP
 			       (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
 		       putStrLn $ "Calling SHUTDOWN..."

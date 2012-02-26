@@ -28,6 +28,8 @@ import Prelude hiding (id)
 import qualified Prelude as Prelude
 
 import Data.Binary (Binary,encode,decode,Put,Get,put,get,putWord8,getWord8)
+import qualified Data.Serialize as Ser
+
 import Control.Monad (liftM)
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as B (hPut,hGet,length)
@@ -64,6 +66,13 @@ type PayloadLength = Int64
 instance Binary Payload where
   put pl = put (payloadType pl) >> put (payloadContent pl)
   get = get >>= \a -> get >>= \b -> return $ Payload {payloadType = a,payloadContent=b}
+
+instance Ser.Serialize Payload where
+  put pl = Ser.put (payloadType pl) >> Ser.put (payloadContent pl)
+  get = do a <- Ser.get 
+	   b <- Ser.get 
+	   return $ Payload {payloadType = a,
+			     payloadContent=b}
 
 payloadLength :: Payload -> PayloadLength
 payloadLength (Payload t c) = B.length t + B.length c

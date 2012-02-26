@@ -15,7 +15,8 @@ import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
 import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
-import qualified Data.ByteString.Lazy.Char8 as BS
+-- import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.List (lookup)
 import Control.Monad (liftM)

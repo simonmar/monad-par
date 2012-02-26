@@ -29,9 +29,11 @@ import Data.IORef             (writeIORef, readIORef, newIORef, IORef)
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as M
 import Data.Int               (Int64)
+import Data.Word              (Word8)
 import Data.Maybe             (fromMaybe)
 import Data.Char              (isSpace)
-import qualified Data.ByteString.Lazy.Char8 as BS
+-- import qualified Data.ByteString.Lazy.Char8 as BS
+import qualified Data.ByteString.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
 import Data.List as L
@@ -39,9 +41,13 @@ import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import qualified Data.Set    as Set
-import Data.Binary        (encode,decode, Binary)
+-- import Data.Binary        (encode,decode, Binary)
 -- import Data.Binary.Derive (deriveGet, derivePut)
-import qualified Data.Binary as Bin
+-- import qualified Data.Binary as Bin
+
+import Data.Serialize        (encode,decode, Serialize(..))
+import qualified Data.Serialize as Bin
+
 import GHC.Generics       (Generic)
 import Prelude     hiding (catch)
 import qualified Prelude as P
@@ -134,7 +140,7 @@ verbosity :: Int
 verbosity = 5
 #else
 -- This should be 1 by default but temporarily upping to 2:
-verbosity = 2
+verbosity = 3
 #endif
 
 dbg :: Bool
@@ -233,6 +239,11 @@ shutdownChan = unsafePerformIO $ newChan
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
 -----------------------------------------------------------------------------------
+
+decodeMsg str = 
+  case decode str of
+    Left err -> errorExitPure$ "ERROR: decoding message from: " ++ show str
+    Right x  -> x
 
 -- forkDaemon = forkIO
 forkDaemon name action = 
@@ -485,7 +496,7 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
 	 slaveConnectLoop iter alreadyConnected = do
           strs <- T.receive targetEnd 
           let str = BS.concat strs
-              msg = decode str
+              msg = decodeMsg str
           case msg of
             AnnounceSlave{name,toAddr} -> do 
 	      taggedMsg 3$ "Master: register new slave, name: "++ BS.unpack name
@@ -531,7 +542,7 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
        taggedMsg 2$ "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
          unless (ndid == myid) $ do 
-          msg <- decode <$> BS.concat <$> T.receive targetEnd 
+          msg <- decodeMsg <$> BS.concat <$> T.receive targetEnd 
           case msg of 
 	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
 	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
@@ -603,7 +614,7 @@ initAction metadata initTransport Slave topStealAction schedMap =
 
                  taggedMsg 3$ "Sent name and addr to master "
 	         _machines_bss <- T.receive myInbound
-                 let MachineListMsg (masterId,masterName) myid machines = decode (BS.concat _machines_bss)
+                 let MachineListMsg (masterId,masterName) myid machines = decodeMsg (BS.concat _machines_bss)
                  taggedMsg 2$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 		 writeIORef myNodeID myid
@@ -630,7 +641,7 @@ initAction metadata initTransport Slave topStealAction schedMap =
          waitBarrier = do 
 	     -- Don't proceed till we get the go-message from the Master:
 	     msg <- T.receive myInbound
-	     case decode (BS.concat msg) of 
+	     case decodeMsg (BS.concat msg) of 
 	       StartStealing -> taggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
 	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg
               
@@ -698,7 +709,7 @@ masterShutdown token targetEnd = do
    taggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
    let loop 0 = return ()
        loop n = do msg <- T.receive targetEnd
-		   case decode (BS.concat msg) of
+		   case decodeMsg (BS.concat msg) of
 		     ShutDownACK -> loop (n-1)
 		     other -> do 
                                  taggedMsg 4$ "Warning: received other msg while trying to shutdown.  Might be ok: "++show other
@@ -762,7 +773,7 @@ stealAction Sched{no} _ = do
   raidPeer = do
      myid <- readHotVar myNodeID
      ind  <- pickVictim myid
-     taggedMsg 3$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
+     taggedMsg 4$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
 
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
@@ -822,14 +833,14 @@ receiveDaemon targetEnd schedMap =
 	   else T.receive targetEnd
    taggedMsg 4$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
-   case decode (BS.concat bss) of 
+   case decodeMsg (BS.concat bss) of 
      StealRequest ndid -> do
 --       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
        when (verbosity>=3) $ do hPutStr stderr "!"; hFlush stderr
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
-	   taggedMsg 3$ "[rcvdmn]   Had longwork in stock, responding with StealResponse..."
+	   taggedMsg 2$ "[rcvdmn]   StealRequest: longwork in stock, responding with StealResponse..."
 	   sendTo ndid (encode$ StealResponse myid stealme)
  -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
 	 Just x -> R.pushL longQueue x
@@ -902,8 +913,10 @@ magic_word = 98989898989898989
 -- Even though this is tedious, because I was running into (toEnum)
 -- exceptions with the above I'm going to write this out longhand
 -- [2012.02.17]:
-type TagTy = Bin.Word8
-instance Binary Message where
+-- type TagTy = Bin.Word8
+type TagTy = Word8
+-- instance Binary Message where
+instance Serialize Message where
  put AnnounceSlave{name,toAddr} = do Bin.put (1::TagTy)
 				     Bin.put name
 				     Bin.put toAddr

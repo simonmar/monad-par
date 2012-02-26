@@ -21,7 +21,7 @@ export MACHINE_LIST="$HOST $HOST"
 ./parfib_dist.exe master $N +RTS $OPTS -RTS &
 
 MASTERPID=$!
-sleep 0.3
+sleep 1
 
 # Launch worker asynchronously:
 ./parfib_dist.exe slave +RTS $OPTS -RTS &> worker.log & 
@@ -32,7 +32,9 @@ wait $MASTERPID
 echo "Done running master computation."
 
 # Don't worry about errors in the slave process.
-set +e
-wait $WORKERPID
+# set +e
+# wait $WORKERPID
+
+kill -9 $WORKERPID
 
 exit 0 
