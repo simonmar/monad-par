@@ -19,7 +19,6 @@
 import System.IO
 import KMeansCommon
 import Data.Array
--- import Data.Vector.Unboxed
 import Text.Printf
 import Data.List
 import Data.Function
@@ -52,14 +51,11 @@ main = do
   print final_clusters
   printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
 
-genPoints :: [Double] -> Int -> [Vector]
-genPoints _ 0        = []
-genPoints (x:y:xs) n = (Vector (x*5) (y*5) : genPoints xs (n-1))
 
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (sequential)
 
-kmeans_seq :: Int -> [Vector] -> [Cluster] -> IO [Cluster]
+kmeans_seq :: Int -> [Point] -> [Cluster] -> IO [Cluster]
 kmeans_seq nclusters points clusters = do
   let
       loop :: Int -> [Cluster] -> IO [Cluster]
@@ -87,7 +83,7 @@ split numChunks l = splitSize (ceiling $ fromIntegral (length l) / fromIntegral 
       splitSize _ [] = []
       splitSize i v = take i v : splitSize i (drop i v)
 
-kmeans_strat :: Int -> Int -> [Vector] -> [Cluster] -> IO [Cluster]
+kmeans_strat :: Int -> Int -> [Point] -> [Cluster] -> IO [Cluster]
 kmeans_strat mappers nclusters points clusters = do
   let chunks = split mappers points
   let
@@ -112,7 +108,7 @@ kmeans_strat mappers nclusters points clusters = do
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (Par monad)
 
-kmeans_par :: Int -> Int -> [Vector] -> [Cluster] -> IO [Cluster]
+kmeans_par :: Int -> Int -> [Point] -> [Cluster] -> IO [Cluster]
 kmeans_par mappers nclusters points clusters = do
   let chunks = split mappers points
   let
@@ -145,12 +141,12 @@ reduce nclusters css =
   combine (c:cs) = [foldr combineClusters c cs]
 
 
-step :: Int -> [Cluster] -> [Vector] -> [Cluster]
+step :: Int -> [Cluster] -> [Point] -> [Cluster]
 step nclusters clusters points
    = makeNewClusters (assign nclusters clusters points)
 
 -- assign each vector to the nearest cluster centre
-assign :: Int -> [Cluster] -> [Vector] -> Array Int [Vector]
+assign :: Int -> [Cluster] -> [Point] -> Array Int [Point]
 assign nclusters clusters points =
     accumArray (flip (:)) [] (0, nclusters-1)
        [ (clId (nearest p), p) | p <- points ]
@@ -158,7 +154,7 @@ assign nclusters clusters points =
     nearest p = fst $ minimumBy (compare `on` snd)
                           [ (c, sqDistance (clCent c) p) | c <- clusters ]
 
-makeNewClusters :: Array Int [Vector] -> [Cluster]
+makeNewClusters :: Array Int [Point] -> [Cluster]
 makeNewClusters arr =
   filter ((>0) . clCount) $
      [ makeCluster i ps | (i,ps) <- assocs arr ]
