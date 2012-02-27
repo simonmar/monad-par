@@ -79,7 +79,7 @@ stealAction topo numTries = SA sa
       case lookup i capAssocs of
         Nothing -> error $ printf "accessed invalid capability %d" i
         Just sa -> sa
-    capVec = Vector.generate (maximum (map fst capAssocs)) lookupSA
+    capVec = Vector.generate (1 + maximum (map fst capAssocs)) lookupSA
     saVec = Vector.fromList subSteals
     sa sched@Sched { no, rng } schedsRef = do
       -- first, steal from the scheduler for this clique

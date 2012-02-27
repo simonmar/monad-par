@@ -76,6 +76,9 @@ newtype InitAction = IA { runIA ::
   -> IO ()
   }
 
+instance Show InitAction where
+  show _ = "<InitAction>"
+
 instance Monoid InitAction where
   mempty = IA $ \_ _ -> return ()
   (IA ia1) `mappend` (IA ia2) = IA ia'
@@ -89,6 +92,9 @@ newtype StealAction = SA { runSA ::
   -> HotVar (IntMap Sched)
   -> IO (Maybe (Par ()))
   }
+
+instance Show StealAction where
+  show _ = "<StealAction>"
 
 instance Monoid StealAction where
   mempty = SA $ \_ _ -> return Nothing
