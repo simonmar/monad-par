@@ -7,6 +7,7 @@ module Control.Monad.Par.Meta.Dist (
   , runParSlaveWithTransport
   , shutdownDist
   , Rem.longSpawn
+  , Rem.globalRPCMetadata
   , WhichTransport(..)
   , module Control.Monad.Par.Meta
 ) where

@@ -3,9 +3,9 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import Data.Int (Int64)
 import System.Environment (getArgs)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
 				   runParDistWithTransport, runParSlaveWithTransport)
-import Control.Monad.IO.Class (liftIO)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
 

@@ -10,7 +10,8 @@ module Control.Monad.Par.Meta.Resources.Remote
     initiateShutdown, waitForShutdown, 
     longSpawn, 
     taggedMsg, InitMode(..),
-    hostName
+    hostName,
+    globalRPCMetadata
   )  
  where
 

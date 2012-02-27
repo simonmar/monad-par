@@ -16,6 +16,10 @@ import PARSCHED
 import Control.Monad.Par
 #endif
 
+-- import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
+-- 				   runParDistWithTransport, runParSlaveWithTransport)
+-- import Remote2.Call (mkClosureRec, remotable)
+
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0
   where   
