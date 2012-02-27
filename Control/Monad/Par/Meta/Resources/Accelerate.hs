@@ -159,13 +159,15 @@ gpuDaemon = do
   gpuDaemon
 
 initAction :: InitAction
-initAction _ _ = do
-  void $ forkIO gpuDaemon
+initAction = IA ia
+  where ia _ _ = do
+          void $ forkIO gpuDaemon
 
 stealAction :: StealAction
-stealAction _ _ = do
-  mfinished <- R.tryPopR resultQueue
-  case mfinished of
-    finished@(Just _) -> return finished
-    Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue
+stealAction = SA sa 
+  where sa _ _ = do
+          mfinished <- R.tryPopR resultQueue
+          case mfinished of
+            finished@(Just _) -> return finished
+            Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue
     

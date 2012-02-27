@@ -1,10 +1,10 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE NamedFieldPuns #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE PackageImports #-}
 
 
 -- The Meta scheduler which can be parameterized over various
@@ -33,6 +33,7 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 import Data.IntMap (IntMap)
 import qualified Data.IntMap as IntMap
+import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
@@ -67,19 +68,36 @@ newtype IVar a = IVar (HotVar (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
-type InitAction =
+newtype InitAction = IA { runIA ::
     -- Combined 'StealAction' for the current scheduler.
      StealAction           
     -- The global structure of schedulers.
   -> HotVar (IntMap Sched) 
   -> IO ()
+  }
 
-type StealAction =  
+instance Monoid InitAction where
+  mempty = IA $ \_ _ -> return ()
+  (IA ia1) `mappend` (IA ia2) = IA ia'
+    where ia' sa schedMap = ia1 sa schedMap >> ia2 sa schedMap            
+                             
+
+newtype StealAction = SA { runSA ::
      -- 'Sched' for the current thread
      Sched
      -- Map of all 'Sched's
   -> HotVar (IntMap Sched)
   -> IO (Maybe (Par ()))
+  }
+
+instance Monoid StealAction where
+  mempty = SA $ \_ _ -> return Nothing
+  (SA sa1) `mappend` (SA sa2) = SA sa'
+    where sa' sched schedMap = do
+            mwork <- sa1 sched schedMap
+            case mwork of
+              Nothing -> sa2 sched schedMap
+              _ -> return mwork                
 
 data Sched = Sched 
     { 
@@ -201,7 +219,7 @@ workerLoop _k = do
                  n         -> error $
                    printf "unexpected mortals count %d on cap %d" n no
       unless die $ do
-        mwork <- liftIO (stealAction mysched globalScheds)
+        mwork <- liftIO (runSA stealAction mysched globalScheds)
         case mwork of
           Just work -> runContT (unPar work) $ const (workerLoop _k)
           Nothing -> do
@@ -284,7 +302,7 @@ runMetaParIO ia sa work = do
   -- determine whether this is a nested call
   isNested <- Set.member tid <$> readHotVar tids
   -- if it's not, we need to run the init action
-  unless isNested (ia sa globalScheds)
+  unless isNested (runIA ia sa globalScheds)
   -- if it is, we need to spawn a replacement worker while we wait on ansMVar
   when isNested $ void $ spawnWorkerOnCap sa cap
   -- push the work, and then wait for the answer

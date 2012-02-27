@@ -19,6 +19,7 @@ import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.Char (ord)
 import Data.List (lookup)
+import Data.Monoid
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
@@ -49,8 +50,10 @@ data WhichTransport =
 -- tries = 20
 -- caps  = numCapabilities
 
-masterInitAction metadata trans sa scheds = 
-     do env <- getEnvironment        
+masterInitAction metadata trans = IA ia
+  where
+    ia sa scheds = do
+        env <- getEnvironment        
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
 	       Nothing -> 
@@ -58,19 +61,14 @@ masterInitAction metadata trans sa scheds =
 		   Just fl -> liftM words $ readFile fl
   	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
 			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
-        Rem.initAction metadata trans (Rem.Master$ map BS.pack ml) sa scheds
-        Single.initAction sa scheds
+        runIA (Rem.initAction metadata trans (Rem.Master$ map BS.pack ml)) sa scheds
+        runIA Single.initAction sa scheds
 
-slaveInitAction metadata trans sa scheds =
-    do Rem.initAction metadata trans Rem.Slave sa scheds
-       Single.initAction sa scheds
+slaveInitAction metadata trans =
+  Rem.initAction metadata trans Rem.Slave <> Single.initAction
 
 sa :: StealAction
-sa sched schedMap = do
-  mtask <- Single.stealAction sched schedMap
-  case mtask of
-    Nothing -> Rem.stealAction sched schedMap
-    jtask -> return jtask
+sa = Single.stealAction <> Rem.stealAction
 
 --------------------------------------------------------------------------------
 
@@ -95,9 +93,9 @@ runParSlaveWithTransport metadata trans = do
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
   runMetaParIO (slaveInitAction metadata (pickTrans trans))
-	       (\ x y -> do res <- sa x y; 
-		            threadDelay (10 * 1000);
-	                    return res)
+	       (SA $ \ x y -> do res <- runSA sa x y; 
+		                 threadDelay (10 * 1000);
+	                         return res)
 	       (new >>= get)
 
   fail "RETURNED FROM runMetaParIO - THIS SHOULD NOT HAPPEN"

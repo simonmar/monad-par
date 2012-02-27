@@ -438,8 +438,9 @@ extendPeerTable id entry =
 initAction :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction metadata initTransport (Master machineList) topStealAction schedMap = 
-  do 
+initAction metadata initTransport (Master machineList) = IA ia
+  where
+    ia topStealAction schedMap = do 
      taggedMsg 2$ "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
@@ -552,7 +553,6 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
      ----------------------------------------
      taggedMsg 3$ "Master initAction returning control to scheduler..."
      return ()
- where 
     -- Annoying book-keeping:  Keep track of how many we've seen
     -- and make sure that the client that actually connect match
     -- the machineList:
@@ -575,8 +575,9 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-initAction metadata initTransport Slave topStealAction schedMap = 
-  do 
+initAction metadata initTransport Slave = IA ia
+  where
+    ia topStealAction schedMap = do 
      taggedMsg 2$ "Init slave: creating connection... " 
      host <- BS.pack <$> commonInit metadata initTransport
      writeIORef global_mode "_S"
@@ -740,40 +741,41 @@ workerShutdown schedMap = do
 --------------------------------------------------------------------------------
 
 stealAction :: StealAction
-stealAction Sched{no} _ = do
-  dbgDelay "stealAction"
+stealAction = SA sa
+  where 
+    sa Sched{no} _ = do
+      dbgDelay "stealAction"
 
-  -- First try to pop local work:
-  x <- R.tryPopR longQueue
+      -- First try to pop local work:
+      x <- R.tryPopR longQueue
 
-  case x of 
-    Just (LongWork{localver}) -> do
-      taggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
-      return (Just localver)
-    Nothing -> raidPeer
- where 
-  pickVictim myid = do
-     pt   <- readHotVar peerTable
-     let len = V.length pt
-         loop = do 
-	   n :: Int <- randomIO 
-	   let ind = n `mod` len
-	   if ind == myid 
-	    then pickVictim myid
-	    else return ind
-     loop 
+      case x of 
+        Just (LongWork{localver}) -> do
+          taggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
+          return (Just localver)
+        Nothing -> raidPeer
+    pickVictim myid = do
+      pt   <- readHotVar peerTable
+      let len = V.length pt
+          loop = do 
+            n :: Int <- randomIO 
+ 	    let ind = n `mod` len
+ 	    if ind == myid 
+             then pickVictim myid
+	     else return ind
+      loop 
 
-  raidPeer = do
-     myid <- readHotVar myNodeID
-     ind  <- pickVictim myid
-     taggedMsg 3$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
+    raidPeer = do
+      myid <- readHotVar myNodeID
+      ind  <- pickVictim myid
+      taggedMsg 3$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
 
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
-     sendTo ind (encode$ StealRequest myid)
+      sendTo ind (encode$ StealRequest myid)
 
-     -- We have nothing to return immediately, but hopefully work will come back later.
-     return Nothing
+      -- We have nothing to return immediately, but hopefully work will come back later.
+      return Nothing
 
 
 
