@@ -38,11 +38,14 @@ instance Show (Closure a) where
      show a = case a of
                 (Closure fn _pl) -> show fn
 
+{-
 instance Bin.Binary (Closure a) where
      get = do s <- Bin.get
               v <- Bin.get
               return $ Closure s v 
      put (Closure s v) = Bin.put s >> Bin.put v
+-}
+
 
 instance Ser.Serialize (Closure a) where
      get = do s <- Ser.get

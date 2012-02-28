@@ -67,13 +67,6 @@ instance Serialize Payload where
   put pl = put (payloadType pl) >> put (payloadContent pl)
   get = get >>= \a -> get >>= \b -> return $ Payload {payloadType = a,payloadContent=b}
 
-instance Ser.Serialize Payload where
-  put pl = Ser.put (payloadType pl) >> Ser.put (payloadContent pl)
-  get = do a <- Ser.get 
-	   b <- Ser.get 
-	   return $ Payload {payloadType = a,
-			     payloadContent=b}
-
 payloadLength :: Payload -> PayloadLength
 payloadLength (Payload t c) = B.length t + B.length c
 

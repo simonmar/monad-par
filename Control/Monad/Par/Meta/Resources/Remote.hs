@@ -499,7 +499,7 @@ initAction metadata initTransport (Master machineList) = IA ia
           let str = BS.concat strs
               msg = decodeMsg str
           case msg of
-            Right (AnnounceSlave{name,toAddr}) -> do 
+            AnnounceSlave{name,toAddr} -> do 
 	      taggedMsg 3$ "Master: register new slave, name: "++ BS.unpack name
 	      taggedMsg 4$ "  Full message received from slave: "++ (BS.unpack str)
 
@@ -527,7 +527,7 @@ initAction metadata initTransport (Master machineList) = IA ia
 
 		  slaveConnectLoop (iter-1) alreadyConnected' 
 
-            Right othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
+--            Right othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
      ----------------------------------------
      taggedMsg 3$ "  ... waiting for slaves to connect."
      let allButMe = if (elem host machineList) 
@@ -545,9 +545,9 @@ initAction metadata initTransport (Master machineList) = IA ia
          unless (ndid == myid) $ do 
           msg <- decodeMsg <$> BS.concat <$> T.receive targetEnd 
           case msg of 
-   	     Right ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", "
-                                          ++ (BS.unpack name) ++ ": peers connected."
-	     Left msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
+   	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", "
+	                           ++ (BS.unpack name) ++ ": peers connected."
+	     msg -> errorExit$ "Expected message when expecting ConnectAllPeers:"++ show msg
 
      taggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
      forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
@@ -848,7 +848,7 @@ receiveDaemon targetEnd schedMap =
 	 Nothing -> return ()
        rcvLoop myid
 
-     Right (StealResponse fromNd pr@(ivarid,pclo)) -> do
+     StealResponse fromNd pr@(ivarid,pclo) -> do
        taggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
        loc <- deClosure pclo
@@ -862,7 +862,7 @@ receiveDaemon targetEnd schedMap =
 				   })
        rcvLoop myid
 
-     Right (WorkFinished fromNd ivarid payload) -> do
+     WorkFinished fromNd ivarid payload -> do
        taggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
 		    " ivarID "++ show ivarid++" payload: "++show payload
        table <- readHotVar remoteIvarTable
@@ -875,14 +875,12 @@ receiveDaemon targetEnd schedMap =
        rcvLoop myid
 
      -- This case EXITS the receive loop peacefully:
-     Right (ShutDown token) -> do
+     ShutDown token -> do
        taggedMsg 1$ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd
 		 else workerShutdown schedMap'
-
-     Left msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ msg
 
 
 
@@ -917,9 +915,9 @@ type TagTy = Word8
 -- exceptions with the above I'm going to write this out longhand
 -- [2012.02.17]:
 instance Serialize Message where
- put AnnounceSlave{name,toAddr} = do Bin.put (1::TagTy)
-				     Bin.put name
-				     Bin.put toAddr
+ put AnnounceSlave{name,toAddr} = do Ser.put (1::TagTy)
+				     Ser.put name
+				     Ser.put toAddr
  put (MachineListMsg (n1,bs) n2 ml) = 
                                   do 
                                      Ser.put (2::TagTy)
