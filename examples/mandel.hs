@@ -4,7 +4,6 @@ import Control.Monad
 import Control.Seq
 import Control.DeepSeq
 import Control.Exception
-import PortablePixmap
 import Data.Complex
 import System.Environment
 import System.IO
@@ -14,6 +13,11 @@ import qualified Control.Monad.Par.Combinator as C
 import PARSCHED
 #else
 import Control.Monad.Par
+#endif
+
+#ifdef WRITE_IMAGE
+import Codec.Picture  -- JuicyPixels
+import qualified Data.Vector.Storable as V
 #endif
 
 mandel :: Int -> Complex Double -> Int
@@ -45,24 +49,22 @@ runMandel minX minY maxX maxY winX winY max_depth = do
     c_scale =   maxX - minX  :: Double
 
 
-makeImage :: Integer -> Integer -> Int -> AList [Int] -> PixMap
+#ifdef WRITE_IMAGE
+-- makeImage :: Integer -> Integer -> Int -> A.AList [Int] -> Image PixelRGB8 
+makeImage :: Int -> Int -> Int -> A.AList [Int] -> Image PixelRGB8 
 makeImage x y depth ls =
-  createPixmap x y depth 
-   (Prelude.map prettyRGB (concat (toList ls)))
+  -- This is a quite silly series of intermediate structures:
+  Image x y (V.fromList $ concat $ 
+	     Prelude.map prettyRGB $
+	     concat$ A.toList ls)
  where 
-   prettyRGB :: Int -> (Int,Int,Int)
-   prettyRGB s = let t = (depth - s) in (s,t,t)
-
-
+   prettyRGB s = 
+      let t = (fromIntegral (depth - s)) in 
+--      PixelRGB8 (fromIntegral s) t t 
+      [fromIntegral s, t, t]
+#endif
 
 simple x y depth = runMandel (-2) (-2) 2 2 x y depth
-{-
-simple x y depth = 
-  runMandel 0 0 x' y' x y depth
- where 
-  x' = fromIntegral x
-  y' = fromIntegral y 
--}
 
 
 --------------------------------------------------------------------------------
@@ -100,10 +102,9 @@ main = do args <- getArgs
 		 -- 		      (read winX) (read winY) (read depth)
 
           let ls = runPar$ simple x y depth
-          when (False) $ do 
-	     hnd <- openFile "mandel_image.ppm" WriteMode
-	     hSetBinaryMode hnd True
-	     hPrint hnd (makeImage (fromIntegral x) (fromIntegral y) depth ls)
-	     hClose hnd
 
+#ifdef WRITE_IMAGE
+	  writePng "mandel_image.png" (makeImage (fromIntegral x) (fromIntegral y) depth ls)
+	  putStrLn$ "File written."
+#endif
           putStrLn$ "Spot check: " ++ show (mandelCheck ls y depth)

@@ -154,6 +154,8 @@ Library
                , mtl >= 2.0.1.0
                , parallel >= 3.1
                , abstract-deque >= 0.1.4
+               , binary
+                -- AList now depends on binary.
   if !flag(NoGPU) {
     Build-depends: accelerate >= 0.9.0.1
   }
@@ -244,6 +246,7 @@ Test-Suite test-monad-par
     build-depends: base >= 4 && < 5
                  , array >= 0.3
                  , deepseq >= 1.2
+                 , binary
                  , QuickCheck, HUnit, time
                  , test-framework, test-framework-th
                  , test-framework-hunit, test-framework-quickcheck2

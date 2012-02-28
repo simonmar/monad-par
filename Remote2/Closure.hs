@@ -6,12 +6,16 @@
 -- swapped out for the \"static\" mechanism described in the
 -- paper.
 module Remote2.Closure (
-                       Closure(..)
+                       Closure(..),
+		       BiClosure(..),
                        ) where
 
-import Data.Serialize (Serialize,get,put)
+import Data.Serialize as Ser 
 import Data.Typeable (Typeable)
 import Remote2.Encoding (Payload)
+
+import qualified Data.Binary as Bin -- (Binary,get,put)
+import qualified Data.Serialize as Ser
 
 -- | A data type representing a closure, that is, a function with its environment.
 --   In spirit, this is actually:
@@ -25,14 +29,27 @@ import Remote2.Encoding (Payload)
 data Closure a = Closure String Payload
      deriving (Typeable)
 
+-- | This type represents a serialized AND native (local) version of a
+--   value.  The consumer can use whichever is appropriate.
+type BiClosure a = (a, Closure a)
+
 
 instance Show (Closure a) where
      show a = case a of
                 (Closure fn _pl) -> show fn
 
-instance Serialize (Closure a) where
-     get = do s <- get
-              v <- get
+{-
+instance Bin.Binary (Closure a) where
+     get = do s <- Bin.get
+              v <- Bin.get
               return $ Closure s v 
-     put (Closure s v) = put s >> put v
+     put (Closure s v) = Bin.put s >> Bin.put v
+-}
+
+
+instance Ser.Serialize (Closure a) where
+     get = do s <- Ser.get
+              v <- Ser.get
+              return $ Closure s v 
+     put (Closure s v) = Ser.put s >> Ser.put v
 

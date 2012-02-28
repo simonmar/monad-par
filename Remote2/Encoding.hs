@@ -26,8 +26,10 @@ module Remote2.Encoding (
 
 import Prelude hiding (id)
 import qualified Prelude as Prelude
-
+-- import Data.Binary (Binary,encode,decode,Put,Get,put,get,putWord8,getWord8)
+-- import qualified Data.Serialize as Ser
 import Data.Serialize (Serialize,encode,decode,Put,Get,put,get,putWord8,getWord8)
+
 import Control.Monad (liftM)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (hPut,hGet,length)
