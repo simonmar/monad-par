@@ -4,7 +4,6 @@ import Control.Monad
 import Control.Seq
 import Control.DeepSeq
 import Control.Exception
-import PortablePixmap
 import Data.Complex
 import System.Environment
 import System.IO
@@ -173,17 +172,14 @@ mandelCheck als max_col max_depth = loop 0 als 0
  loop2 i j (h:t) !sum | h == max_depth = loop2 i (j+1) t (sum + i*max_col + j)
 		      | otherwise      = loop2 i (j+1) t  sum
 	      
-main = do role : transport : args <- getArgs
+main = do role : args <- getArgs
 
-          let (x,y,depth) = 
+          let (transport, x,y,depth) = 
 		case args of
-		 [] -> 
-                       -- Defaults recommended by Simon Marlow
-		       -- (1024,1024,256)
-                       -- Note, this should do something very *quick* when called with no args:
-                       (3,3,3)
-		 [x,y,depth] -> 
-		       (read x, read y, read depth)
+		 []      -> ("pipes",3,3,3)
+		 [trans] -> (trans,  3,3,3)
+		 [trans,x,y,depth] -> 
+		       (trans,read x, read y, read depth)
 
           let trans = case transport of 
 		        "tcp" -> TCP 

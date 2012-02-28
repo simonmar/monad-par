@@ -1,7 +1,11 @@
 #!/bin/bash
 
 set -e 
-set -x
+# set -x
+
+if [ "$APP" = "" ]; then 
+  APP=parfib_dist
+fi
 
 # Comment to disable debug mode:
 if [ "$DEBUG" != "" ]; then 
@@ -15,7 +19,7 @@ if [ "$GHC" = "" ]; then
 fi
 
 # -hide-package remote
-$GHC -i../..  --make parfib_dist.hs -o parfib_dist.exe -O2 -threaded -rtsopts $OPTS $@
+$GHC -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
 
 echo "  Next run this command here:"
 echo "MACHINE_LIST=... ./parfib_dist.exe master 10 +RTS -N2"

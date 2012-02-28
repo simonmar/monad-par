@@ -20,7 +20,7 @@ import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.Char (ord)
 import Data.List (lookup)
-import Data.Monoid
+import Data.Monoid (mappend)
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
@@ -48,6 +48,11 @@ data WhichTransport =
 --  | MPI 
   | Custom (Rem.InitMode -> IO T.Transport)
 
+instance Show WhichTransport where
+  show TCP = "TCP"
+  show Pipes = "Pipes"
+  show (Custom _) = "<CustomTransport>"
+
 -- tries = 20
 -- caps  = numCapabilities
 
@@ -66,17 +71,19 @@ masterInitAction metadata trans = IA ia
         runIA Single.initAction sa scheds
 
 slaveInitAction metadata trans =
-  Rem.initAction metadata trans Rem.Slave <> Single.initAction
+  Rem.initAction metadata trans Rem.Slave `mappend` Single.initAction
 
 sa :: StealAction
-sa = Single.stealAction <> Rem.stealAction
+sa = Single.stealAction `mappend` Rem.stealAction
 
 --------------------------------------------------------------------------------
 
 -- The default Transport is TCP:
 runParDist mt = runParDistWithTransport mt TCP
 
-runParDistWithTransport metadata trans comp = catch main hndlr 
+runParDistWithTransport metadata trans comp = 
+   do Rem.taggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
+      catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
    hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e

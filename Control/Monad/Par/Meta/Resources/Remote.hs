@@ -55,6 +55,7 @@ import System.IO.Unsafe   (unsafePerformIO)
 import System.Process     (readProcess)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
+import System.Environment (getEnvironment)
 import Text.Printf        (printf)
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
@@ -128,27 +129,48 @@ data Message =
   deriving (Show, Generic, Typeable)
 
 
------------------------------------------------------------------------------------
--- Global constants:
------------------------------------------------------------------------------------
+-- | Unique (per-machine) identifier for 'IVar's
+type IVarId = Int
 
+type ParClosure a = (Par a, Closure (Par a))
+
+
+-----------------------------------------------------------------------------------
+-- VERBOSITY and DEBUGGING
+-----------------------------------------------------------------------------------
 -- This controls how much output will be printed, 0-5.
 -- 5 is "debug" mode and affects other aspects of execution (see dbgDelay)
+
+-- RRN [2012.02.28] -- Eventually for performance reasons this
+-- decision will probably be made statically.  For now, in the heat of
+-- debugging, it is nice to be able to change it dynamically.
+
+-- Well, to change it truly DYNAMICALLY, it would have to be an IORef.
+-- For now we just allow an environment variable to override the
+-- setting at load time.
+
+{-# NOINLINE verbosity #-}
 verbosity :: Int
+verbosity = unsafePerformIO$ do
+	      env <- getEnvironment
+              case lookup "VERBOSITY" env of 
+                    Just s  -> do let n = read s
+                                  when (n >= 2)$ putStrLn "Responding to VERBOSITY environment variable!"
+                                  return n
 #ifdef DEBUG
-verbosity = 5
+    	  	    Nothing -> return 5
 #else
--- This should be 1 by default but temporarily upping to 2:
-verbosity = 2
+                    Nothing -> return 1
 #endif
 
 dbg :: Bool
 dbg = (verbosity>=5)
+whenVerbosity n action = when (verbosity >= n) action
 
--- | Machine-unique identifier for 'IVar's
-type IVarId = Int
 
-type ParClosure a = (Par a, Closure (Par a))
+-----------------------------------------------------------------------------------
+-- Global constants:
+-----------------------------------------------------------------------------------
 
 master_addr_file :: String
 master_addr_file = "master_control.addr"
@@ -327,7 +349,6 @@ exitSuccess :: IO a
 exitSuccess = do 
    taggedMsg 1$ "  EXITING process with success exit code."
    closeAllConnections
-   -- TODO: Close connections.
    taggedMsg 1$ "   (Connections closed, now exiting for real)"
    exitProcess 0
 
@@ -356,7 +377,6 @@ exitProcess code = do
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
 
--- TODO:
 closeAllConnections = do
   pt <- readHotVar peerTable
   V.forM_ pt $ \ entry -> 
@@ -385,9 +405,10 @@ instance Show Payload where
 -- | Initialize one part of the global state.
 initPeerTable ms = do
      writeIORef  machineList ms
-     printErr$ "PeerTable:\n"
-     forM_ (zip [0..] ms) $ \ (i,m) -> 
-        printErr$ "  "++show i++": "++ BS.unpack m
+     whenVerbosity 1 $ do
+	printErr$ "PeerTable:\n"
+	forM_ (zip [0..] ms) $ \ (i,m) -> 
+	   printErr$ "  "++show i++": "++ BS.unpack m
      writeHotVar peerTable (V.replicate (length ms) Nothing)
 
 
@@ -419,7 +440,7 @@ waitReadAndConnect ind file = do
 	  if b then BS.readFile file
 	   else do if bool then 
                       taggedMsg 2$ "  File does not exist yet...."
-		    else when (verbosity>=2) $ do 
+		    else whenVerbosity 2 $ do 
                       hPutStr stdout "."
                       hFlush stdout
 		   threadDelay (10*1000) -- Wait between file system checks.
@@ -837,7 +858,7 @@ receiveDaemon targetEnd schedMap =
    case decodeMsg (BS.concat bss) of 
      StealRequest ndid -> do
 --       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
-       when (verbosity>=3) $ do hPutStr stderr "!"; hFlush stderr
+       whenVerbosity 3 $ do hPutStr stderr "!"; hFlush stderr
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 

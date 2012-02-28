@@ -1,30 +1,32 @@
 #!/bin/bash
 
-N=$1
-shift
-if [ "$N" == "" ]; then
- N=10
-fi
+
+ARGS=$*
 
 # Error if any command fails:
 set -e 
-set -x
+# set -x
 
 HOST=`hostname`
 
 # Use -xc here under profiling mode:
-OPTS="-N2 $*"
+OPTS="-N2 "
 
 export MACHINE_LIST="$HOST $HOST"
 
+if [ "$APP" = "" ]; then 
+  APP=parfib_dist
+fi
+
 # Launch master asynchronously:
-./parfib_dist.exe master $N +RTS $OPTS -RTS &
+time ./$APP.exe master $ARGS +RTS $OPTS -RTS &
 
 MASTERPID=$!
-sleep 1
+sleep 0.5
 
 # Launch worker asynchronously:
-./parfib_dist.exe slave +RTS $OPTS -RTS &> worker.log & 
+# ./$APP.exe slave +RTS $OPTS -RTS &> worker.log & 
+./$APP.exe slave +RTS $OPTS -RTS & 
 WORKERPID=$!
 
 # Now wait until the master is done.

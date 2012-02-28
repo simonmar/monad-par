@@ -48,22 +48,23 @@ hostName = do s <- readProcess "hostname" [] ""
 -- Generate stub code for RPC:
 remotable ['parfib1]
 
--- transport = Pipes
-transport = TCP
-
 main = do 
     args <- getArgs
-    let (version, size, cutoff) = case args of 
-            []      -> ("master", 3, 1)
-            [v]     -> (v,        3, 1)
-            [v,n]   -> (v, read n,   1)
-            [v,n,c] -> (v, read n, read c)
+    let (version, trans_, size, cutoff) = case args of 
+            []        -> ("master", "pipes", 10, 1)
+            [v]       -> (v,        "pipes", 10, 1)
+            [v,t]     -> (v,         t,      10, 1)
+            [v,t,n]   -> (v,         t,  read n, 1)
+            [v,t,n,c] -> (v,         t,  read n, read c)
+        trans = parse trans_
+        parse "tcp"   = TCP
+	parse "pipes" = Pipes
 
     case version of 
-        "slave" -> runParSlaveWithTransport [__remoteCallMetaData] TCP
+        "slave" -> runParSlaveWithTransport [__remoteCallMetaData] trans
         "master" -> do 
 		       putStrLn "Using non-thresholded version:"
-		       ans <- (runParDistWithTransport [__remoteCallMetaData] TCP
+		       ans <- (runParDistWithTransport [__remoteCallMetaData] trans
 			       (parfib1 size) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
 		       putStrLn $ "Calling SHUTDOWN..."

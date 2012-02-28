@@ -31,7 +31,8 @@ import qualified Data.List as L
 import qualified Control.Monad.Par.Combinator as C
 import Control.Monad.Par.Class
 import Data.Typeable
-import Data.Binary as B
+import Data.Binary    as B
+import qualified Data.Serialize as S
 
 ----------------------------------------------------------------------------------------------------
 
@@ -56,6 +57,12 @@ instance Binary a => Binary (AList a) where
   put al = B.put (toList al)
   get = do x <- B.get 
 	   return (fromList x)
+instance S.Serialize a => S.Serialize (AList a) where
+  put al = S.put (toList al)
+  get = do x <- S.get 
+	   return (fromList x)
+
+
 
 ----------------------------------------------------------------------------------------------------
 
