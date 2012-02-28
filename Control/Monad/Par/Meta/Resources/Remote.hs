@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -24,6 +25,7 @@ import Control.Exception      (ErrorCall(..), catch, SomeException)
 import Control.Monad          (forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
+import Data.Char              (chr, ord)
 import Data.Unique            (hashUnique, newUnique)
 import Data.Typeable          (Typeable)
 import Data.IORef             (writeIORef, readIORef, newIORef, IORef)
@@ -33,7 +35,6 @@ import Data.Int               (Int64)
 import Data.Word              (Word8)
 import Data.Maybe             (fromMaybe)
 import Data.Char              (isSpace)
--- import qualified Data.ByteString.Lazy.Char8 as BS
 import qualified Data.ByteString.Char8 as BS
 import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
@@ -42,13 +43,10 @@ import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 import qualified Data.Set    as Set
--- import Data.Binary        (encode,decode, Binary)
--- import Data.Binary.Derive (deriveGet, derivePut)
--- import qualified Data.Binary as Bin
 
-import Data.Serialize        (encode,decode, Serialize(..))
-import qualified Data.Serialize as Bin
-
+import Data.Serialize (encode, decode, Serialize)
+import qualified Data.Serialize as Ser
+-- import Data.Serialize.Derive (deriveGet, derivePut)
 import GHC.Generics       (Generic)
 import Prelude     hiding (catch)
 import qualified Prelude as P
@@ -141,7 +139,7 @@ verbosity :: Int
 verbosity = 5
 #else
 -- This should be 1 by default but temporarily upping to 2:
-verbosity = 3
+verbosity = 2
 #endif
 
 dbg :: Bool
@@ -448,8 +446,9 @@ extendPeerTable id entry =
 initAction :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction metadata initTransport (Master machineList) topStealAction schedMap = 
-  do 
+initAction metadata initTransport (Master machineList) = IA ia
+  where
+    ia topStealAction schedMap = do 
      taggedMsg 2$ "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
@@ -460,7 +459,7 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
 
      -- Write global mutable variables:
      ----------------------------------------
-     host <- BS.pack <$> hostName        
+     host <- BS.pack <$> hostName
      let myid = nameToID host 0 machineList
      taggedMsg 3$ "Master node id established as: "++showNodeID myid
      writeIORef myNodeID myid
@@ -500,7 +499,7 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
           let str = BS.concat strs
               msg = decodeMsg str
           case msg of
-            AnnounceSlave{name,toAddr} -> do 
+            Right (AnnounceSlave{name,toAddr}) -> do 
 	      taggedMsg 3$ "Master: register new slave, name: "++ BS.unpack name
 	      taggedMsg 4$ "  Full message received from slave: "++ (BS.unpack str)
 
@@ -528,12 +527,12 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
 
 		  slaveConnectLoop (iter-1) alreadyConnected' 
 
-            othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg
+            Right othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
      ----------------------------------------
      taggedMsg 3$ "  ... waiting for slaves to connect."
      let allButMe = if (elem host machineList) 
 		    then delete host machineList
-		    else error$ "Could not find master domain name "++BS.unpack host++
+		    else error$ "Could not find master domain name " ++ (BS.unpack host)++
 			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
      slaveConnectLoop (length allButMe) (M.singleton host 1)
      taggedMsg 2$ "  ... All slaves announced themselves."
@@ -546,8 +545,9 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
          unless (ndid == myid) $ do 
           msg <- decodeMsg <$> BS.concat <$> T.receive targetEnd 
           case msg of 
-	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", " ++ BS.unpack name ++ ": peers connected."
-	     msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
+   	     Right ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", "
+                                          ++ (BS.unpack name) ++ ": peers connected."
+	     Left msg -> errorExit$ "Expected ConnectAllPeers message, received: "++ show msg
 
      taggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
      forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
@@ -561,7 +561,6 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
      ----------------------------------------
      taggedMsg 3$ "Master initAction returning control to scheduler..."
      return ()
- where 
     -- Annoying book-keeping:  Keep track of how many we've seen
     -- and make sure that the client that actually connect match
     -- the machineList:
@@ -579,13 +578,14 @@ initAction metadata initTransport (Master machineList) topStealAction schedMap =
 				|| basename bs1 == basename bs2) bsls
       in if length indices > skip 
 	 then indices !! skip
-	 else error$ "nameToID: hostname not in [or not included enough times] in machine list: "++BS.unpack bs1
+	 else error$ "nameToID: hostname not in [or not included enough times] in machine list: "++ (BS.unpack bs1)
 
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-initAction metadata initTransport Slave topStealAction schedMap = 
-  do 
+initAction metadata initTransport Slave = IA ia
+  where
+    ia topStealAction schedMap = do 
      taggedMsg 2$ "Init slave: creating connection... " 
      host <- BS.pack <$> commonInit metadata initTransport
      writeIORef global_mode "_S"
@@ -593,7 +593,7 @@ initAction metadata initTransport Slave topStealAction schedMap =
      transport <- readIORef myTransport
      (mySourceAddr, myInbound) <- T.newConnection transport
 
-     taggedMsg 3$ "  Source addr created: " ++ BS.unpack (T.serialize mySourceAddr)
+     taggedMsg 3$ "  Source addr created: " ++ (BS.unpack (T.serialize mySourceAddr))
 
      let 
          waitMasterFile = do  
@@ -645,8 +645,7 @@ initAction metadata initTransport Slave topStealAction schedMap =
 	     msg <- T.receive myInbound
 	     case decodeMsg (BS.concat msg) of 
 	       StartStealing -> taggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
-	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg
-              
+	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg              
 
      -- These are the key steps:
      waitMasterFile
@@ -749,40 +748,40 @@ workerShutdown schedMap = do
 --------------------------------------------------------------------------------
 
 stealAction :: StealAction
-stealAction Sched{no} _ = do
-  dbgDelay "stealAction"
+stealAction = SA sa
+  where 
+    sa Sched{no} _ = do
+      dbgDelay "stealAction"
 
-  -- First try to pop local work:
-  x <- R.tryPopR longQueue
+      -- First try to pop local work:
+      x <- R.tryPopR longQueue
 
-  case x of 
-    Just (LongWork{localver}) -> do
-      taggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
-      return (Just localver)
-    Nothing -> raidPeer
- where 
-  pickVictim myid = do
-     pt   <- readHotVar peerTable
-     let len = V.length pt
-         loop = do 
-	   n :: Int <- randomIO 
-	   let ind = n `mod` len
-	   if ind == myid 
-	    then pickVictim myid
-	    else return ind
-     loop 
+      case x of 
+        Just (LongWork{localver}) -> do
+          taggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
+          return (Just localver)
+        Nothing -> raidPeer
+    pickVictim myid = do
+      pt   <- readHotVar peerTable
+      let len = V.length pt
+          loop = do 
+            n :: Int <- randomIO 
+ 	    let ind = n `mod` len
+ 	    if ind == myid 
+             then pickVictim myid
+	     else return ind
+      loop 
 
-  raidPeer = do
-     myid <- readHotVar myNodeID
-     ind  <- pickVictim myid
-     taggedMsg 4$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
-
+    raidPeer = do
+      myid <- readHotVar myNodeID
+      ind  <- pickVictim myid
+      taggedMsg 4$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
-     sendTo ind (encode$ StealRequest myid)
+      sendTo ind (encode$ StealRequest myid)
 
-     -- We have nothing to return immediately, but hopefully work will come back later.
-     return Nothing
+      -- We have nothing to return immediately, but hopefully work will come back later.
+      return Nothing
 
 
 
@@ -849,7 +848,7 @@ receiveDaemon targetEnd schedMap =
 	 Nothing -> return ()
        rcvLoop myid
 
-     StealResponse fromNd pr@(ivarid,pclo) -> do
+     Right (StealResponse fromNd pr@(ivarid,pclo)) -> do
        taggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
 
        loc <- deClosure pclo
@@ -863,7 +862,7 @@ receiveDaemon targetEnd schedMap =
 				   })
        rcvLoop myid
 
-     WorkFinished fromNd ivarid payload -> do
+     Right (WorkFinished fromNd ivarid payload) -> do
        taggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
 		    " ivarID "++ show ivarid++" payload: "++show payload
        table <- readHotVar remoteIvarTable
@@ -876,14 +875,14 @@ receiveDaemon targetEnd schedMap =
        rcvLoop myid
 
      -- This case EXITS the receive loop peacefully:
-     ShutDown token -> do
+     Right (ShutDown token) -> do
        taggedMsg 1$ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd
 		 else workerShutdown schedMap'
 
-     msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ show msg
+     Left msg -> errorExit$ "Received unexpected message while in receiveDaemon: "++ msg
 
 
 
@@ -904,7 +903,7 @@ longSpawn  :: (NFData a, Serializable a)
 #if 0 
 -- Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
-instance Binary Message where
+instance Serialize Message where
   put = derivePut 
   get = deriveGet
 magic_word :: Int64
@@ -912,62 +911,61 @@ magic_word = 98989898989898989
 -- Note, these encodings of sums are not efficient!
 #else 
 
+type TagTy = Word8
+
 -- Even though this is tedious, because I was running into (toEnum)
 -- exceptions with the above I'm going to write this out longhand
 -- [2012.02.17]:
--- type TagTy = Bin.Word8
-type TagTy = Word8
--- instance Binary Message where
 instance Serialize Message where
  put AnnounceSlave{name,toAddr} = do Bin.put (1::TagTy)
 				     Bin.put name
 				     Bin.put toAddr
  put (MachineListMsg (n1,bs) n2 ml) = 
                                   do 
-                                     Bin.put (2::TagTy)
-				     Bin.put n1
-				     Bin.put bs
-				     Bin.put n2
-				     Bin.put ml
- put ConnectedAllPeers =    Bin.put (3::TagTy)
- put StartStealing     =    Bin.put (4::TagTy)
- put (ShutDown tok)    = do Bin.put (5::TagTy)
-			    Bin.put tok
- put ShutDownACK       =    Bin.put (6::TagTy)
- put (StealRequest id) = do Bin.put (7::TagTy)
-			    Bin.put id
+                                     Ser.put (2::TagTy)
+				     Ser.put n1
+				     Ser.put bs
+				     Ser.put n2
+				     Ser.put ml
+ put ConnectedAllPeers =    Ser.put (3::TagTy)
+ put StartStealing     =    Ser.put (4::TagTy)
+ put (ShutDown tok)    = do Ser.put (5::TagTy)
+			    Ser.put tok
+ put ShutDownACK       =    Ser.put (6::TagTy)
+ put (StealRequest id) = do Ser.put (7::TagTy)
+			    Ser.put id
  put (StealResponse id (iv,pay)) = 
-                         do Bin.put (8::TagTy)
-			    Bin.put id
-			    Bin.put iv
-			    Bin.put pay
+                         do Ser.put (8::TagTy)
+			    Ser.put id
+			    Ser.put iv
+			    Ser.put pay
  put (WorkFinished nd iv pay) = 
-                         do Bin.put (9::TagTy)
-			    Bin.put nd
-			    Bin.put iv
-			    Bin.put pay
- get = do tag <- Bin.get 
+                         do Ser.put (9::TagTy)
+			    Ser.put nd
+			    Ser.put iv
+			    Ser.put pay
+ get = do tag <- Ser.get 
           case tag :: TagTy of 
-	    1 -> do name   <- Bin.get 
-		    toAddr <- Bin.get
+	    1 -> do name   <- Ser.get 
+		    toAddr <- Ser.get
 		    return (AnnounceSlave{name,toAddr})
-            2 -> do n1 <- Bin.get 
-		    bs <- Bin.get 
-		    n2 <- Bin.get 
-		    ml <- Bin.get 
+            2 -> do n1 <- Ser.get 
+		    bs <- Ser.get 
+		    n2 <- Ser.get 
+		    ml <- Ser.get 
 		    return (MachineListMsg (n1,bs) n2 ml) 
 	    3 -> return ConnectedAllPeers
 	    4 -> return StartStealing
-	    5 -> ShutDown <$> Bin.get
+	    5 -> ShutDown <$> Ser.get
 	    6 -> return ShutDownACK
-	    7 -> StealRequest <$> Bin.get
-	    8 -> do id <- Bin.get
-		    iv <- Bin.get
-		    pay <- Bin.get
+	    7 -> StealRequest <$> Ser.get
+	    8 -> do id <- Ser.get
+		    iv <- Ser.get
+		    pay <- Ser.get
 		    return (StealResponse id (iv,pay))
-	    9 -> do nd <- Bin.get
-		    iv <- Bin.get
-		    pay <- Bin.get
+	    9 -> do nd <- Ser.get
+		    iv <- Ser.get
+		    pay <- Ser.get
 		    return (WorkFinished nd iv pay)
             _ -> errorExitPure$ "Remote.hs: Corrupt message: tag header = "++show tag
 #endif      

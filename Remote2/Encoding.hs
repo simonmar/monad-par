@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveDataTypeable,CPP,FlexibleInstances,UndecidableInstances #-}
+{-# LANGUAGE DeriveDataTypeable,CPP,FlexibleInstances,UndecidableInstances,ScopedTypeVariables #-}
 
 -- | This module provides the 'Serializable' type class and
 -- functions to convert to and from 'Payload's. It's implemented
@@ -26,13 +26,13 @@ module Remote2.Encoding (
 
 import Prelude hiding (id)
 import qualified Prelude as Prelude
-
-import Data.Binary (Binary,encode,decode,Put,Get,put,get,putWord8,getWord8)
-import qualified Data.Serialize as Ser
+-- import Data.Binary (Binary,encode,decode,Put,Get,put,get,putWord8,getWord8)
+-- import qualified Data.Serialize as Ser
+import Data.Serialize (Serialize,encode,decode,Put,Get,put,get,putWord8,getWord8)
 
 import Control.Monad (liftM)
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy as B (hPut,hGet,length)
+import Data.ByteString (ByteString)
+import qualified Data.ByteString as B (hPut,hGet,length)
 import Control.Exception (try,evaluate,ErrorCall)
 import Data.Int (Int64)
 import System.IO (Handle)
@@ -49,8 +49,8 @@ import Data.Generics (Data,gfoldl,gunfold, toConstr,constrRep,ConstrRep(..),repC
 -- or you can use the 'genericGet' and 'genericPut' flavors,
 -- which will work automatically for types implementing
 -- 'Data'.
-class (Binary a,Typeable a) => Serializable a
-instance (Binary a,Typeable a) => Serializable a
+class (Serialize a,Typeable a) => Serializable a
+instance (Serialize a,Typeable a) => Serializable a
 
 data Payload = Payload
                 { 
@@ -61,9 +61,9 @@ data DynamicPayload = DynamicPayload
                 {
                   dynamicPayloadContent :: Dynamic
                 }
-type PayloadLength = Int64
+type PayloadLength = Int
 
-instance Binary Payload where
+instance Serialize Payload where
   put pl = put (payloadType pl) >> put (payloadContent pl)
   get = get >>= \a -> get >>= \b -> return $ Payload {payloadType = a,payloadContent=b}
 
@@ -81,7 +81,9 @@ getPayloadContent :: Payload -> ByteString
 getPayloadContent = payloadContent
 
 getPayloadType :: Payload -> String
-getPayloadType pl = decode $ payloadType pl
+getPayloadType pl = either (error "error decoding payload type")
+                           Prelude.id
+                           (decode $ payloadType pl)
 
 hPutPayload :: Handle -> Payload -> IO ()
 hPutPayload h (Payload t c) = B.hPut h (encode (B.length t :: PayloadLength)) >>  
@@ -91,9 +93,11 @@ hPutPayload h (Payload t c) = B.hPut h (encode (B.length t :: PayloadLength)) >>
 
 hGetPayload :: Handle -> IO Payload
 hGetPayload h = do tl <- B.hGet h (fromIntegral baseLen)
-                   t <- B.hGet h (fromIntegral (decode tl :: PayloadLength))
+                   let (Right tl') = decode tl
+                   t <- B.hGet h (fromIntegral (tl' :: PayloadLength))
                    cl <- B.hGet h (fromIntegral baseLen)
-                   c <- B.hGet h (fromIntegral (decode cl :: PayloadLength))
+                   let (Right cl') = decode cl
+                   c <- B.hGet h (fromIntegral (cl' :: PayloadLength))
                    return $ Payload {payloadType = t,payloadContent = c}
     where baseLen = B.length (encode (0::PayloadLength))
 
@@ -119,24 +123,25 @@ serialEncode a = do encoded <- evaluate $ encode a -- this evaluate is actually 
                                         payloadContent = encoded}
 
 
-serialDecodePure :: (Serializable a) => Payload -> Maybe a
-serialDecodePure a = (\id -> 
-                      let pc = payloadContent a
+serialDecodePure :: forall a. (Serializable a) => Payload -> Maybe a
+serialDecodePure p = (\id -> 
+                      let pc = payloadContent p
                       in
                         pc `seq`
-                        if (decode $! payloadType a) == 
-                              show (typeOf $ id undefined)
-                          then Just (id $! decode pc)
+                        if (decode $! payloadType p) == 
+                              Right (show (typeOf $ (undefined :: a)))
+                          then Just (either (error "serialDecodePure")
+                                            Prelude.id
+                                            $! decode pc)
                           else Nothing ) Prelude.id
 
 
 serialDecode :: (Serializable a) => Payload -> IO (Maybe a)
 serialDecode a = (\id ->
                       if (decode $ payloadType a) == 
-                            show (typeOf $ id undefined)
+                            Right (show (typeOf $ id undefined))
                          then do
-                                 res <- try (evaluate $ decode (payloadContent a)) 
-                                    :: (Serializable a) => IO (Either ErrorCall a)
+                                 res <- evaluate $ decode (payloadContent a)
                                  case res of
                                   Left _ -> return $ Nothing
                                   Right v -> return $ Just $ id v
@@ -179,7 +184,9 @@ genericGet = generic `extR` genericString
                            (repConstr (dataTypeOf (id undefined)) constr_rep)) Prelude.id
          genericString :: Get String
          genericString = do q <- get
-                            return $ decode q
+                            either (error "genericString")
+                                   return
+                                   (decode q)
 
 serializeConstr :: ConstrRep -> Put
 serializeConstr (AlgConstr ix)   = putWord8 1 >> put ix

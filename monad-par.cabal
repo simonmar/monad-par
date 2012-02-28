@@ -154,12 +154,26 @@ Library
                , mtl >= 2.0.1.0
                , parallel >= 3.1
                , abstract-deque >= 0.1.4
+               , binary
+                -- AList now depends on binary.
   if !flag(NoGPU) {
     Build-depends: accelerate >= 0.9.0.1
   }
   if !flag(NoDist) {
     Build-depends: network
-                 , binary-derive
+                 , bytestring >= 0.9
+                 , cereal >= 0.3
+                 , cereal-derive
+                 , directory >= 1.1
+                 , ghc-prim
+                 , network-transport
+                 , network-transport-pipes
+                 , process >= 1.1
+                 , syb >= 0.3
+                 , unix >= 2.5
+
+    Exposed-modules: Control.Monad.Par.Meta.Dist,
+                     Control.Monad.Par.Meta.Resources.Remote
   }
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
@@ -177,7 +191,7 @@ Library
                  Control.Monad.Par.Scheds.Direct
 
                -- Strawman scheduler that forks IO threads:
-               , Control.Monad.Par.Scheds.ContFree
+--               , Control.Monad.Par.Scheds.ContFree
 
                -- Internal logging framework:
                , Control.Monad.Par.Logging
@@ -232,6 +246,7 @@ Test-Suite test-monad-par
     build-depends: base >= 4 && < 5
                  , array >= 0.3
                  , deepseq >= 1.2
+                 , binary
                  , QuickCheck, HUnit, time
                  , test-framework, test-framework-th
                  , test-framework-hunit, test-framework-quickcheck2

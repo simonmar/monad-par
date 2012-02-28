@@ -25,12 +25,14 @@ dbg = True
 #endif
 
 initAction :: InitAction
-initAction sa _ = do
-  qsem <- newQSem 0
-  (cap, _) <- threadCapability =<< myThreadId
-  printf " [%d] spawning single worker\n" cap
-  void $ spawnWorkerOnCap' qsem sa cap
-  waitQSem qsem        
+initAction = IA ia 
+  where ia sa _ = do
+          qsem <- newQSem 0
+          (cap, _) <- threadCapability =<< myThreadId
+          printf " [%d] spawning single worker\n" cap
+          void $ spawnWorkerOnCap' qsem sa cap
+          waitQSem qsem        
 
 stealAction :: StealAction
-stealAction _ _ = return Nothing
+stealAction = SA sa 
+  where sa _ _ = return Nothing

@@ -10,6 +10,7 @@ module Remote2.Closure (
 		       BiClosure(..),
                        ) where
 
+import Data.Serialize as Ser 
 import Data.Typeable (Typeable)
 import Remote2.Encoding (Payload)
 

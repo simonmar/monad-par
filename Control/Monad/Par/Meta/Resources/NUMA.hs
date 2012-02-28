@@ -13,7 +13,6 @@ module Control.Monad.Par.Meta.Resources.NUMA (
 
 import Control.Monad
 
-import qualified Data.IntMap as IntMap
 import qualified Data.Vector as Vector
 
 import System.Environment
@@ -39,9 +38,11 @@ type SimpleTopology = [[Int]]
 
 -- | 'InitAction' for spawning a NUMA scheduler.
 initAction :: SimpleTopology -> InitAction
-initAction topo sa _m = do
-  when dbg $ printf "NUMA scheduler spawning subordinate schedulers\n"
-  forM_ topo $ \node -> SharedMemory.initActionForCaps node sa _m
+initAction topo = IA ia
+  where ia sa _m = do
+          when dbg $ printf "NUMA scheduler spawning subordinate schedulers\n"
+          forM_ topo $ \node -> 
+            runIA (SharedMemory.initActionForCaps node) sa _m
 
 -- | A version of 'initAction' that reads a 'SimpleTopology' from the
 -- @NUMA_TOPOLOGY@ environment variable. For example,
@@ -64,37 +65,39 @@ randModN n rngRef = uniformR (0, n-1) =<< readHotVar rngRef
 -- | Given a 'SimpleTopology' and a number of steals to attempt per
 -- invocation, return a 'StealAction'.
 stealAction :: SimpleTopology -> Int -> StealAction
-stealAction topo numTries = sa
+stealAction topo numTries = SA sa
   where
     numNodes = length topo
     triesPerNode = numTries `quot` numNodes
     buildSteal caps = 
       SharedMemory.stealActionForCaps caps triesPerNode
     subSteals = map buildSteal topo
-    capAssocs = [map (\cap -> (cap, sa)) caps | caps <- topo | sa <- subSteals]
-    capMap = IntMap.fromList (concat capAssocs)
+    capAssocs = concat [map (\cap -> (cap, sa)) caps
+                       | caps <- topo
+                       | sa <- subSteals]
+    lookupSA i =
+      case lookup i capAssocs of
+        Nothing -> error $ printf "accessed invalid capability %d" i
+        Just sa -> sa
+    capVec = Vector.generate (maximum (map fst capAssocs)) lookupSA
     saVec = Vector.fromList subSteals
-    sa :: StealAction
     sa sched@Sched { no, rng } schedsRef = do
       -- first, steal from the scheduler for this clique
-      let cliqueSteal = IntMap.lookup no capMap
-      case cliqueSteal of
-        Nothing -> error $ printf "[%d] no steal action for NUMA node" no
-        Just sa -> do
-          mtask <- sa sched schedsRef
-          case mtask of
-            jtask@(Just _) -> return jtask
-            Nothing -> do
-              let getNext :: IO Int
-                  getNext = randModN numNodes rng
-                  -- | Main steal loop
-                  loop :: Int -> Int -> IO (Maybe (Par ()))
-                  loop 0 _ = return Nothing      
-                  loop n i = do
-                    -- unlike shared memory, ok to steal from "self"
-                    mtask <- (saVec Vector.! i) sched schedsRef
-                    maybe (loop (n-1) =<< getNext) (return . return) mtask
-              loop numTries =<< getNext
+      let sa = capVec Vector.! no
+      mtask <- runSA sa sched schedsRef
+      case mtask of
+        jtask@(Just _) -> return jtask
+        Nothing -> do
+          let getNext :: IO Int
+              getNext = randModN numNodes rng
+              -- | Main steal loop
+              loop :: Int -> Int -> IO (Maybe (Par ()))
+              loop 0 _ = return Nothing      
+              loop n i = do
+                -- unlike shared memory, ok to steal from "self"
+                mtask <- runSA (saVec Vector.! i) sched schedsRef
+                maybe (loop (n-1) =<< getNext) (return . return) mtask
+          loop numTries =<< getNext
 
 stealActionFromEnv :: Int -> StealAction
 stealActionFromEnv = stealAction topoFromEnv

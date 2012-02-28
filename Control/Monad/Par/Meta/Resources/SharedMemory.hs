@@ -34,24 +34,26 @@ dbg = False
 
 -- | 'InitAction' for spawning threads on all capabilities.
 initAction :: InitAction
-initAction sa _m = do
-  caps <- getNumCapabilities
-  initActionForCaps [0..caps-1] sa _m
+initAction = IA ia
+  where ia sa _m = do
+          caps <- getNumCapabilities
+          runIA (initActionForCaps [0..caps-1]) sa _m
   
 -- | 'InitAction' for spawning threads only on a particular set of
 -- capabilities.
 initActionForCaps :: [Int] -> InitAction
-initActionForCaps caps sa _ = do
-  when dbg $ do
-    printf "spawning worker threads for shared memory on caps:\n"
-    printf "\t%s\n" (show caps)
-  -- create a semaphore so that we only return once all the workers
-  -- have been spawned
-  qsem <- newQSem 0
-  let caps' = nub caps
-  forM_ caps' $ \n ->
-    void $ spawnWorkerOnCap' qsem sa n
-  forM_ caps' $ const (waitQSem qsem)
+initActionForCaps caps = IA ia
+  where ia sa _ = do
+          when dbg $ do
+            printf "spawning worker threads for shared memory on caps:\n"
+            printf "\t%s\n" (show caps)
+          -- create a semaphore so that we only return once all the workers
+          -- have been spawned
+          qsem <- newQSem 0
+          let caps' = nub caps
+          forM_ caps' $ \n ->
+            void $ spawnWorkerOnCap' qsem sa n
+          forM_ caps' $ const (waitQSem qsem)
   
 
 {-# INLINE randModN #-}
@@ -60,19 +62,19 @@ randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 
 -- | 'StealAction' for all capabilities.
 stealAction :: Int -> StealAction
-stealAction triesPerCap sched schedsRef = do
-  caps <- getNumCapabilities
-  stealActionForCaps [0..caps-1] triesPerCap sched schedsRef
+stealAction triesPerCap = SA sa
+  where sa sched schedsRef = do
+          caps <- getNumCapabilities
+          runSA (stealActionForCaps [0..caps-1] triesPerCap) sched schedsRef
 
 -- | Given a set of capabilities and a number of steals to attempt per
 -- capability, return a 'StealAction'.
 stealActionForCaps :: [Int] -> Int -> StealAction
-stealActionForCaps caps triesPerCap = sa
+stealActionForCaps caps triesPerCap = SA sa
   where 
     numCaps = length caps
     numTries = numCaps * triesPerCap
     capVec = Vector.fromList caps
-    sa :: StealAction
     sa Sched { no, rng } schedsRef = do
       scheds <- readHotVar schedsRef
       let {-# INLINE getNext #-}

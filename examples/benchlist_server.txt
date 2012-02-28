@@ -13,18 +13,18 @@
 # # Problems with this:
 parfib_pseq   none           42
 parfib_monad  futures monad  38
-parfib_monad  futures nested 30
+#parfib_monad  futures nested 30
 
 blackscholes  futures 10000 30000000
 
-cholesky      ivars   1000 50 cholesky_matrix1000.dat
+#cholesky      ivars   1000 50 cholesky_matrix1000.dat
 
 nbody         ivars  25000
 
-mandel        futures 3000 3000 3000000
+# mandel        futures 3000 3000 3000000
 
 coins         futures 8 1600
-queens        futures monad 14
+# queens        futures monad 14
 
 # quicksort/parquicksort_monad futures 1500000
 # quicksort/parquicksort_pseq  none    1500000
@@ -40,7 +40,7 @@ queens        futures monad 14
 
 # # These don't match the naming convention at the moment.
 sumeuler/sumeuler futures 38 16000 100
-matmult/matmult   futures 1024 0 64
+matmult/MatMult   futures 1024 0 64
 
 # Getting a drastic parallel slowdown currently! [2011.10.25]
-# partree/partree futures 600 20
+partree/partree futures 600 20
