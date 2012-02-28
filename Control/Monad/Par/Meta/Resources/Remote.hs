@@ -369,7 +369,8 @@ closeAllConnections = do
   T.closeTransport trans
 
 instance Show Payload where
-  show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "++ show (getPayloadContent payload) ++ ">"
+  show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "
+		 ++ show (BS.take 100$ getPayloadContent payload) ++ ">"
     
 -----------------------------------------------------------------------------------
 -- Initialize & Establish workers.

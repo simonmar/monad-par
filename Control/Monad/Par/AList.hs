@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, DeriveDataTypeable #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 -- | This module defines the 'AList' type, a list that supports
@@ -30,10 +30,17 @@ import qualified Prelude as P
 import qualified Data.List as L
 import qualified Control.Monad.Par.Combinator as C
 import Control.Monad.Par.Class
+import Data.Typeable
+import Data.Binary as B
+
+----------------------------------------------------------------------------------------------------
 
 -- | List that support constant-time append (sometimes called
 -- join-lists).
 data AList a = ANil | ASing a | Append (AList a) (AList a) | AList [a]
+ deriving (Typeable)
+
+-- TODO -- Add vectors.
 
 instance NFData a => NFData (AList a) where
  rnf ANil         = ()
@@ -43,6 +50,14 @@ instance NFData a => NFData (AList a) where
 
 instance Show a => Show (AList a) where 
   show al = "fromList "++ show (toList al)
+
+-- TODO: Better Serialization
+instance Binary a => Binary (AList a) where
+  put al = B.put (toList al)
+  get = do x <- B.get 
+	   return (fromList x)
+
+----------------------------------------------------------------------------------------------------
 
 {-# INLINE append #-}
 -- | /O(1)/ Append two 'AList's

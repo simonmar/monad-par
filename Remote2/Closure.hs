@@ -6,7 +6,8 @@
 -- swapped out for the \"static\" mechanism described in the
 -- paper.
 module Remote2.Closure (
-                       Closure(..)
+                       Closure(..),
+		       BiClosure(..),
                        ) where
 
 import Data.Typeable (Typeable)
@@ -26,6 +27,10 @@ import qualified Data.Serialize as Ser
 --   See the paper for clarification.
 data Closure a = Closure String Payload
      deriving (Typeable)
+
+-- | This type represents a serialized AND native (local) version of a
+--   value.  The consumer can use whichever is appropriate.
+type BiClosure a = (a, Closure a)
 
 
 instance Show (Closure a) where
