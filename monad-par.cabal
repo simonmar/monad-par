@@ -197,6 +197,9 @@ Library
                -- Serial Elision is currently experimental:
                , Control.Monad.Par.Scheds.SerialElision
 
+               -- HotVar implementations
+               , Control.Monad.Par.Meta.HotVar.IORef
+
 
                ------------------------------------------------------------
                --                   Data Structures                      -- 
