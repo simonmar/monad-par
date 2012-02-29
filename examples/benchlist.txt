@@ -3,7 +3,7 @@
 # This is a default set of benchmarks reasonable for a powerful four core desktop.
 # For example on my machine this takes 15.5 minutes to do 3 trials from 1-8 threads.
 #
-# Version: desktop 1.1
+# Version: desktop 1.2
 # 
 # I'm attempting to keep track of changes to this config with the above.
 # Note that changes to the benchmarks themselves also require changing
@@ -26,6 +26,7 @@ nbody         ivars  13000
 
 # mandel 300 300 4000
 # mandel        futures 2000 2000 3000000
+mandel futures 1024 1024 256
 
 coins         futures 8 1250
 # queens        futures 14
@@ -47,3 +48,6 @@ partree/partree futures 600 20
 # These don't match the naming convention at the moment.
 matmult/MatMult   futures 768 0 64
 sumeuler/sumeuler futures 38 8000 100
+
+# distributed/parfib_dist
+# distributed/mandel_dist dist pipes 1024

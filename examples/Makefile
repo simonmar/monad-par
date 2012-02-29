@@ -22,6 +22,8 @@ BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
 # binomial_lattice.hs
 # Note: not using all of the stream benchmarks at the moment.
 
+DISTEXES= distributed/parfib_dist.exe
+
 ALLEXES= $(BENCHMARKS:.hs=.exe)
 
 # FILE EXTENSIONS USED:
@@ -36,6 +38,8 @@ OUTS  = $(ALLEXES:.exe=.out)
 .PRECIOUS: $(ALLEXES) $(OUTS)
 
 all: $(ALLEXES) datasets 
+
+dist: $(DISTEXES)
 
 %.exe : %.hs $(ALLPARSRC)
 	@echo "Building executable: $@"
