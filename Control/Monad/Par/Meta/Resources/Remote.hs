@@ -202,6 +202,7 @@ dbg = False
 whenVerbosity n action = when (verbosity >= n) action
 
 -- | taggedMsg is our routine for logging debugging output:
+-- taggedMsg :: Int -> BS.ByteString -> IO ()
 taggedMsg :: Int -> String -> IO ()
 taggedMsg = if binaryEventLog then binaryLogMsg else textLogMsg
 
@@ -240,7 +241,8 @@ dbgDelay _ =
   else return ()
 
 -- printErr = hPutStrLn stderr
-printErr = putStrLn
+-- printErr = putStrLn
+printErr = BS.putStrLn . BS.pack 
 
 meaningless_alloc :: IO ()
 meaningless_alloc = 
@@ -261,11 +263,16 @@ master_addr_file = "master_control.addr"
 
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
+-- | Flag: establish all-to-all connections BEFORE beginning any real computation.
 eager_connections = False
 -- Other temporary toggles:
 -- define SHUTDOWNACK
 -- define KILL_WORKERS_ON_SHUTDOWN
 
+
+-- | Receive daemon backoff policy.  How many times 
+-- tries_before_sleep = 
+-- max_backoff_sleep = 
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -403,10 +410,8 @@ makePayloadClosure (Closure name arg) =
 errorExit :: String -> IO a
 -- TODO: Might be better to just call "kill" on our own PID:
 errorExit str = do
---       tid <- readIORef mainThread
---       throwTo tid (ErrorCall$ "ERROR: "++str)
---       error$ "ERROR: "++str
-   printErr$ "ERROR: "++str 
+   printErr    $ "ERROR: "++str 
+   taggedMsg 0 $ "ERROR: "++str 
 
 #ifdef TMPDBG
    diverge
@@ -446,6 +451,7 @@ exitProcess code = do
    -- Option 1: Async exception
    -- tid <- readIORef mainThread
    -- throwTo tid (ErrorCall$ "Exiting with code: "++show code)
+   --   NOTE ^^ - this was having problems not being serviced.
 
    -- Option 2: kill:
    --      mypid <- getProcessID
@@ -917,15 +923,20 @@ longSpawn (local, clo@(Closure n pld)) = do
 
 --------------------------------------------------------------------------------
 
--- | Receive steal requests from other nodes.
+-- | Receive steal requests from other nodes.  This runs in a loop indefinitely.
 receiveDaemon :: T.TargetEnd -> HotVar (IntMap.IntMap Sched) -> IO ()
 receiveDaemon targetEnd schedMap = 
   do myid <- readIORef myNodeID
      rcvLoop myid
  where 
   rcvLoop myid = do
+   -- let loopSuccess = rcvLoop myid 0 
+   --     loopFail | numTries > tries_before_sleep = do waitBackoff  (numTries - tries_before_sleep)
+   -- 						     rcvLoop myid (numTries + 1)
+   -- 		| otherwise                     =    rcvLoop myid (numTries + 1)
+
    dbgDelay "receiveDaemon"
- --  bss  <- if dbg
+   -- Do a blocking receive to process the next message:
    bss  <- if False
 	   then catch (T.receive targetEnd)
 		      (\ (e::SomeException) -> do
@@ -939,20 +950,28 @@ receiveDaemon targetEnd schedMap =
      StealRequest ndid -> do
        dbgCharMsg 3 "!" ("[rcvdmn] Received StealRequest from: "++ showNodeID ndid)
 
+       -- There are no "peek" operations currently.  Instead assuming pushL:
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
 	   taggedMsg 2$ "[rcvdmn]   StealRequest: longwork in stock, responding with StealResponse..."
 	   sendTo ndid (encode$ StealResponse myid stealme)
- -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
-	 Just x -> R.pushL longQueue x
-	 Nothing -> return ()
+
+          -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
+	 Just x -> do 
+	    taggedMsg 2$ "[rcvdmn]   StealRequest: Uh oh!  The bottom thing on the queue is not remote-executable.  Requeing it."
+            R.pushL longQueue x
+	 Nothing -> do
+	    taggedMsg 4$ "[rcvdmn]   StealRequest: No work to service request.  Not responding."
+            return ()
        rcvLoop myid
 
      StealResponse fromNd pr@(ivarid,pclo) -> do
        taggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
-
        loc <- deClosure pclo
+       -- Here the policy is to execute local work (woken
+       -- continuations) using the SAME work queue.  We thus have
+       -- heterogeneous entries in that queue.
        R.pushL longQueue (LongWork { stealver = Nothing,
 				     localver = do 
 						   liftIO$ taggedMsg 1 "[rcvdmn] RUNNING STOLEN PAR WORK "
@@ -999,8 +1018,9 @@ longSpawn  :: (NFData a, Serializable a)
 
 #endif
 
+
 #if 0 
--- Use the GHC Generics mechanism to derive these:
+-- Option 1: Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
 instance Serialize Message where
   put = derivePut 

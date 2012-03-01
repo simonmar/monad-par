@@ -21,7 +21,8 @@ set -e
 HOST=`hostname`
 
 # Use -xc here under profiling mode:
-OPTS="-N2 "
+# OPTS="-N2 "
+OPTS=" -N1 "
 
 export MACHINE_LIST="$HOST $HOST"
 
