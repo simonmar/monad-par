@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, ScopedTypeVariables, TypeFamilies #-}
+{-# LANGUAGE CPP, TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- | Helpers for fast conversion of 'Data.Vector.Storable' vectors
@@ -29,40 +29,52 @@ import Test.QuickCheck
 import Test.QuickCheck.Monadic
 #endif
 
-fromVector :: forall a e. (Storable a, Elt e, BlockPtrs (EltRepr e) ~ ((), Ptr a))
-           => Vector a -> IO (Array DIM1 e)
+fromVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a))
+           => Vector a -> IO (Array DIM1 a)
 fromVector v = withForeignPtr fp $ \ptr -> fromPtr (Z :. len) ((), ptr)
   where (fp, len) = unsafeToForeignPtr0 v
 
-toVector :: (Storable a, Elt e, BlockPtrs (EltRepr e) ~ ((), Ptr a)) 
-         => Array DIM1 e -> IO (Vector a)
+toVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a)) 
+         => Array DIM1 a -> IO (Vector a)
 toVector arr = do
   let (Z :. len) = arrayShape arr
   fp <- mallocForeignPtrArray len
   withForeignPtr fp $ \ptr -> toPtr arr ((), ptr)
   return $ unsafeFromForeignPtr0 fp len
 
-test :: IO (Array DIM1 Float)
-test = fromVector $ fromList ([1,2] :: [Float])
+unsafeFromVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a))
+                 => Vector a -> Array DIM1 a
+unsafeFromVector v = unsafePerformIO $ fromVector v
+
+unsafeToVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a)) 
+         => Array DIM1 a -> Vector a
+unsafeToVector arr = unsafePerformIO $ toVector arr
 
 #ifdef TEST
-prop_roundtrip :: forall a e. ( Arbitrary a
-                              , Eq a
-                              , Elt e
-                              , Storable a
-                              , BlockPtrs (EltRepr e) ~ ((), Ptr a) )
-               => Array DIM1 e -> [a] -> Property
-prop_roundtrip (_ :: Array DIM1 e) xs = monadicIO $ do
+prop_roundtrip :: ( Arbitrary a
+                  , Eq a
+                  , Elt a
+                  , Storable a
+                  , BlockPtrs (EltRepr a) ~ ((), Ptr a) )
+               => [a] -> Property
+prop_roundtrip xs = monadicIO $ do
   let xsv = fromList xs
   xsarr <- run $ fromVector xsv
-  xsv'  <- run $ toVector (xsarr :: Array DIM1 e)
+  xsv'  <- run $ toVector xsarr
   assert (xsv == xsv')
 
-{- WOW. These things are a serious pain in the ass to use. Seems like
-   you have to provide a witness of the equivalence at each use;
-   gross.
+prop_unsaferoundtrip :: ( Arbitrary a
+                        , Eq a
+                        , Elt a
+                        , Storable a
+                        , BlockPtrs (EltRepr a) ~ ((), Ptr a) )
+                       => [a] -> Bool
+prop_unsaferoundtrip xs = xsv == (unsafeToVector (unsafeFromVector xsv))
+  where xsv = fromList xs
 
-*Data.Array.Accelerate.IO.Vector> quickCheck (prop_roundtrip (undefined :: Array DIM1 Double) :: [Double] -> Property)
+{- OK, not so much of a pain in the butt; they just need to be monomorphic.
+
+*Data.Array.Accelerate.IO.Vector> quickCheck (prop_roundtrip :: [Double] -> Property)
 +++ OK, passed 100 tests.
 
 -}
