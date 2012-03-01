@@ -12,8 +12,8 @@ module Control.Monad.Par.Meta.Dist
 ) where
 
 import Control.Monad.Par.Meta
+import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
-import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
@@ -87,7 +87,7 @@ sa = Single.stealAction `mappend`
 runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = 
-   do Rem.taggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
+   do dbgTaggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
       catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
@@ -101,7 +101,7 @@ runParDistWithTransport metadata trans comp =
 runParSlave meta = runParSlaveWithTransport meta TCP
 
 runParSlaveWithTransport metadata trans = do
-  Rem.taggedMsg 2 "runParSlave invoked."
+  dbgTaggedMsg 2 "runParSlave invoked."
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:

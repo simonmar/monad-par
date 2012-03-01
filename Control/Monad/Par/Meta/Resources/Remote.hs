@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE MagicHash, UnboxedTuples #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
@@ -12,31 +11,20 @@ module Control.Monad.Par.Meta.Resources.Remote
   ( initAction, stealAction, 
     initiateShutdown, waitForShutdown, 
     longSpawn, 
-    taggedMsg, InitMode(..),
+    InitMode(..),
     hostName,
     globalRPCMetadata
   )  
  where
 
-----------------------------------------
--- For tracing events:
--- import Foreign
-import Foreign.C (CString, withCString)
-import GHC.Exts (traceEvent#, Ptr(Ptr))
--- import GHC.IO hiding (liftIO)
-import GHC.IO (IO(IO))
-----------------------------------------
-
 import Control.Applicative    ((<$>))
-import Control.Concurrent     (myThreadId, threadDelay, throwTo, killThread,
-			       writeChan, readChan, newChan, Chan,
+import Control.Concurrent     (myThreadId, threadDelay, writeChan, readChan, newChan, Chan,
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
-import Control.Exception      (ErrorCall(..), catch, SomeException)
+import Control.Exception      (catch, SomeException)
 import Control.Monad          (forM, forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
-import Data.Char              (chr, ord)
 import Data.Unique            (hashUnique, newUnique)
 import Data.Typeable          (Typeable)
 import Data.IORef             (writeIORef, readIORef, newIORef, IORef)
@@ -53,22 +41,21 @@ import Data.List as L
 import Data.List.Split    (splitOn)
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
-import qualified Data.Set    as Set
 
 import Data.Serialize (encode, decode, Serialize)
 import qualified Data.Serialize as Ser
 -- import Data.Serialize.Derive (deriveGet, derivePut)
 import GHC.Generics       (Generic)
-import Prelude     hiding (catch)
-import qualified Prelude as P
-import System.IO          (hPutStr, hPutStrLn, hFlush, stdout, stderr)
+import System.IO          (hFlush, stdout, stderr)
 import System.IO.Unsafe   (unsafePerformIO)
 import System.Process     (readProcess)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
-import System.Environment (getEnvironment)
 import Text.Printf        (printf)
 
+
+import Control.Monad.Par.Meta.Resources.Debugging
+   (dbg, dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import qualified Network.Transport     as T
 import Remote2.Closure  (Closure(Closure))
@@ -144,114 +131,6 @@ data Message =
 type IVarId = Int
 
 type ParClosure a = (Par a, Closure (Par a))
-
-
------------------------------------------------------------------------------------
--- VERBOSITY and DEBUGGING
------------------------------------------------------------------------------------
--- This controls how much output will be printed, 0-5.
--- 5 is "debug" mode and affects other aspects of execution (see dbgDelay)
-
-#define TMPDBG
-#define EVENTLOG
-
--- RRN [2012.02.28] -- Eventually for performance reasons this
--- decision will probably be made statically.  For now, in the heat of
--- debugging, it is nice to be able to change it dynamically.
-
--- Well, to change it truly DYNAMICALLY, it would have to be an IORef.
--- For now we just allow an environment variable to override the
--- setting at load time.
-
-{-# NOINLINE verbosity #-}
-verbosity :: Int
-verbosity = unsafePerformIO$ do
---              putStrLn "GETTING ENV TO READ VERBOSITY..."
-	      env <- getEnvironment
---              putStrLn$ " ENV LENGTH " ++ show (length env)
-              case lookup "VERBOSITY" env of 
-                    Just s  -> do let n = read s
-                                  when (n >= 2)$ putStrLn "(!) Responding to VERBOSITY environment variable!"
-                                  return n
-#ifdef DEBUG
-    	  	    Nothing -> return 5
-#else
-                    Nothing -> do -- putStrLn "DEFAULTING VERBOSITY TO 1" 
-                                  return 1
-#endif
-
-
-{-# NOINLINE binaryEventLog #-}
-binaryEventLog :: Bool
-binaryEventLog = unsafePerformIO$ do
-	      env <- getEnvironment
-              case lookup "EVENTLOG" env of 
-                    Nothing  -> return False
-                    Just ""  -> return False                    
-                    Just "0" -> return False                    
-                    Just s   -> return True
-
--- When debugging is turned on we will do extra invariant checking:
-dbg :: Bool
-#ifdef DEBUG
-dbg = True
-#else
-dbg = False
-#endif
-
-whenVerbosity n action = when (verbosity >= n) action
-
--- | taggedMsg is our routine for logging debugging output:
--- taggedMsg :: Int -> BS.ByteString -> IO ()
-taggedMsg :: Int -> String -> IO ()
-taggedMsg = if binaryEventLog then binaryLogMsg else textLogMsg
-
-textLogMsg lvl s = 
-   whenVerbosity lvl $ 
-      do m <- readIORef global_mode
-         tid <- myThreadId
-	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
-
-binaryLogMsg lvl s = do 
---   meaningless_alloc  -- This works as well as a print for preventing the inf loop [2012.03.01]!
-   whenVerbosity lvl $ do 
-     m <- readIORef global_mode
-     tid <- myThreadId
-     let msg = " [distmeta"++m++" "++show tid++"] "++s
-     withCString msg myTraceEvent
-     return ()
-
-myTraceEvent :: CString -> IO ()
-myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
-
-
--- | `dbgCharMsg` is for printing a small tag like '.' (with no line
---   termination) which produces a different kind of visual output.
-dbgCharMsg :: Int -> String -> String -> IO ()
-dbgCharMsg lvl tag fullmsg = 
-  if binaryEventLog 
-  then taggedMsg lvl fullmsg -- It doesn't make sense to event-log a single character.
-  else whenVerbosity lvl $ do hPutStr stderr tag; hFlush stderr
-
-
--- When debugging it is helpful to slow down certain fast paths to a human scale:
-dbgDelay _ = 
-  if   dbg
-  then threadDelay (200*1000)
-  else return ()
-
--- printErr = hPutStrLn stderr
--- printErr = putStrLn
-printErr = BS.putStrLn . BS.pack 
-
-meaningless_alloc :: IO ()
-meaningless_alloc = 
-   case length (fibls 5) of 
-     0 -> return (error "Never happen!")
-     n -> return ()
- where 
-  fibls n | n <= 1 = [1::Int] 
-  fibls n = fibls (n-1) ++ fibls (n-2)
 
 
 -----------------------------------------------------------------------------------
@@ -335,11 +214,6 @@ mainThread = unsafePerformIO$ newIORef (error "uninitialized global 'mainThread'
 remoteIvarTable :: HotVar (IntMap.IntMap (Payload -> Par ()))
 remoteIvarTable = unsafePerformIO$ newHotVar IntMap.empty
 
-{-# NOINLINE global_mode #-}
--- Just for debugging, tracking global node as M (master) or S (slave):
-global_mode = unsafePerformIO$ newIORef "_M"
-
-
 type Token = Int64
 {-# NOINLINE shutdownChan #-}
 shutdownChan :: Chan Token
@@ -392,7 +266,7 @@ atomicWriteFile file contents = do
 deClosure :: Closure Payload -> IO (Par Payload)
 -- deClosure :: (Typeable a) => Closure a -> IO (Maybe a)
 deClosure pclo@(Closure ident payload) = do 
-  taggedMsg 4$ "Declosuring : "++ show ident ++ " type "++ show payload
+  dbgTaggedMsg 4$ "Declosuring : "++ show ident ++ " type "++ show payload
   lkp <- readIORef globalRPCMetadata
   case Reg.getEntryByIdent lkp ident of 
     Nothing -> fail$ "deClosure: failed to deserialize closure identifier: "++show ident
@@ -411,7 +285,7 @@ errorExit :: String -> IO a
 -- TODO: Might be better to just call "kill" on our own PID:
 errorExit str = do
    printErr    $ "ERROR: "++str 
-   taggedMsg 0 $ "ERROR: "++str 
+   dbgTaggedMsg 0 $ "ERROR: "++str 
 
 #ifdef TMPDBG
    diverge
@@ -421,18 +295,20 @@ errorExit str = do
    printErr$ "Connections closed, now exiting process."
    exitProcess 1
 
+printErr = BS.putStrLn . BS.pack 
+
 foreign import ccall "exit" c_exit :: Int -> IO ()
 
 -- | Exit the process successfully.
 exitSuccess :: IO a
 exitSuccess = do 
-   taggedMsg 1$ "  EXITING process with success exit code."
+   dbgTaggedMsg 1$ "  EXITING process with success exit code."
 #ifdef TMPDBG
    diverge
 #else
    closeAllConnections
 #endif
-   taggedMsg 1$ "   (Connections closed, now exiting for real)"
+   dbgTaggedMsg 1$ "   (Connections closed, now exiting for real)"
    exitProcess 0
 
 --diverge = do putStr "!?"; threadDelay 100; diverge
@@ -496,7 +372,7 @@ initPeerTable ms = do
      writeIORef  machineList ms
      lines <- forM (zip [0..] ms) $ \ (i,m) -> 
 	        return ("  "++show i++": "++ BS.unpack m)
-     taggedMsg 1 $ "PeerTable:\n" ++ unlines lines
+     dbgTaggedMsg 1 $ "PeerTable:\n" ++ unlines lines
      writeHotVar peerTable (V.replicate (length ms) Nothing)
 
 
@@ -520,14 +396,14 @@ connectNode ind = do
 
 -- | Wait until a file appears, read an addr from it, and connect.
 waitReadAndConnect ind file = do 
-      taggedMsg 2$ "    Establishing connection, reading file: "++file
+      dbgTaggedMsg 2$ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
       let 
           loop firstTime = do
 	  b <- doesFileExist file 
 	  if b then BS.readFile file
 	   else do if firstTime 
-                    then taggedMsg  2     ("  File "++ file ++" does not exist yet....")
+                    then dbgTaggedMsg  2     ("  File "++ file ++" does not exist yet....")
 		    else dbgCharMsg 2 "." ("  File "++ file ++" still does not exist...")
 		   threadDelay (10*1000) -- Wait between file system checks.
 		   loop False
@@ -536,7 +412,7 @@ waitReadAndConnect ind file = do
  	        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
 		Just a  -> return a
       conn <- T.connect addr
-      taggedMsg 2$ "     ... Connected."
+      dbgTaggedMsg 2$ "     ... Connected."
       return conn
 
 extendPeerTable :: Int -> (PeerName, T.SourceEnd) -> IO ()
@@ -556,7 +432,7 @@ initAction :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMo
 initAction metadata initTransport (Master machineList) = IA ia
   where
     ia topStealAction schedMap = do 
-     taggedMsg 2$ "Initializing master..."
+     dbgTaggedMsg 2$ "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
      initPeerTable machineList
@@ -568,14 +444,14 @@ initAction metadata initTransport (Master machineList) = IA ia
      ----------------------------------------
      host <- BS.pack <$> hostName
      let myid = nameToID host 0 machineList
-     taggedMsg 3$ "Master node id established as: "++showNodeID myid
+     dbgTaggedMsg 3$ "Master node id established as: "++showNodeID myid
      writeIORef myNodeID myid
      writeIORef masterID myid
      writeIORef isMaster True
      writeIORef myTransport transport
      myThreadId >>= writeIORef mainThread
      writeIORef globalRPCMetadata (Reg.registerCalls metadata)
-     taggedMsg 3$ "RPC metadata initialized."
+     dbgTaggedMsg 3$ "RPC metadata initialized."
      ----------------------------------------
 
 
@@ -607,8 +483,8 @@ initAction metadata initTransport (Master machineList) = IA ia
               msg = decodeMsg str
           case msg of
             AnnounceSlave{name,toAddr} -> do 
-	      taggedMsg 3$ "Master: register new slave, name: "++ BS.unpack name
-	      taggedMsg 4$ "  Full message received from slave: "++ (BS.unpack str)
+	      dbgTaggedMsg 3$ "Master: register new slave, name: "++ BS.unpack name
+	      dbgTaggedMsg 4$ "  Full message received from slave: "++ (BS.unpack str)
 
 	      -- Deserialize each of the sourceEnds received by the slaves:
 	      case T.deserialize transport toAddr of
@@ -619,35 +495,35 @@ initAction metadata initTransport (Master machineList) = IA ia
 		  -- Convention: send slaves the machine list, and tell it what its ID is:
 		  T.send srcEnd [encode$ MachineListMsg (myid,host) id machineList]
 
-		  taggedMsg 4$ "Sent machine list to slave "++showNodeID id++": "++ unwords (map BS.unpack machineList)
+		  dbgTaggedMsg 4$ "Sent machine list to slave "++showNodeID id++": "++ unwords (map BS.unpack machineList)
 
 		  -- Write the file to communicate that the machine is
 		  -- online and set up a way to contact it:
 		  let filename = mkAddrFile name id
 
 		  atomicWriteFile filename toAddr
-		  taggedMsg 3$ "  Wrote file to signify slave online: " ++ filename
+		  dbgTaggedMsg 3$ "  Wrote file to signify slave online: " ++ filename
 
 		  -- Keep track of the connection for future communications:
-		  taggedMsg 4$ "  Extending peerTable with node ID "++ show id
+		  dbgTaggedMsg 4$ "  Extending peerTable with node ID "++ show id
 		  extendPeerTable id (name, srcEnd)
 
 		  slaveConnectLoop (iter-1) alreadyConnected' 
 
 --            Right othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
      ----------------------------------------
-     taggedMsg 3$ "  ... waiting for slaves to connect."
+     dbgTaggedMsg 3$ "  ... waiting for slaves to connect."
      let allButMe = if (elem host machineList) 
 		    then delete host machineList
 		    else error$ "Could not find master domain name " ++ (BS.unpack host)++
 			        " in machine list:\n  "++ unwords (map BS.unpack machineList)
      slaveConnectLoop (length allButMe) (M.singleton host 1)
-     taggedMsg 2$ "  ... All slaves announced themselves."
+     dbgTaggedMsg 2$ "  ... All slaves announced themselves."
 
      ----------------------------------------
      -- Possibly wait for slaves to get all their peer connections up:
      when eager_connections $ do 
-       taggedMsg 2$ "  Waiting for slaves to bring up all N^2 mutual connections..."
+       dbgTaggedMsg 2$ "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
          unless (ndid == myid) $ do 
           msg <- decodeMsg <$> BS.concat <$> T.receive targetEnd 
@@ -656,7 +532,7 @@ initAction metadata initTransport (Master machineList) = IA ia
 	                           ++ (BS.unpack name) ++ ": peers connected."
 	     msg -> errorExit$ "Expected message when expecting ConnectAllPeers:"++ show msg
 
-     taggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
+     dbgTaggedMsg 2$ "  All slaves ready!  Launching receiveDaemon..."
      forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
        
      ----------------------------------------
@@ -666,7 +542,7 @@ initAction metadata initTransport (Master machineList) = IA ia
 	 sendTo ndid (encode StartStealing)
 
      ----------------------------------------
-     taggedMsg 3$ "Master initAction returning control to scheduler..."
+     dbgTaggedMsg 3$ "Master initAction returning control to scheduler..."
      return ()
     -- Annoying book-keeping:  Keep track of how many we've seen
     -- and make sure that the client that actually connect match
@@ -693,14 +569,14 @@ initAction metadata initTransport (Master machineList) = IA ia
 initAction metadata initTransport Slave = IA ia
   where
     ia topStealAction schedMap = do 
-     taggedMsg 2$ "Init slave: creating connection... " 
+     dbgTaggedMsg 2$ "Init slave: creating connection... " 
      host <- BS.pack <$> commonInit metadata initTransport
-     writeIORef global_mode "_S"
+     writeIORef taggedmsg_global_mode "_S"
 
      transport <- readIORef myTransport
      (mySourceAddr, myInbound) <- T.newConnection transport
 
-     taggedMsg 3$ "  Source addr created: " ++ (BS.unpack (T.serialize mySourceAddr))
+     dbgTaggedMsg 3$ "  Source addr created: " ++ (BS.unpack (T.serialize mySourceAddr))
 
      let 
          waitMasterFile = do  
@@ -712,7 +588,7 @@ initAction metadata initTransport Slave = IA ia
 		        waitMasterFile
          ----------------------------------------
          doMasterConnection = do
-             taggedMsg 3$ "Found master's address in file: "++ master_addr_file
+             dbgTaggedMsg 3$ "Found master's address in file: "++ master_addr_file
              bstr <- BS.readFile master_addr_file
 	     case T.deserialize transport bstr of 
 	       Nothing -> fail$ " [distmeta] Garbage message in master file: "++ master_addr_file
@@ -721,10 +597,10 @@ initAction metadata initTransport Slave = IA ia
 		 -- Convention: connect by sending name and reverse connection:
 		 T.send toMaster [encode$ AnnounceSlave host (T.serialize mySourceAddr)]
 
-                 taggedMsg 3$ "Sent name and addr to master "
+                 dbgTaggedMsg 3$ "Sent name and addr to master "
 	         _machines_bss <- T.receive myInbound
                  let MachineListMsg (masterId,masterName) myid machines = decodeMsg (BS.concat _machines_bss)
-                 taggedMsg 2$ "Received machine list from master: "++ unwords (map BS.unpack machines)
+                 dbgTaggedMsg 2$ "Received machine list from master: "++ unwords (map BS.unpack machines)
 		 initPeerTable machines
 		 writeIORef myNodeID myid
                  writeIORef masterID masterId
@@ -737,21 +613,21 @@ initAction metadata initTransport Slave = IA ia
                  return (masterId, machines)
          ----------------------------------------
          establishALLConections (masterId, machines) = do
-	     taggedMsg 2$ "  Proactively connecting to all peers..."
+	     dbgTaggedMsg 2$ "  Proactively connecting to all peers..."
 	     myid <- readIORef myNodeID 
 	     forM_ (zip [0..] machines) $ \ (ndid,name) -> 
 		unless (ndid == myid) $ do 
 		  connectNode ndid
- --			taggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
+ --			dbgTaggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
 		  return ()
-	     taggedMsg 2$ "  Fully connected, notifying master."
+	     dbgTaggedMsg 2$ "  Fully connected, notifying master."
 	     sendTo masterId (encode ConnectedAllPeers)
          ----------------------------------------
          waitBarrier = do 
 	     -- Don't proceed till we get the go-message from the Master:
 	     msg <- T.receive myInbound
 	     case decodeMsg (BS.concat msg) of 
-	       StartStealing -> taggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
+	       StartStealing -> dbgTaggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
 	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg              
 
      -- These are the key steps:
@@ -761,7 +637,7 @@ initAction metadata initTransport Slave = IA ia
      waitBarrier
 
      forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound schedMap
-     taggedMsg 3$ "Slave initAction returning control to scheduler..."
+     dbgTaggedMsg 3$ "Slave initAction returning control to scheduler..."
 
      return ()
 
@@ -771,7 +647,7 @@ initAction metadata initTransport Slave = IA ia
 commonInit metadata initTransport = do 
   
      writeIORef globalRPCMetadata (Reg.registerCalls metadata)
-     taggedMsg 3$ "RPC metadata initialized."
+     dbgTaggedMsg 3$ "RPC metadata initialized."
 
      host <- hostName
      transport <- initTransport Slave
@@ -814,16 +690,16 @@ masterShutdown token targetEnd = do
       sendTo ndid (encode$ ShutDown token)
    ----------------------------------------  
 #ifdef SHUTDOWNACK
-   taggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
+   dbgTaggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
    let loop 0 = return ()
        loop n = do msg <- T.receive targetEnd
 		   case decodeMsg (BS.concat msg) of
 		     ShutDownACK -> loop (n-1)
 		     other -> do 
-                                 taggedMsg 4$ "Warning: received other msg while trying to shutdown.  Might be ok: "++show other
+                                 dbgTaggedMsg 4$ "Warning: received other msg while trying to shutdown.  Might be ok: "++show other
 			         loop n
    loop (length mLs - 1)
-   taggedMsg 1$ "All nodes shut down successfully."
+   dbgTaggedMsg 1$ "All nodes shut down successfully."
 #endif
    writeChan shutdownChan token
 
@@ -832,7 +708,7 @@ masterShutdown token targetEnd = do
 
 workerShutdown :: (IntMap.IntMap Sched) -> IO ()
 workerShutdown schedMap = do
-   taggedMsg 1$ "Shutdown initiated for worker."
+   dbgTaggedMsg 1$ "Shutdown initiated for worker."
 #ifdef SHUTDOWNACK
    mid <- readIORef masterID
    sendTo mid (encode ShutDownACK)
@@ -844,7 +720,7 @@ workerShutdown schedMap = do
 --     set <- readHotVar tids
      set <- modifyHotVar tids (\set -> (Set.empty,set))
      mapM_ killThread (Set.toList set) 
-   taggedMsg 1$ "  Killed all Par worker threads."
+   dbgTaggedMsg 1$ "  Killed all Par worker threads."
 #endif
    exitSuccess
 
@@ -865,7 +741,7 @@ stealAction = SA sa
 
       case x of 
         Just (LongWork{localver}) -> do
-          taggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
+          dbgTaggedMsg 3$ "stealAction: worker number "++show no++" found work in own queue."
           return (Just localver)
         Nothing -> raidPeer
     pickVictim myid = do
@@ -882,7 +758,7 @@ stealAction = SA sa
     raidPeer = do
       myid <- readHotVar myNodeID
       ind  <- pickVictim myid
-      taggedMsg 4$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
+      dbgTaggedMsg 4$ ""++ showNodeID myid++" Attempting steal from Node ID "++showNodeID ind
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
       sendTo ind (encode$ StealRequest myid)
@@ -897,7 +773,7 @@ longSpawn (local, clo@(Closure n pld)) = do
                      $ makePayloadClosure clo
   iv <- new
   liftIO$ do
-    taggedMsg 4$ " Serialized closure: " ++ show clo
+    dbgTaggedMsg 4$ " Serialized closure: " ++ show clo
 
     (cap, _) <- (threadCapability =<< myThreadId)
     when dbg $ printf " [%d] longSpawn'ing computation...\n" cap
@@ -938,13 +814,14 @@ receiveDaemon targetEnd schedMap =
    dbgDelay "receiveDaemon"
    -- Do a blocking receive to process the next message:
    bss  <- if False
-	   then catch (T.receive targetEnd)
+	   then Control.Exception.catch 
+                      (T.receive targetEnd)
 		      (\ (e::SomeException) -> do
 		       printErr$ "Exception while attempting to receive message in receive loop."
 		       exitSuccess
 		      )
 	   else T.receive targetEnd
-   taggedMsg 4$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
+   dbgTaggedMsg 4$ "[rcvdmn] Received "++ show (BS.length (BS.concat bss)) ++" byte message..."
 
    case decodeMsg (BS.concat bss) of 
      StealRequest ndid -> do
@@ -954,36 +831,36 @@ receiveDaemon targetEnd schedMap =
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
-	   taggedMsg 2$ "[rcvdmn]   StealRequest: longwork in stock, responding with StealResponse..."
+	   dbgTaggedMsg 2$ "[rcvdmn]   StealRequest: longwork in stock, responding with StealResponse..."
 	   sendTo ndid (encode$ StealResponse myid stealme)
 
           -- TODO: FIXME: Dig deeper into the queue to look for something stealable:
 	 Just x -> do 
-	    taggedMsg 2$ "[rcvdmn]   StealRequest: Uh oh!  The bottom thing on the queue is not remote-executable.  Requeing it."
+	    dbgTaggedMsg 2$ "[rcvdmn]   StealRequest: Uh oh!  The bottom thing on the queue is not remote-executable.  Requeing it."
             R.pushL longQueue x
 	 Nothing -> do
-	    taggedMsg 4$ "[rcvdmn]   StealRequest: No work to service request.  Not responding."
+	    dbgTaggedMsg 4$ "[rcvdmn]   StealRequest: No work to service request.  Not responding."
             return ()
        rcvLoop myid
 
      StealResponse fromNd pr@(ivarid,pclo) -> do
-       taggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
+       dbgTaggedMsg 3$ "[rcvdmn] Received Steal RESPONSE from "++showNodeID fromNd++" "++ show pr     
        loc <- deClosure pclo
        -- Here the policy is to execute local work (woken
        -- continuations) using the SAME work queue.  We thus have
        -- heterogeneous entries in that queue.
        R.pushL longQueue (LongWork { stealver = Nothing,
 				     localver = do 
-						   liftIO$ taggedMsg 1 "[rcvdmn] RUNNING STOLEN PAR WORK "
+						   liftIO$ dbgTaggedMsg 1 "[rcvdmn] RUNNING STOLEN PAR WORK "
 						   payl <- loc
-						   liftIO$ taggedMsg 1 "[rcvdmn]   DONE running stolen par work."
+						   liftIO$ dbgTaggedMsg 1 "[rcvdmn]   DONE running stolen par work."
 						   liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
 						   return ()
 				   })
        rcvLoop myid
 
      WorkFinished fromNd ivarid payload -> do
-       taggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
+       dbgTaggedMsg 2$ "[rcvdmn] Received WorkFinished from "++showNodeID fromNd++
 		    " ivarID "++ show ivarid++" payload: "++show payload
        table <- readHotVar remoteIvarTable
        case IntMap.lookup ivarid table of 
@@ -996,7 +873,7 @@ receiveDaemon targetEnd schedMap =
 
      -- This case EXITS the receive loop peacefully:
      ShutDown token -> do
-       taggedMsg 1$ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
+       dbgTaggedMsg 1$ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd
