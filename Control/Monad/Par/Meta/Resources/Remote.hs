@@ -1,6 +1,8 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE MagicHash, UnboxedTuples #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
@@ -15,6 +17,15 @@ module Control.Monad.Par.Meta.Resources.Remote
     globalRPCMetadata
   )  
  where
+
+----------------------------------------
+-- For tracing events:
+-- import Foreign
+import Foreign.C (CString)
+import GHC.Exts (traceEvent#, Ptr(Ptr))
+-- import GHC.IO hiding (liftIO)
+import GHC.IO (IO(IO))
+----------------------------------------
 
 import Control.Applicative    ((<$>))
 import Control.Concurrent     (myThreadId, threadDelay, throwTo, killThread,
@@ -163,9 +174,33 @@ verbosity = unsafePerformIO$ do
                     Nothing -> return 1
 #endif
 
+-- When debugging is turned on we will do extra invariant checking:
 dbg :: Bool
-dbg = (verbosity>=5)
+#ifdef DEBUG
+dbg = True
+#else
+dbg = False
+#endif
+
 whenVerbosity n action = when (verbosity >= n) action
+
+myTraceEvent :: CString -> IO ()
+-- myTraceEvent = undefined
+myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
+
+taggedMsg :: Int -> String -> IO ()
+taggedMsg lvl s = do 
+   tid <- myThreadId
+   if verbosity >= lvl then 
+      do m <- readIORef global_mode
+	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
+    else return ()
+
+-- When debugging it is helpful to slow down certain fast paths to a human scale:
+dbgDelay _ = 
+  if   dbg
+  then threadDelay (200*1000)
+  else return ()
 
 
 -----------------------------------------------------------------------------------
@@ -290,19 +325,6 @@ sendTo ndid msg = do
     (_,conn) <- connectNode ndid
     T.send conn [msg]
 
-taggedMsg lvl s = do 
-   tid <- myThreadId
-   if verbosity >= lvl then 
-      do m <- readIORef global_mode
-	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
-    else return ()
-
--- When debugging it is helpful to slow down certain fast paths to a human scale:
-dbgDelay _ = 
-  if   dbg
-  then threadDelay (200*1000)
-  else return ()
-
 -- | We don't want anyone to try to use a file that isn't completely written.
 --   Note, this needs further thought for use with NFS...
 atomicWriteFile file contents = do 
@@ -338,7 +360,13 @@ errorExit str = do
 --       throwTo tid (ErrorCall$ "ERROR: "++str)
 --       error$ "ERROR: "++str
    printErr$ "ERROR: "++str 
+
+#ifdef TMPDBG
+   diverge
+#else
    closeAllConnections
+#endif
+   diverge
    printErr$ "Connections closed, now exiting process."
    exitProcess 1
 
@@ -348,9 +376,15 @@ foreign import ccall "exit" c_exit :: Int -> IO ()
 exitSuccess :: IO a
 exitSuccess = do 
    taggedMsg 1$ "  EXITING process with success exit code."
+#ifdef TMPDBG
+   diverge
+#else
    closeAllConnections
+#endif
    taggedMsg 1$ "   (Connections closed, now exiting for real)"
    exitProcess 0
+
+diverge = do putStr "!?"; threadDelay 100; diverge
 
 exitProcess :: Int -> IO a
 exitProcess code = do

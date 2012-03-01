@@ -1,7 +1,18 @@
 #!/bin/bash
 
+# INPUTS
+#----------------------------------------
 
 ARGS=$*
+
+if [ "$APP" = "" ]; then 
+  APP=parfib_dist
+fi
+
+if [ "$SLEEP" = "" ]; then 
+  SLEEP=0.5
+fi
+#----------------------------------------
 
 # Error if any command fails:
 set -e 
@@ -14,15 +25,11 @@ OPTS="-N2 "
 
 export MACHINE_LIST="$HOST $HOST"
 
-if [ "$APP" = "" ]; then 
-  APP=parfib_dist
-fi
-
 # Launch master asynchronously:
 time ./$APP.exe master $ARGS +RTS $OPTS -RTS &
 
 MASTERPID=$!
-sleep 0.5
+sleep $SLEEP
 
 # Launch worker asynchronously:
 # ./$APP.exe slave +RTS $OPTS -RTS &> worker.log & 
