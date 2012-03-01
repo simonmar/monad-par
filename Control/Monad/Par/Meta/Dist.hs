@@ -1,6 +1,5 @@
-module Control.Monad.Par.Meta.Dist (
---    runPar
---  , runParIO
+module Control.Monad.Par.Meta.Dist 
+(
     runParDist
   , runParSlave
   , runParDistWithTransport
@@ -34,8 +33,9 @@ import System.Random (randomIO)
 import System.IO (hPutStrLn, stderr)
 import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
-
 import GHC.Conc
+
+--------------------------------------------------------------------------------
 
 -- | Select from available transports or provide your own.  A custom
 --   implementation is required to create a transport for each node
@@ -53,8 +53,8 @@ instance Show WhichTransport where
   show Pipes = "Pipes"
   show (Custom _) = "<CustomTransport>"
 
--- tries = 20
--- caps  = numCapabilities
+--------------------------------------------------------------------------------
+-- Init and Steal actions:
 
 masterInitAction metadata trans = IA ia
   where
@@ -77,6 +77,7 @@ sa :: StealAction
 sa = Single.stealAction `mappend` Rem.stealAction
 
 --------------------------------------------------------------------------------
+-- Running and shutting down the distributed Par monad:
 
 -- The default Transport is TCP:
 runParDist mt = runParDistWithTransport mt TCP
@@ -90,7 +91,7 @@ runParDistWithTransport metadata trans comp =
 		throw (e::SomeException)
 
 
--- When global initialization has already happened:
+-- Could have this for when global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
 runParSlave meta = runParSlaveWithTransport meta TCP
