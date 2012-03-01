@@ -198,7 +198,7 @@ taggedMsg :: Int -> String -> IO ()
 #ifdef EVENTLOG
 taggedMsg lvl s = do 
    tid <- myThreadId
-   meaningless_alloc
+--   meaningless_alloc
 --   putStrLn "MESSAGE"        
    return ()
    -- if verbosity >= lvl then 
@@ -206,10 +206,10 @@ taggedMsg lvl s = do
    -- 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
    --  else return ()
 #else
-taggedMsg lvl s = do 
-   tid <- myThreadId
+taggedMsg lvl s = do    
    if verbosity >= lvl then 
       do m <- readIORef global_mode
+         tid <- myThreadId
 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
     else return ()
 #endif
