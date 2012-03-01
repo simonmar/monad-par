@@ -21,7 +21,7 @@ module Control.Monad.Par.Meta.Resources.Remote
 ----------------------------------------
 -- For tracing events:
 -- import Foreign
-import Foreign.C (CString)
+import Foreign.C (CString, withCString)
 import GHC.Exts (traceEvent#, Ptr(Ptr))
 -- import GHC.IO hiding (liftIO)
 import GHC.IO (IO(IO))
@@ -190,29 +190,40 @@ dbg = False
 
 whenVerbosity n action = when (verbosity >= n) action
 
-myTraceEvent :: CString -> IO ()
--- myTraceEvent = undefined
-myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
-
+-- | taggedMsg is our routine for logging debugging output:
 taggedMsg :: Int -> String -> IO ()
+
+-- | `dbgCharMsg` is for printing a small tag like '.' (with no line
+--   termination) which produces a different kind of visual output.
+dbgCharMsg :: Int -> String -> String -> IO ()
+
 #ifdef EVENTLOG
 taggedMsg lvl s = do 
-   tid <- myThreadId
---   meaningless_alloc
---   putStrLn "MESSAGE"        
-   return ()
-   -- if verbosity >= lvl then 
-   --    do m <- readIORef global_mode
-   -- 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
-   --  else return ()
+--   meaningless_alloc  -- This works as well as a print for preventing the inf loop [2012.03.01]!
+   whenVerbosity lvl $ do 
+     m <- readIORef global_mode
+     tid <- myThreadId
+     let msg = " [distmeta"++m++" "++show tid++"] "++s
+     withCString msg myTraceEvent
+     return ()
+
+-- It doesn't make sense to event-log a single character:
+dbgCharMsg lvl tag fullmsg = taggedMsg lvl fullmsg
+
+myTraceEvent :: CString -> IO ()
+myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
 #else
-taggedMsg lvl s = do    
-   if verbosity >= lvl then 
+taggedMsg lvl s = 
+   whenVerbosity lvl $ 
       do m <- readIORef global_mode
          tid <- myThreadId
 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
-    else return ()
+
+dbgCharMsg lvl tag fullmsg = 
+  whenVerbosity lvl $ do hPutStr stderr tag; hFlush stderr
 #endif
+
+
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay _ = 
@@ -918,8 +929,8 @@ receiveDaemon targetEnd schedMap =
 
    case decodeMsg (BS.concat bss) of 
      StealRequest ndid -> do
---       taggedMsg 3$ "[rcvdmn] Received StealRequest from: "++ showNodeID ndid
-       whenVerbosity 3 $ do hPutStr stderr "!"; hFlush stderr
+       dbgCharMsg 3 "!" ("[rcvdmn] Received StealRequest from: "++ showNodeID ndid)
+
        p <- R.tryPopL longQueue
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
@@ -936,9 +947,9 @@ receiveDaemon targetEnd schedMap =
        loc <- deClosure pclo
        R.pushL longQueue (LongWork { stealver = Nothing,
 				     localver = do 
-						   liftIO$ putStrLn "[rcvdmn] RUNNING STOLEN PAR WORK "
+						   liftIO$ taggedMsg 1 "[rcvdmn] RUNNING STOLEN PAR WORK "
 						   payl <- loc
-						   liftIO$ putStrLn "[rcvdmn]   DONE running stolen par work."
+						   liftIO$ taggedMsg 1 "[rcvdmn]   DONE running stolen par work."
 						   liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
 						   return ()
 				   })
