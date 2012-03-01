@@ -33,7 +33,7 @@ import Control.Concurrent     (myThreadId, threadDelay, throwTo, killThread,
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
 import Control.Exception      (ErrorCall(..), catch, SomeException)
-import Control.Monad          (forM_, when, unless)
+import Control.Monad          (forM, forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Data.Char              (chr, ord)
@@ -171,7 +171,7 @@ verbosity = unsafePerformIO$ do
 --              putStrLn$ " ENV LENGTH " ++ show (length env)
               case lookup "VERBOSITY" env of 
                     Just s  -> do let n = read s
-                                  when (n >= 2)$ putStrLn "Responding to VERBOSITY environment variable!"
+                                  when (n >= 2)$ putStrLn "(!) Responding to VERBOSITY environment variable!"
                                   return n
 #ifdef DEBUG
     	  	    Nothing -> return 5
@@ -179,6 +179,17 @@ verbosity = unsafePerformIO$ do
                     Nothing -> do -- putStrLn "DEFAULTING VERBOSITY TO 1" 
                                   return 1
 #endif
+
+
+{-# NOINLINE binaryEventLog #-}
+binaryEventLog :: Bool
+binaryEventLog = unsafePerformIO$ do
+	      env <- getEnvironment
+              case lookup "EVENTLOG" env of 
+                    Nothing  -> return False
+                    Just ""  -> return False                    
+                    Just "0" -> return False                    
+                    Just s   -> return True
 
 -- When debugging is turned on we will do extra invariant checking:
 dbg :: Bool
@@ -192,13 +203,15 @@ whenVerbosity n action = when (verbosity >= n) action
 
 -- | taggedMsg is our routine for logging debugging output:
 taggedMsg :: Int -> String -> IO ()
+taggedMsg = if binaryEventLog then binaryLogMsg else textLogMsg
 
--- | `dbgCharMsg` is for printing a small tag like '.' (with no line
---   termination) which produces a different kind of visual output.
-dbgCharMsg :: Int -> String -> String -> IO ()
+textLogMsg lvl s = 
+   whenVerbosity lvl $ 
+      do m <- readIORef global_mode
+         tid <- myThreadId
+	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
 
-#ifdef EVENTLOG
-taggedMsg lvl s = do 
+binaryLogMsg lvl s = do 
 --   meaningless_alloc  -- This works as well as a print for preventing the inf loop [2012.03.01]!
    whenVerbosity lvl $ do 
      m <- readIORef global_mode
@@ -207,22 +220,17 @@ taggedMsg lvl s = do
      withCString msg myTraceEvent
      return ()
 
--- It doesn't make sense to event-log a single character:
-dbgCharMsg lvl tag fullmsg = taggedMsg lvl fullmsg
-
 myTraceEvent :: CString -> IO ()
 myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
-#else
-taggedMsg lvl s = 
-   whenVerbosity lvl $ 
-      do m <- readIORef global_mode
-         tid <- myThreadId
-	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
 
+
+-- | `dbgCharMsg` is for printing a small tag like '.' (with no line
+--   termination) which produces a different kind of visual output.
+dbgCharMsg :: Int -> String -> String -> IO ()
 dbgCharMsg lvl tag fullmsg = 
-  whenVerbosity lvl $ do hPutStr stderr tag; hFlush stderr
-#endif
-
+  if binaryEventLog 
+  then taggedMsg lvl fullmsg -- It doesn't make sense to event-log a single character.
+  else whenVerbosity lvl $ do hPutStr stderr tag; hFlush stderr
 
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
@@ -422,7 +430,10 @@ exitSuccess = do
    taggedMsg 1$ "   (Connections closed, now exiting for real)"
    exitProcess 0
 
-diverge = do putStr "!?"; threadDelay 100; diverge
+--diverge = do putStr "!?"; threadDelay 100; diverge
+diverge = do dbgCharMsg 0 "!?" "Purposefully diverging instead of exiting for this experiment..."
+	     threadDelay 200
+	     diverge
 
 exitProcess :: Int -> IO a
 exitProcess code = do
@@ -477,10 +488,9 @@ instance Show Payload where
 -- | Initialize one part of the global state.
 initPeerTable ms = do
      writeIORef  machineList ms
-     whenVerbosity 1 $ do
-	printErr$ "PeerTable:\n"
-	forM_ (zip [0..] ms) $ \ (i,m) -> 
-	   printErr$ "  "++show i++": "++ BS.unpack m
+     lines <- forM (zip [0..] ms) $ \ (i,m) -> 
+	        return ("  "++show i++": "++ BS.unpack m)
+     taggedMsg 1 $ "PeerTable:\n" ++ unlines lines
      writeHotVar peerTable (V.replicate (length ms) Nothing)
 
 
@@ -507,14 +517,12 @@ waitReadAndConnect ind file = do
       taggedMsg 2$ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
       let 
-          loop bool = do
+          loop firstTime = do
 	  b <- doesFileExist file 
 	  if b then BS.readFile file
-	   else do if bool then 
-                      taggedMsg 2$ "  File does not exist yet...."
-		    else whenVerbosity 2 $ do 
-                      hPutStr stdout "."
-                      hFlush stdout
+	   else do if firstTime 
+                    then taggedMsg  2     ("  File "++ file ++" does not exist yet....")
+		    else dbgCharMsg 2 "." ("  File "++ file ++" still does not exist...")
 		   threadDelay (10*1000) -- Wait between file system checks.
 		   loop False
       bstr <- loop True
