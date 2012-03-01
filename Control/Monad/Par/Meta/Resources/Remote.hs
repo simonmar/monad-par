@@ -152,6 +152,9 @@ type ParClosure a = (Par a, Closure (Par a))
 -- This controls how much output will be printed, 0-5.
 -- 5 is "debug" mode and affects other aspects of execution (see dbgDelay)
 
+#define TMPDBG
+#define EVENTLOG
+
 -- RRN [2012.02.28] -- Eventually for performance reasons this
 -- decision will probably be made statically.  For now, in the heat of
 -- debugging, it is nice to be able to change it dynamically.
@@ -163,7 +166,9 @@ type ParClosure a = (Par a, Closure (Par a))
 {-# NOINLINE verbosity #-}
 verbosity :: Int
 verbosity = unsafePerformIO$ do
+--              putStrLn "GETTING ENV TO READ VERBOSITY..."
 	      env <- getEnvironment
+--              putStrLn$ " ENV LENGTH " ++ show (length env)
               case lookup "VERBOSITY" env of 
                     Just s  -> do let n = read s
                                   when (n >= 2)$ putStrLn "Responding to VERBOSITY environment variable!"
@@ -171,7 +176,8 @@ verbosity = unsafePerformIO$ do
 #ifdef DEBUG
     	  	    Nothing -> return 5
 #else
-                    Nothing -> return 1
+                    Nothing -> do -- putStrLn "DEFAULTING VERBOSITY TO 1" 
+                                  return 1
 #endif
 
 -- When debugging is turned on we will do extra invariant checking:
@@ -189,18 +195,42 @@ myTraceEvent :: CString -> IO ()
 myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
 
 taggedMsg :: Int -> String -> IO ()
+#ifdef EVENTLOG
+taggedMsg lvl s = do 
+   tid <- myThreadId
+   meaningless_alloc
+--   putStrLn "MESSAGE"        
+   return ()
+   -- if verbosity >= lvl then 
+   --    do m <- readIORef global_mode
+   -- 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
+   --  else return ()
+#else
 taggedMsg lvl s = do 
    tid <- myThreadId
    if verbosity >= lvl then 
       do m <- readIORef global_mode
 	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
     else return ()
+#endif
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
 dbgDelay _ = 
   if   dbg
   then threadDelay (200*1000)
   else return ()
+
+-- printErr = hPutStrLn stderr
+printErr = putStrLn
+
+meaningless_alloc :: IO ()
+meaningless_alloc = 
+   case length (fibls 5) of 
+     0 -> return (error "Never happen!")
+     n -> return ()
+ where 
+  fibls n | n <= 1 = [1::Int] 
+  fibls n = fibls (n-1) ++ fibls (n-2)
 
 
 -----------------------------------------------------------------------------------
@@ -217,8 +247,6 @@ eager_connections = False
 -- define SHUTDOWNACK
 -- define KILL_WORKERS_ON_SHUTDOWN
 
--- printErr = hPutStrLn stderr
-printErr = putStrLn
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -366,7 +394,6 @@ errorExit str = do
 #else
    closeAllConnections
 #endif
-   diverge
    printErr$ "Connections closed, now exiting process."
    exitProcess 1
 
