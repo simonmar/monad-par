@@ -1,4 +1,5 @@
 {-# LANGUAGE MagicHash, UnboxedTuples, CPP #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
 
 module Control.Monad.Par.Meta.Resources.Debugging
@@ -14,7 +15,7 @@ module Control.Monad.Par.Meta.Resources.Debugging
 ----------------------------------------
 -- For tracing events:
 -- import Foreign
-import Foreign.C (CString, withCString)
+import Foreign.C (CString)
 import GHC.Exts (traceEvent#, Ptr(Ptr))
 -- import GHC.IO hiding (liftIO)
 import GHC.IO (IO(IO))
@@ -24,7 +25,7 @@ import qualified Data.ByteString.Char8 as BS
 import Data.IORef             (readIORef, newIORef)
 import Control.Monad          (when)
 import Control.Concurrent     (myThreadId, threadDelay)
-import System.IO              (hPutStr, hFlush, stderr)
+import System.IO              (hFlush, stderr)
 import System.IO.Unsafe       (unsafePerformIO)
 import System.Environment     (getEnvironment)
 
@@ -85,23 +86,29 @@ dbg = False
 whenVerbosity n action = when (verbosity >= n) action
 
 -- | dbgTaggedMsg is our routine for logging debugging output:
--- dbgTaggedMsg :: Int -> BS.ByteString -> IO ()
-dbgTaggedMsg :: Int -> String -> IO ()
+dbgTaggedMsg :: Int -> BS.ByteString -> IO ()
+-- dbgTaggedMsg :: Int -> String -> IO ()
 dbgTaggedMsg = if binaryEventLog then binaryLogMsg else textLogMsg
 
+textLogMsg :: Int -> BS.ByteString -> IO ()
 textLogMsg lvl s = 
    whenVerbosity lvl $ 
-      do m <- readIORef taggedmsg_global_mode
+      do m   <- readIORef taggedmsg_global_mode
          tid <- myThreadId
-	 printErr$ " [distmeta"++m++" "++show tid++"] "++s
+	 BS.putStrLn$ " [distmeta" +++ m +++" "+++ sho tid +++"] "+++s
 
+a +++ b = BS.append a b
+sho = BS.pack . show
+
+
+binaryLogMsg :: Int -> BS.ByteString -> IO ()
 binaryLogMsg lvl s = do 
 --   meaningless_alloc  -- This works as well as a print for preventing the inf loop [2012.03.01]!
    whenVerbosity lvl $ do 
      m <- readIORef taggedmsg_global_mode
      tid <- myThreadId
-     let msg = " [distmeta"++m++" "++show tid++"] "++s
-     withCString msg myTraceEvent
+     let msg = " [distmeta"+++m+++" "+++ sho tid+++"] "+++s
+     BS.useAsCString msg myTraceEvent
      return ()
 
 myTraceEvent :: CString -> IO ()
@@ -110,11 +117,12 @@ myTraceEvent (Ptr msg) = IO $ \s -> case traceEvent# msg s of s' -> (# s', () #)
 
 -- | `dbgCharMsg` is for printing a small tag like '.' (with no line
 --   termination) which produces a different kind of visual output.
-dbgCharMsg :: Int -> String -> String -> IO ()
+-- dbgCharMsg :: Int -> String -> String -> IO ()
+dbgCharMsg :: Int -> BS.ByteString -> BS.ByteString -> IO ()
 dbgCharMsg lvl tag fullmsg = 
   if binaryEventLog 
   then dbgTaggedMsg lvl fullmsg -- It doesn't make sense to event-log a single character.
-  else whenVerbosity lvl $ do hPutStr stderr tag; hFlush stderr
+  else whenVerbosity lvl $ do BS.hPutStr stderr tag; hFlush stderr
 
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:

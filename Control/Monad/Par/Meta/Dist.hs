@@ -87,7 +87,7 @@ sa = Single.stealAction `mappend`
 runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = 
-   do dbgTaggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
+   do dbgTaggedMsg 1$ BS.pack$ "Initializing distributed Par monad with transport: "++ show trans
       catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
@@ -101,7 +101,7 @@ runParDistWithTransport metadata trans comp =
 runParSlave meta = runParSlaveWithTransport meta TCP
 
 runParSlaveWithTransport metadata trans = do
-  dbgTaggedMsg 2 "runParSlave invoked."
+  dbgTaggedMsg 2 (BS.pack "runParSlave invoked.")
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
