@@ -6,6 +6,7 @@
 
 -- Turn this on to do extra invariant checking
 #define AUDIT_WORK
+-- define TMPDBG
 
 -- | Resource for Remote execution.
 
@@ -68,7 +69,6 @@ import GHC.Conc (numCapabilities)
 --                                              TODO                                              --
 ----------------------------------------------------------------------------------------------------
 
---   * Make ivarid actually unique.  Per-thread incremented counters would be fine.
 --   * Add configurability for constants below.
 --   * Get rid of myTransport -- just use the peerTable
 --   * Rewrite serialization using putWordhost
@@ -226,11 +226,12 @@ shutdownChan = unsafePerformIO $ newChan
 -- Debugging Helpers:
 -----------------------------------------------------------------------------------
 
-measureIVarTable :: IO BS.ByteString
+measureIVarTable :: IO (Int, BS.ByteString)
 measureIVarTable = do
   tbl <- readIORef remoteIvarTable
-  return (" (Outstanding unreturned work " +++ sho (IntMap.size tbl) +++ ", ids:"+++
-	  sho (take 5 $ IntMap.keys tbl)+++" )")
+  let size = IntMap.size tbl
+  return (size, " (Outstanding unreturned work " +++ sho size +++ ", ids:"+++
+	          sho (take 5 $ IntMap.keys tbl)+++" )")
 
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
@@ -299,6 +300,7 @@ errorExit str = do
    printErr    $ "ERROR: "++str 
    dbgTaggedMsg 0 $ BS.pack $ "ERROR: "++str 
 
+-- The idea with this debugging hack is to prevent ANYTHING that could be closing connections:
 #ifdef TMPDBG
    diverge
 #else
@@ -769,9 +771,9 @@ stealAction = SA sa
     raidPeer = do
       myid <- readHotVar myNodeID
       ind  <- pickVictim myid
-      tblsize <- measureIVarTable
+      (_,str) <- measureIVarTable
       dbgTaggedMsg 4$ ""+++ showNodeID myid+++" Attempting steal from Node ID "
-                      +++showNodeID ind+++"  "+++ tblsize
+                      +++showNodeID ind+++"  "+++ str
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
       sendTo ind (encode$ StealRequest myid)
@@ -832,7 +834,7 @@ receiveDaemon targetEnd schedMap =
   rcvLoop myid = do
 
    dbgDelay "receiveDaemon"
-   outstanding <- measureIVarTable
+   (_,outstanding) <- measureIVarTable
    dbgTaggedMsg 4$ "[rcvdmn] About to do blocking rcv of next msg... "+++ outstanding
 
    -- Do a blocking receive to process the next message:
@@ -900,8 +902,10 @@ receiveDaemon targetEnd schedMap =
 
      -- This case EXITS the receive loop peacefully:
      ShutDown token -> do
-       outstanding <- measureIVarTable
+       (num,outstanding) <- measureIVarTable
        dbgTaggedMsg 1 $ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-" +++ outstanding
+       unless (num == 0) $ errorExit " The number of outstanding longSpawned IVars was NOT zero at shutdown"
+
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd
