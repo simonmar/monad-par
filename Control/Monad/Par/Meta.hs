@@ -34,15 +34,15 @@ import Data.Concurrent.Deque.Reference as R
 import Data.IntMap (IntMap)
 -- import Data.Word   (Word64)
 import qualified Data.IntMap as IntMap
+import qualified Data.ByteString.Char8 as BS
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 import Data.IORef (IORef, writeIORef, newIORef)
 
-import Prelude hiding (catch)
 import System.IO.Unsafe (unsafePerformIO)
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 import System.Random.MWC
 
 import Text.Printf
@@ -207,13 +207,14 @@ spawnWorkerOnCap' qsem sa cap =
     signalQSem qsem
     runReaderT (workerLoop 0 errK) sched
 
+-- Exceptions that walk up the fork tree of threads:
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
 forkWithExceptions forkit descr action = do 
    parent <- myThreadId
    forkit $ 
-      catch action
+      Control.Exception.catch action
 	 (\ e -> do
-	  hPutStrLn stderr $ "Exception inside child thread "++descr++": "++show e
+	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++descr++": "++show e
 	  throwTo parent (e::SomeException)
 	 )
 

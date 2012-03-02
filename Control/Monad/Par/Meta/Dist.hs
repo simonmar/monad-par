@@ -29,9 +29,8 @@ import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
 import qualified Network.Transport.Pipes as PT
 
-import Prelude hiding (catch)
 import System.Random (randomIO)
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
 import GHC.Conc
@@ -89,10 +88,10 @@ runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = 
    do dbgTaggedMsg 1$ BS.pack$ "Initializing distributed Par monad with transport: "++ show trans
-      catch main hndlr 
+      Control.Exception.catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
-   hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
+   hndlr e = do	BS.hPutStrLn stderr $ BS.pack $ "Exception inside runParDist: "++show e
 		throw (e::SomeException)
 
 
