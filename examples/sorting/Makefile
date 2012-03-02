@@ -20,3 +20,6 @@ clean:
 
 .PHONY: clean
 
+
+# /u/rrnewton/opt/cuda/bin/nvcc  -gencode=arch=compute_10,code=\"sm_10,compute_10\"  -gencode=arch=compute_20,code=\"sm_20,compute_20\"  -m64 --compiler-options -fno-strict-aliasing  -I. -I/u/rrnewton/opt/cuda/include -I../../common/inc -I../../../shared//inc -DUNIX -O2   -o obj/x86_64/release/radixSortThrust.cu.o -c radixSortThrust.cu
+
