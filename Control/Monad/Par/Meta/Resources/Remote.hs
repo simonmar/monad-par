@@ -224,10 +224,11 @@ shutdownChan = unsafePerformIO $ newChan
 -- Debugging Helpers:
 -----------------------------------------------------------------------------------
 
-ivarTableSize :: IO BS.ByteString
-ivarTableSize = do
+measureIVarTable :: IO BS.ByteString
+measureIVarTable = do
   tbl <- readIORef remoteIvarTable
-  return (" (Outstanding unreturned work " +++ sho (IntMap.size tbl) +++ " )")
+  return (" (Outstanding unreturned work " +++ sho (IntMap.size tbl) +++ ", ids:"+++
+	  sho (take 5 $ IntMap.keys tbl)+++" )")
 
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
@@ -766,7 +767,7 @@ stealAction = SA sa
     raidPeer = do
       myid <- readHotVar myNodeID
       ind  <- pickVictim myid
-      tblsize <- ivarTableSize
+      tblsize <- measureIVarTable
       dbgTaggedMsg 4$ ""+++ showNodeID myid+++" Attempting steal from Node ID "
                       +++showNodeID ind+++"  "+++ tblsize
 --     (_,conn) <- connectNode ind 
@@ -804,7 +805,7 @@ longSpawn (local, clo@(Closure n pld)) = do
 		  localver= do x <- local
                                liftIO$ do 
                                   dbgTaggedMsg 4 $ "Executed LOCAL version of longspawn.  "+++
-		                                   "Filling & unregistering ivarid = "+++sho ivarid
+		                                   "Filling & unregistering ivarid "+++sho ivarid
 		                  modifyHotVar_ remoteIvarTable (IntMap.delete ivarid)
 		               put_ iv x
 		})
@@ -823,6 +824,9 @@ receiveDaemon targetEnd schedMap =
   rcvLoop myid = do
 
    dbgDelay "receiveDaemon"
+   outstanding <- measureIVarTable
+   dbgTaggedMsg 4$ "[rcvdmn] About to do blocking rcv of next msg... "+++ outstanding
+
    -- Do a blocking receive to process the next message:
    bss  <- if False
 	   then Control.Exception.catch 
@@ -874,7 +878,10 @@ receiveDaemon targetEnd schedMap =
      WorkFinished fromNd ivarid payload -> do
        dbgTaggedMsg 2$ "[rcvdmn] Received WorkFinished from "+++showNodeID fromNd+++
 		    " ivarID "+++sho ivarid+++" payload: "+++sho payload
-       table <- readHotVar remoteIvarTable
+
+       -- table <- readHotVar remoteIvarTable
+       table <- modifyHotVar remoteIvarTable (\tbl -> (IntMap.delete ivarid tbl, tbl))
+
        case IntMap.lookup ivarid table of 
 	 Nothing  -> errorExit$ "Processing WorkFinished message, failed to find ivarID in table: "++show ivarid
 	 Just parFn -> 
@@ -885,7 +892,8 @@ receiveDaemon targetEnd schedMap =
 
      -- This case EXITS the receive loop peacefully:
      ShutDown token -> do
-       dbgTaggedMsg 1 "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-"
+       outstanding <- measureIVarTable
+       dbgTaggedMsg 1 $ "[rcvdmn] -== RECEIVED SHUTDOWN MESSAGE ==-" +++ outstanding
        master    <- readHotVar isMaster
        schedMap' <- readHotVar schedMap
        if master then masterShutdown token targetEnd

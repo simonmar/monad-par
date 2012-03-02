@@ -5,10 +5,10 @@
 --   especially so in the distributed case where steal attempts send
 --   actual messages.
 
--- Normally backoff functionality is baked into the scheduler loop.
--- One nice aspect of the Meta scheduler design is that backoff can
--- become "just another resource".  Most schedulers (compositions)
--- should include this at tho bottom of their stack.
+--   Normally backoff functionality is baked into the scheduler loop.
+--   One nice aspect of the Meta scheduler design is that backoff can
+--   become "just another resource".  Most schedulers (compositions)
+--   should include this at tho bottom of their stack.
 
 module Control.Monad.Par.Meta.Resources.Backoff
   ( initAction, mkStealAction )
@@ -19,13 +19,8 @@ import Data.Word (Word64)
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Concurrent     (myThreadId, threadDelay)
--- import Control.Monad          (when)
 import qualified Data.Vector.Unboxed as V
 import qualified Data.ByteString.Char8 as BS
-
-
--- Like most resources, this maintains a global state.  (Yuck.)
--- global_backoff_counters
 
 
 initAction :: InitAction
@@ -35,11 +30,11 @@ initAction = IA (\ sa _ -> return () )
 -- maximum amount of time (nanoseconds) to sleep.  The exponential
 -- backoff policy is always the same: it starts at 1ns and doubles.
 -- 
--- It's whether sleeping actually *occurs* that varies.  For example,
--- `mkStealAction 1000 100000` will not sleep for the first ten
--- invocations (until 1024), and then will sleep an amount that
--- doubles each time until it surpasses the maximum, at which point
--- each sleep will be for the maximum: 100ms.
+-- The thing that changes over time is whether sleeping actually
+-- *occurs*.  For example, `mkStealAction 1000 100000` will not sleep
+-- for the first ten invocations (until 1024), and then will sleep an
+-- amount that doubles each time until it surpasses the maximum, at
+-- which point each sleep will be for the maximum: 100ms.
 mkStealAction :: Word64 -> Word64 -> StealAction
 mkStealAction shortest longest = SA sa 
   where 
@@ -55,3 +50,4 @@ mkStealAction shortest longest = SA sa
        else do 
          dbgTaggedMsg 4 $ "Backoff: NOT yet sleeping, nanoseconds = " `BS.append` BS.pack (show nanos)
       return Nothing
+
