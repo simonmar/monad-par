@@ -27,7 +27,7 @@ parfib1 n = do
        mytid <- myThreadId
        host  <- hostName
 --       let host = ""
-#if 1
+#if 0
        putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
 #endif
        return ()

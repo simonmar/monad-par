@@ -220,6 +220,14 @@ type Token = Int64
 shutdownChan :: Chan Token
 shutdownChan = unsafePerformIO $ newChan
 
+-----------------------------------------------------------------------------------
+-- Debugging Helpers:
+-----------------------------------------------------------------------------------
+
+ivarTableSize :: IO BS.ByteString
+ivarTableSize = do
+  tbl <- readIORef remoteIvarTable
+  return (" (Outstanding unreturned work " +++ sho (IntMap.size tbl) +++ " )")
 
 -----------------------------------------------------------------------------------
 -- Misc Helpers:
@@ -758,7 +766,9 @@ stealAction = SA sa
     raidPeer = do
       myid <- readHotVar myNodeID
       ind  <- pickVictim myid
-      dbgTaggedMsg 4$ ""+++ showNodeID myid+++" Attempting steal from Node ID "+++showNodeID ind
+      tblsize <- ivarTableSize
+      dbgTaggedMsg 4$ ""+++ showNodeID myid+++" Attempting steal from Node ID "
+                      +++showNodeID ind+++"  "+++ tblsize
 --     (_,conn) <- connectNode ind 
 --     T.send conn [encode$ StealRequest myid]
       sendTo ind (encode$ StealRequest myid)
@@ -850,14 +860,15 @@ receiveDaemon targetEnd schedMap =
        -- Here the policy is to execute local work (woken
        -- continuations) using the SAME work queue.  We thus have
        -- heterogeneous entries in that queue.
-       R.pushL longQueue (LongWork { stealver = Nothing,
-				     localver = do 
-						   liftIO$ dbgTaggedMsg 1 "[rcvdmn] RUNNING STOLEN PAR WORK "
-						   payl <- loc
-						   liftIO$ dbgTaggedMsg 1 "[rcvdmn]   DONE running stolen par work."
-						   liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
-						   return ()
-				   })
+       R.pushL longQueue 
+	    (LongWork { stealver = Nothing,
+			localver = do 
+				     liftIO$ dbgTaggedMsg 1 $ "[rcvdmn] RUNNING STOLEN PAR WORK "
+				     payl <- loc
+				     liftIO$ dbgTaggedMsg 1 $ "[rcvdmn]   DONE running stolen par work."
+				     liftIO$ sendTo fromNd (encode$ WorkFinished myid ivarid payl)
+				     return ()
+		       })
        rcvLoop myid
 
      WorkFinished fromNd ivarid payload -> do
