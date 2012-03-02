@@ -37,6 +37,7 @@ import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
+import Data.IORef (IORef, writeIORef, newIORef)
 
 import Prelude hiding (catch)
 import System.IO.Unsafe (unsafePerformIO)
@@ -114,6 +115,10 @@ data Sched = Sched
       rng      :: HotVar GenIO, -- Random number gen for work stealing.
       mortals  :: HotVar Int, -- How many threads are mortal on this capability?
 
+      -- | Are we on the *first* steal attempt (after doing productive
+      --   work), or is this the Nth failed steal in a row?
+      consecutiveFailures :: IORef Int,
+
       ---- Meta addition ----
       stealAction :: StealAction
     }
@@ -159,6 +164,7 @@ makeOrGetSched sa cap = do
                      <*> R.newQ
                      <*> (newHotVar =<< create)
                      <*> newHotVar 0
+                     <*> newIORef  0
                      <*> pure sa
   modifyHotVar globalScheds $ \scheds ->
     case IntMap.lookup cap scheds of
@@ -181,7 +187,7 @@ spawnWorkerOnCap sa cap =
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
-    runReaderT (workerLoop errK) sched
+    runReaderT (workerLoop 0 errK) sched
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
 -- just before the new worker enters the 'workerLoop'.
@@ -193,7 +199,7 @@ spawnWorkerOnCap' qsem sa cap =
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
     signalQSem qsem
-    runReaderT (workerLoop errK) sched
+    runReaderT (workerLoop 0 errK) sched
 
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
 forkWithExceptions forkit descr action = do 
@@ -208,14 +214,14 @@ forkWithExceptions forkit descr action = do
 errK = error "this closure shouldn't be used"
 
 reschedule :: Par a
-reschedule = Par $ ContT workerLoop
+reschedule = Par $ ContT (workerLoop 0)
 
-workerLoop :: ignoredCont -> ROnly ()
-workerLoop _k = do
-  mysched@Sched{ no, mortals, stealAction } <- ask
+workerLoop :: Int -> ignoredCont -> ROnly ()
+workerLoop failCount _k = do
+  mysched@Sched{ no, mortals, stealAction, consecutiveFailures } <- ask
   mwork <- liftIO $ popWork mysched
   case mwork of
-    Just work -> runContT (unPar work) $ const (workerLoop _k)
+    Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
     Nothing -> do
       -- check if we need to die
       die <- liftIO $ modifyHotVar mortals $ \ms ->
@@ -225,13 +231,18 @@ workerLoop _k = do
                  n         -> error $
                    printf "unexpected mortals count %d on cap %d" n no
       unless die $ do
+        -- Before steal we make sure the consecutiveFailures field is up
+        -- to date.  This would seem to be a very ugly method of
+        -- passing an extra argument to the steal action, and if we
+        -- could tolerate it, it should perhaps become an additional argument:
+        liftIO$ writeIORef consecutiveFailures failCount
         mwork <- liftIO (runSA stealAction mysched globalScheds)
         case mwork of
-          Just work -> runContT (unPar work) $ const (workerLoop _k)
+          Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
           Nothing -> do
             when dbg $ liftIO $ printf "[%d] failed to find work; looping\n" no
             -- idle behavior might go here
-            workerLoop _k
+            workerLoop (failCount + 1) _k 
 
 {-# INLINE fork #-}
 fork :: Par () -> Par ()

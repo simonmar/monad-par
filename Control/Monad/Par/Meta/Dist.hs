@@ -14,6 +14,7 @@ module Control.Monad.Par.Meta.Dist
 import Control.Monad.Par.Meta
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
+import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
@@ -72,13 +73,13 @@ masterInitAction metadata trans = IA ia
 
 slaveInitAction metadata trans =
   Rem.initAction metadata trans Rem.Slave `mappend` 
-  Single.initAction -- `mappend`
---  Bkoff.initAction
+  Single.initAction                       `mappend`
+  Bkoff.initAction
 
 sa :: StealAction
 sa = Single.stealAction `mappend` 
-     Rem.stealAction -- `mappend`
---     Bkoff.stealAction 
+     Rem.stealAction    `mappend`
+     Bkoff.mkStealAction 1000 (100*1000)
 
 --------------------------------------------------------------------------------
 -- Running and shutting down the distributed Par monad:
