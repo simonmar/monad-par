@@ -2,8 +2,10 @@
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
-
 {-# OPTIONS_GHC -fwarn-unused-imports #-}
+
+-- Turn this on to do extra invariant checking
+#define AUDIT_WORK
 
 -- | Resource for Remote execution.
 
@@ -51,8 +53,6 @@ import System.IO.Unsafe   (unsafePerformIO)
 import System.Process     (readProcess)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
-import Text.Printf        (printf)
-
 
 import Control.Monad.Par.Meta.Resources.Debugging
    (dbg, dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
@@ -153,10 +153,6 @@ eager_connections = False
 -- define SHUTDOWNACK
 -- define KILL_WORKERS_ON_SHUTDOWN
 
-
--- | Receive daemon backoff policy.  How many times 
--- tries_before_sleep = 
--- max_backoff_sleep = 
 
 --------------------------------------------------------------------------------
 -- Global Mutable Structures 
@@ -271,7 +267,7 @@ atomicWriteFile file contents = do
 deClosure :: Closure Payload -> IO (Par Payload)
 -- deClosure :: (Typeable a) => Closure a -> IO (Maybe a)
 deClosure pclo@(Closure ident payload) = do 
-  dbgTaggedMsg 4$ "Declosuring : "+++ sho ident +++ " type "+++ sho payload
+  dbgTaggedMsg 5$ "Declosuring : "+++ sho ident +++ " type "+++ sho payload
   lkp <- readIORef globalRPCMetadata
   case Reg.getEntryByIdent lkp ident of 
     Nothing -> fail$ "deClosure: failed to deserialize closure identifier: "++show ident
@@ -740,15 +736,14 @@ stealAction = SA sa
   where 
     sa Sched{no} _ = do
       dbgDelay "stealAction"
-
       -- First try to pop local work:
       x <- R.tryPopR longQueue
-
       case x of 
         Just (LongWork{localver}) -> do
           dbgTaggedMsg 3$ "stealAction: worker number "+++sho no+++" found work in own queue."
           return (Just localver)
         Nothing -> raidPeer
+
     pickVictim myid = do
       pt   <- readHotVar peerTable
       let len = V.length pt
@@ -771,17 +766,17 @@ stealAction = SA sa
       -- We have nothing to return immediately, but hopefully work will come back later.
       return Nothing
 
+--------------------------------------------------------------------------------
 
-
+-- | Spawn a parallel subcomputation that can happen either locally or remotely.
 longSpawn (local, clo@(Closure n pld)) = do
   let pclo = fromMaybe (errorExitPure "Could not find Payload closure")
                      $ makePayloadClosure clo
   iv <- new
   liftIO$ do
-    dbgTaggedMsg 4$ " Serialized closure: " +++ sho clo
-
+    dbgTaggedMsg 5$ " Serialized closure: " +++ sho clo
     (cap, _) <- (threadCapability =<< myThreadId)
-    when dbg $ printf " [%d] longSpawn'ing computation...\n" cap
+    dbgTaggedMsg 5$ " [cap "+++ sho cap +++"] longSpawn'ing computation..." 
 
     -- Create a unique identifier for this IVar that is valid for the
     -- rest of the current run:
@@ -796,7 +791,12 @@ longSpawn (local, clo@(Closure n pld)) = do
 
     R.pushR longQueue 
        (LongWork{ stealver= Just (ivarid,pclo),
-		  localver= do x <- local; put_ iv x
+		  localver= do x <- local
+                               liftIO$ do 
+                                  dbgTaggedMsg 4 $ "Executed LOCAL version of longspawn.  "+++
+		                                   "Filling & unregistering ivarid = "+++sho ivarid
+		                  modifyHotVar_ remoteIvarTable (IntMap.delete ivarid)
+		               put_ iv x
 		})
 
   return iv
@@ -811,10 +811,6 @@ receiveDaemon targetEnd schedMap =
      rcvLoop myid
  where 
   rcvLoop myid = do
-   -- let loopSuccess = rcvLoop myid 0 
-   --     loopFail | numTries > tries_before_sleep = do waitBackoff  (numTries - tries_before_sleep)
-   -- 						     rcvLoop myid (numTries + 1)
-   -- 		| otherwise                     =    rcvLoop myid (numTries + 1)
 
    dbgDelay "receiveDaemon"
    -- Do a blocking receive to process the next message:

@@ -25,9 +25,9 @@ parfib1 n = do
     liftIO $ do 
        mypid <- getProcessID
        mytid <- myThreadId
---       host  <- hostName
-       let host = ""
-#if 0
+       host  <- hostName
+--       let host = ""
+#if 1
        putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
 #endif
        return ()

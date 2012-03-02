@@ -72,14 +72,14 @@ masterInitAction metadata trans = IA ia
         runIA Single.initAction sa scheds
 
 slaveInitAction metadata trans =
-  Rem.initAction metadata trans Rem.Slave `mappend` 
-  Single.initAction                       `mappend`
-  Bkoff.initAction
+            Rem.initAction metadata trans Rem.Slave 
+  `mappend` Single.initAction                       
+  `mappend` Bkoff.initAction
 
 sa :: StealAction
-sa = Single.stealAction `mappend` 
-     Rem.stealAction    `mappend`
-     Bkoff.mkStealAction 1000 (100*1000)
+sa =           Single.stealAction 
+     `mappend` Rem.stealAction    
+     `mappend` Bkoff.mkStealAction 1000 (100*1000)
 
 --------------------------------------------------------------------------------
 -- Running and shutting down the distributed Par monad:
