@@ -32,6 +32,7 @@ import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 import Data.IntMap (IntMap)
+-- import Data.Word   (Word64)
 import qualified Data.IntMap as IntMap
 import Data.Monoid
 import Data.Set (Set)
@@ -119,6 +120,10 @@ data Sched = Sched
       --   work), or is this the Nth failed steal in a row?
       consecutiveFailures :: IORef Int,
 
+      -- | A per-thread counter used for unique ivarIDs.  
+      --   (Multiple by numCapabilities and add 'no' for uniqueness.)
+      ivarUID :: HotVar Int,
+
       ---- Meta addition ----
       stealAction :: StealAction
     }
@@ -160,12 +165,13 @@ getSchedForCap cap = do
 
 makeOrGetSched :: StealAction -> Int -> IO Sched
 makeOrGetSched sa cap = do
-  sched <- Sched cap <$> newHotVar (Set.empty)
-                     <*> R.newQ
-                     <*> (newHotVar =<< create)
-                     <*> newHotVar 0
-                     <*> newIORef  0
-                     <*> pure sa
+  sched <- Sched cap <$> newHotVar (Set.empty)  -- tids
+                     <*> R.newQ                 -- workpool
+                     <*> (newHotVar =<< create) -- rng
+                     <*> newHotVar 0            -- mortals
+                     <*> newIORef  0            -- consecutiveFailures
+                     <*> newHotVar 0            -- ivarUID
+                     <*> pure sa                -- stealAction
   modifyHotVar globalScheds $ \scheds ->
     case IntMap.lookup cap scheds of
       Just sched -> (scheds, sched)

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP #-}
+{-# LANGUAGE CPP, BangPatterns, PackageImports #-}
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -19,6 +19,7 @@ module Control.Monad.Par.Meta.Resources.Remote
   )  
  where
 
+import "mtl" Control.Monad.Reader (ask)
 import Control.Applicative    ((<$>))
 import Control.Concurrent     (myThreadId, threadDelay, writeChan, readChan, newChan, Chan,
 			       forkOS, threadCapability, ThreadId)
@@ -61,6 +62,7 @@ import qualified Network.Transport     as T
 import Remote2.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
 import qualified Remote2.Reg as Reg
+import GHC.Conc (numCapabilities)
 
 ----------------------------------------------------------------------------------------------------
 --                                              TODO                                              --
@@ -783,6 +785,8 @@ stealAction = SA sa
 longSpawn (local, clo@(Closure n pld)) = do
   let pclo = fromMaybe (errorExitPure "Could not find Payload closure")
                      $ makePayloadClosure clo
+  Sched{no, ivarUID} <- ask
+
   iv <- new
   liftIO$ do
     dbgTaggedMsg 5$ " Serialized closure: " +++ sho clo
@@ -791,7 +795,11 @@ longSpawn (local, clo@(Closure n pld)) = do
 
     -- Create a unique identifier for this IVar that is valid for the
     -- rest of the current run:
-    ivarid <- hashUnique <$> newUnique -- This is not actually safe.  Hashes may collide.
+--    ivarid <- hashUnique <$> newUnique -- This is not actually safe.  Hashes may collide.
+
+    cntr <- modifyHotVar ivarUID (\ !n -> (n+1,n) )
+    -- This should be guaranteed to be unique:
+    let ivarid = numCapabilities * cntr + no
 
     let ivarCont payl = case serialDecodePure payl of 
 			  Just x  -> put_ iv x
