@@ -193,9 +193,10 @@ pushWorkEnsuringWorker Sched { no } work = do
           Just () -> return $ Just ()
           Nothing -> loop ns
   msucc <- attempt no
+  schedNos <- IntMap.keys <$> readHotVar globalScheds
   case msucc of
     Just () -> return $ Just ()
-    Nothing -> loop [0..numCapabilities-1]
+    Nothing -> loop schedNos
 --------------------------------------------------------------------------------
 -- Global structure and helpers for proper nesting behavior
 
