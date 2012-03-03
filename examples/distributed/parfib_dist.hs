@@ -62,6 +62,9 @@ main = do
         parse "tcp"   = TCP
 	parse "pipes" = Pipes
 
+    putStr$ "Running parfib with settings: "
+    putStrLn$ show (version, trans_, size, cutoff)
+
     case version of 
         "slave" -> runParSlaveWithTransport [__remoteCallMetaData] trans
         "master" -> do 

@@ -45,7 +45,7 @@ mkStealAction shortest longest = SA sa
                    else 2 ^ failCount
       if nanos > shortest then do 
          let capped = min longest nanos
-         dbgTaggedMsg 2 $ "Backoff: Sleeping, nanoseconds = " `BS.append` BS.pack (show capped)
+         dbgTaggedMsg 3 $ "Backoff: Sleeping, nanoseconds = " `BS.append` BS.pack (show capped)
          threadDelay (fromIntegral capped)
        else do 
          dbgTaggedMsg 4 $ "Backoff: NOT yet sleeping, nanoseconds = " `BS.append` BS.pack (show nanos)

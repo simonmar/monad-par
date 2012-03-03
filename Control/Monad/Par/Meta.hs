@@ -143,7 +143,7 @@ forkWithExceptions forkit descr action = do
    forkit $ 
       Control.Exception.catch action
 	 (\ e -> do
-	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++descr++": "++show e
+	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++show descr++": "++show e
 	  throwTo parent (e::SomeException)
 	 )
 

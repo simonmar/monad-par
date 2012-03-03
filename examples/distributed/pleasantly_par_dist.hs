@@ -8,22 +8,19 @@
 -- the parallel computation is finished!
 
 import GHC.Conc
-import Debug.Trace
+import Data.Char            (isSpace)
 import Control.Monad
 import Control.Monad.IO.Class (liftIO)
-
 import Control.Exception (evaluate)
 -- import System.Environment
 import qualified Control.Monad.State.Strict as S 
 import qualified Data.ByteString.Char8 as BS
-
--- import Control.Monad.Par.Scheds.Direct (Par, spawn_, get, runPar)
-
 import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
 				    runParDistWithTransport, runParSlaveWithTransport)
 import Control.Monad.Par.Unsafe
 import Remote2.Call (mkClosureRec, remotable)
-
+import System.Process       (readProcess)
+import System.Posix.Process (getProcessID)
 import DistDefaultMain (defaultMain)
 
 --------------------------------------------------------------------------------
@@ -37,11 +34,20 @@ kernel :: (Int, Int) -> Par Double
 kernel (oneshare,jid) =
    do 
       tid <- io myThreadId 
-      prnt$ (show tid++" job "++show jid++":  About to do a chunk of work ("++ show oneshare ++" iterations)...")
+      mypid <- io getProcessID
+      host  <- io hostName
+      let tag = show (host,"PID "++show mypid,tid) ++ " job "++show jid
+      prnt$ (tag++":  About to do a chunk of work ("++ show oneshare ++" iterations)...")
       res <- io$ evaluate $ work (oneshare * jid) oneshare 0.0
-      prnt$ (show tid++"   job "++show jid++":  done with work (result "++ show res ++")")
+      prnt$ (tag++":  done with work (result "++ show res ++")")
       return res
-
+ where 
+  hostName = do s <- readProcess "hostname" [] ""
+	        return (trim s)
+  -- | Trim whitespace from both ends of a string.
+  trim :: String -> String
+  trim = f . f
+     where f = reverse . dropWhile isSpace
 --------------------------------------------------------------------------------
 
 -- runit :: [Double] -> Par ()
