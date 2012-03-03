@@ -1,6 +1,5 @@
-module Control.Monad.Par.Meta.Dist (
---    runPar
---  , runParIO
+module Control.Monad.Par.Meta.Dist 
+(
     runParDist
   , runParSlave
   , runParDistWithTransport
@@ -13,8 +12,9 @@ module Control.Monad.Par.Meta.Dist (
 ) where
 
 import Control.Monad.Par.Meta
+import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
-import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
+import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
@@ -29,13 +29,13 @@ import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
 import qualified Network.Transport.Pipes as PT
 
-import Prelude hiding (catch)
 import System.Random (randomIO)
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
-
 import GHC.Conc
+
+--------------------------------------------------------------------------------
 
 -- | Select from available transports or provide your own.  A custom
 --   implementation is required to create a transport for each node
@@ -53,8 +53,8 @@ instance Show WhichTransport where
   show Pipes = "Pipes"
   show (Custom _) = "<CustomTransport>"
 
--- tries = 20
--- caps  = numCapabilities
+--------------------------------------------------------------------------------
+-- Init and Steal actions:
 
 masterInitAction metadata trans = IA ia
   where
@@ -71,32 +71,37 @@ masterInitAction metadata trans = IA ia
         runIA Single.initAction sa scheds
 
 slaveInitAction metadata trans =
-  Rem.initAction metadata trans Rem.Slave `mappend` Single.initAction
+            Rem.initAction metadata trans Rem.Slave 
+  `mappend` Single.initAction                       
+  `mappend` Bkoff.initAction
 
 sa :: StealAction
-sa = Single.stealAction `mappend` Rem.stealAction
+sa =           Single.stealAction 
+     `mappend` Rem.stealAction    
+     `mappend` Bkoff.mkStealAction 1000 (100*1000)
 
 --------------------------------------------------------------------------------
+-- Running and shutting down the distributed Par monad:
 
 -- The default Transport is TCP:
 runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = 
-   do Rem.taggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
-      catch main hndlr 
+   do dbgTaggedMsg 1$ BS.pack$ "Initializing distributed Par monad with transport: "++ show trans
+      Control.Exception.catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
-   hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
+   hndlr e = do	BS.hPutStrLn stderr $ BS.pack $ "Exception inside runParDist: "++show e
 		throw (e::SomeException)
 
 
--- When global initialization has already happened:
+-- Could have this for when global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
 runParSlave meta = runParSlaveWithTransport meta TCP
 
 runParSlaveWithTransport metadata trans = do
-  Rem.taggedMsg 2 "runParSlave invoked."
+  dbgTaggedMsg 2 (BS.pack "runParSlave invoked.")
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:

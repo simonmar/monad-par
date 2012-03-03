@@ -12,6 +12,7 @@ module Control.Monad.Par.Meta.Resources.Accelerate (
   , spawnAccVector
   ) where
 
+import Control.Applicative
 import Control.Concurrent
 import Control.Exception.Base (evaluate)
 import Control.Monad
@@ -24,14 +25,18 @@ import qualified Data.Array.Accelerate.CUDA as Acc
 #else
 import qualified Data.Array.Accelerate.Interpreter as Acc
 #endif
+import Data.Array.Accelerate.IO
+import Data.Array.Accelerate.IO.Vector
 
 import Data.Array.IArray (IArray)
 import qualified Data.Array.IArray as IArray    
 
-import qualified Data.Vector.Unboxed as Vector
+import qualified Data.Vector.Storable as Vector
 
 import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
 import Data.Concurrent.Deque.Reference as R
+
+import Foreign (Ptr, Storable)
 
 import System.IO.Unsafe
 
@@ -113,12 +118,12 @@ spawnAccIArray (parComp, accComp) = do
     return iv
 
 -- | Backstealing spawn where the result is converted to a
--- 'Data.Vector.Unboxed.Vector'. Since the result of either 'Par' or
+-- 'Data.Vector.Storable.Vector'. Since the result of either 'Par' or
 -- the 'Acc' version may be put in the resulting 'IVar', it is
 -- expected that the result of both computations is an equivalent
 -- 'Vector'. /TODO/: make a variant with unrestricted 'Shape' that,
 -- e.g., yields a vector in row-major order.
-spawnAccVector :: (Vector.Unbox a, Elt a)
+spawnAccVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a))
                => (Par (Vector.Vector a), Acc (Array DIM1 a))
                -> Par (IVar (Vector.Vector a))
 spawnAccVector (parComp, accComp) = do 
@@ -127,18 +132,16 @@ spawnAccVector (parComp, accComp) = do
     let wrappedParComp :: Par ()
         wrappedParComp = do
           when dbg $ liftIO $ printf "running backstolen computation\n"
-          put_ iv =<< parComp          
+          put_ iv =<< parComp
+        wrappedAccComp :: IO ()
         wrappedAccComp = do
           when dbg $ printf "running Accelerate computation\n"
-          ans <- evaluate $ Acc.run accComp
+          ans <- toVector $ Acc.run accComp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
-            put_ iv (arrToVector ans)
+            put_ iv ans
     liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
     return iv
-
-arrToVector :: Vector.Unbox a => Array DIM1 a -> Vector.Vector a
-arrToVector arr = Vector.fromList (toList arr)
 
 -- runAcc :: (Arrays a) => Acc a -> Par a
 

@@ -32,15 +32,17 @@ import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 import Data.IntMap (IntMap)
+-- import Data.Word   (Word64)
 import qualified Data.IntMap as IntMap
+import qualified Data.ByteString.Char8 as BS
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
+import Data.IORef (IORef, writeIORef, newIORef)
 
-import Prelude hiding (catch)
 import System.IO.Unsafe (unsafePerformIO)
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 import System.Random.MWC
 
 import Text.Printf
@@ -76,6 +78,9 @@ newtype InitAction = IA { runIA ::
   -> IO ()
   }
 
+instance Show InitAction where
+  show _ = "<InitAction>"
+
 instance Monoid InitAction where
   mempty = IA $ \_ _ -> return ()
   (IA ia1) `mappend` (IA ia2) = IA ia'
@@ -89,6 +94,9 @@ newtype StealAction = SA { runSA ::
   -> HotVar (IntMap Sched)
   -> IO (Maybe (Par ()))
   }
+
+instance Show StealAction where
+  show _ = "<StealAction>"
 
 instance Monoid StealAction where
   mempty = SA $ \_ _ -> return Nothing
@@ -107,6 +115,14 @@ data Sched = Sched
       workpool :: WSDeque (Par ()),
       rng      :: HotVar GenIO, -- Random number gen for work stealing.
       mortals  :: HotVar Int, -- How many threads are mortal on this capability?
+
+      -- | Are we on the *first* steal attempt (after doing productive
+      --   work), or is this the Nth failed steal in a row?
+      consecutiveFailures :: IORef Int,
+
+      -- | A per-thread counter used for unique ivarIDs.  
+      --   (Multiple by numCapabilities and add 'no' for uniqueness.)
+      ivarUID :: HotVar Int,
 
       ---- Meta addition ----
       stealAction :: StealAction
@@ -149,11 +165,13 @@ getSchedForCap cap = do
 
 makeOrGetSched :: StealAction -> Int -> IO Sched
 makeOrGetSched sa cap = do
-  sched <- Sched cap <$> newHotVar (Set.empty)
-                     <*> R.newQ
-                     <*> (newHotVar =<< create)
-                     <*> newHotVar 0
-                     <*> pure sa
+  sched <- Sched cap <$> newHotVar (Set.empty)  -- tids
+                     <*> R.newQ                 -- workpool
+                     <*> (newHotVar =<< create) -- rng
+                     <*> newHotVar 0            -- mortals
+                     <*> newIORef  0            -- consecutiveFailures
+                     <*> newHotVar 0            -- ivarUID
+                     <*> pure sa                -- stealAction
   modifyHotVar globalScheds $ \scheds ->
     case IntMap.lookup cap scheds of
       Just sched -> (scheds, sched)
@@ -175,7 +193,7 @@ spawnWorkerOnCap sa cap =
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
-    runReaderT (workerLoop errK) sched
+    runReaderT (workerLoop 0 errK) sched
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
 -- just before the new worker enters the 'workerLoop'.
@@ -187,29 +205,30 @@ spawnWorkerOnCap' qsem sa cap =
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
     signalQSem qsem
-    runReaderT (workerLoop errK) sched
+    runReaderT (workerLoop 0 errK) sched
 
+-- Exceptions that walk up the fork tree of threads:
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
 forkWithExceptions forkit descr action = do 
    parent <- myThreadId
    forkit $ 
-      catch action
+      Control.Exception.catch action
 	 (\ e -> do
-	  hPutStrLn stderr $ "Exception inside child thread "++descr++": "++show e
+	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++descr++": "++show e
 	  throwTo parent (e::SomeException)
 	 )
 
 errK = error "this closure shouldn't be used"
 
 reschedule :: Par a
-reschedule = Par $ ContT workerLoop
+reschedule = Par $ ContT (workerLoop 0)
 
-workerLoop :: ignoredCont -> ROnly ()
-workerLoop _k = do
-  mysched@Sched{ no, mortals, stealAction } <- ask
+workerLoop :: Int -> ignoredCont -> ROnly ()
+workerLoop failCount _k = do
+  mysched@Sched{ no, mortals, stealAction, consecutiveFailures } <- ask
   mwork <- liftIO $ popWork mysched
   case mwork of
-    Just work -> runContT (unPar work) $ const (workerLoop _k)
+    Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
     Nothing -> do
       -- check if we need to die
       die <- liftIO $ modifyHotVar mortals $ \ms ->
@@ -219,13 +238,18 @@ workerLoop _k = do
                  n         -> error $
                    printf "unexpected mortals count %d on cap %d" n no
       unless die $ do
+        -- Before steal we make sure the consecutiveFailures field is up
+        -- to date.  This would seem to be a very ugly method of
+        -- passing an extra argument to the steal action, and if we
+        -- could tolerate it, it should perhaps become an additional argument:
+        liftIO$ writeIORef consecutiveFailures failCount
         mwork <- liftIO (runSA stealAction mysched globalScheds)
         case mwork of
-          Just work -> runContT (unPar work) $ const (workerLoop _k)
+          Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
           Nothing -> do
             when dbg $ liftIO $ printf "[%d] failed to find work; looping\n" no
             -- idle behavior might go here
-            workerLoop _k
+            workerLoop (failCount + 1) _k 
 
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
