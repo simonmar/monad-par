@@ -233,6 +233,8 @@ makeOrGetSched sa cap = do
 --------------------------------------------------------------------------------
 -- Worker routines
 
+forkOn' cap k = forkOn cap $ setAffinityOS cap >> k
+
 -- | Spawn a pinned worker that will stay on a capability.
 -- 
 -- Note: this does not check for nesting, and should be called
@@ -240,7 +242,7 @@ makeOrGetSched sa cap = do
 -- like mortal counts.
 spawnWorkerOnCap :: StealAction -> Int -> IO ThreadId
 spawnWorkerOnCap sa cap = 
-  forkWithExceptions (forkOn cap) "spawned Par worker" $ do
+  forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
@@ -251,7 +253,7 @@ spawnWorkerOnCap sa cap =
 -- just before the new worker enters the 'workerLoop'.
 spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
 spawnWorkerOnCap' qsem sa cap = 
-  forkWithExceptions (forkOn cap) "spawned Par worker" $ do
+  forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)

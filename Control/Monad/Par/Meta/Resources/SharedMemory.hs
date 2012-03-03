@@ -62,7 +62,7 @@ initAction = IA ia
 initActionForCaps :: [Int] -> InitAction
 initActionForCaps caps = IA ia
   where ia sa _ = do
-          setAffinityRange caps
+--          setAffinityRange caps
           when dbg $ do
             printf "spawning worker threads for shared memory on caps:\n"
             printf "\t%s\n" (show caps)
