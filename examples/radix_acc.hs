@@ -19,10 +19,12 @@ import qualified Data.Array.MArray as M
 
 import Data.List             (sort)
 import Data.Array.Unboxed    (IArray, UArray, listArray, bounds, elems)
-import System.Environment    (getArgs)
+import System.Environment    (getArgs, withArgs)
 import System.Random
 import System.Random.MWC
 import Unsafe.Coerce
+
+import Criterion.Main
 
 import Control.Monad.Par.Meta.SharedMemoryAccelerate
 
@@ -107,15 +109,14 @@ randomUArrayR lim gen n = do
 main :: IO () -- Int -> IO (() -> UArray Int Int, () -> Acc (Vector Int))
 main = withSystemRandom $ \gen -> do
   args <- getArgs
-  let n = case args of 
-            []  -> 10000 :: Int
-            [n] -> (read n)
-            _   -> error "usage: radix_acc.exe [size]" 
+  let (n,args') = case args of 
+                    []  -> (10000 :: Int, [])
+                    (n:args') -> ((read n), args')
   
   vec  <- randomUArrayR (minBound,maxBound) gen n
   vec' <- convertUArray vec
   --
-  print $ run_par vec' () 
+  withArgs args' $ defaultMain $ [bench "radix" $ whnfIO $ evaluate $ run_par vec' ()]
   where
     {-# NOINLINE run_ref #-}
     run_ref xs () = sortRef xs
