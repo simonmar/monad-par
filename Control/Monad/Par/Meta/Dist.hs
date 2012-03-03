@@ -78,7 +78,10 @@ slaveInitAction metadata trans =
 sa :: StealAction
 sa =           Single.stealAction 
      `mappend` Rem.stealAction    
+     -- Start actually sleeping at 1ms and go up to 100ms:
      `mappend` Bkoff.mkStealAction 1000 (100*1000)
+-- Testing: A CONSTANT backoff:
+--     `mappend` Bkoff.mkStealAction 1 1 
 
 --------------------------------------------------------------------------------
 -- Running and shutting down the distributed Par monad:
@@ -107,7 +110,7 @@ runParSlaveWithTransport metadata trans = do
   -- system up, running, and work-stealing:
   runMetaParIO (slaveInitAction metadata (pickTrans trans))
 	       (SA $ \ x y -> do res <- runSA sa x y; 
-		                 threadDelay (10 * 1000);
+--		                 threadDelay (10 * 1000);
 	                         return res)
 	       (new >>= get)
 

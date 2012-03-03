@@ -51,6 +51,6 @@ echo "Done running master computation."
 # Don't worry about errors in the slave process.
 set +e
 # wait $WORKERPID
-kill -9 $WORKERPID
+kill $WORKERPID
 
 exit 0 

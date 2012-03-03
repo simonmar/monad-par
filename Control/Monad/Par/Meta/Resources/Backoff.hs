@@ -49,5 +49,8 @@ mkStealAction shortest longest = SA sa
          threadDelay (fromIntegral capped)
        else do 
          dbgTaggedMsg 4 $ "Backoff: NOT yet sleeping, nanoseconds = " `BS.append` BS.pack (show nanos)
+         -- QUESTION - do we want to yield here?  Probably not.
+         -- Maybe for some ranges of nanosecond intervals we could yield instead...
+         -- yield
       return Nothing
 
