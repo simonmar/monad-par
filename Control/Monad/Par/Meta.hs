@@ -18,7 +18,7 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent ( forkOS, newEmptyMVar, putMVar, takeMVar
+import Control.Concurrent ( forkOn, newEmptyMVar, putMVar, takeMVar
                           , QSem, signalQSem)
 import Control.DeepSeq
 import Control.Monad
@@ -233,9 +233,6 @@ makeOrGetSched sa cap = do
 --------------------------------------------------------------------------------
 -- Worker routines
 
-forkOnOS :: Int -> IO () -> IO ThreadId
-forkOnOS cap k = forkOS $ setAffinityOS cap >> k
-
 -- | Spawn a pinned worker that will stay on a capability.
 -- 
 -- Note: this does not check for nesting, and should be called
@@ -243,7 +240,7 @@ forkOnOS cap k = forkOS $ setAffinityOS cap >> k
 -- like mortal counts.
 spawnWorkerOnCap :: StealAction -> Int -> IO ThreadId
 spawnWorkerOnCap sa cap = 
-  forkWithExceptions (forkOnOS cap) "spawned Par worker" $ do
+  forkWithExceptions (forkOn cap) "spawned Par worker" $ do
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
@@ -254,7 +251,7 @@ spawnWorkerOnCap sa cap =
 -- just before the new worker enters the 'workerLoop'.
 spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
 spawnWorkerOnCap' qsem sa cap = 
-  forkWithExceptions (forkOnOS cap) "spawned Par worker" $ do
+  forkWithExceptions (forkOn cap) "spawned Par worker" $ do
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
