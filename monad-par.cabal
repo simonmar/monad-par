@@ -182,7 +182,9 @@ Library
   -- NOTE!  These dependencies DO NOT include all dependencies required
   -- by the examples/benchmarks.  Run "make deps" in the examples
   -- directory.
-
+  c-sources:       cbits/pin.c
+  include-dirs:    include
+  includes:        pin.h
   ghc-options: -O2
   Other-modules:
                ------------------------------------------------------------
@@ -243,6 +245,7 @@ Library
                -- Deterministic RNG should be released as soon as its tested more.
                , Control.Monad.Par.RNG
 
+               , System.Posix.Affinity
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
