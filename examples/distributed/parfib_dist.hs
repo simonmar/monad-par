@@ -14,6 +14,8 @@ import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import Data.Char            (isSpace)
 
+import DistDefaultMain
+
 --------------------------------------------------------------------------------
 
 type FibType = Int64

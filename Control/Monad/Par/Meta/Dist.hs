@@ -59,14 +59,16 @@ instance Show WhichTransport where
 masterInitAction metadata trans = IA ia
   where
     ia sa scheds = do
-        env <- getEnvironment        
+        env <- getEnvironment
+        host <- Rem.hostName 
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
 	       Nothing -> 
 		 case lookup "MACHINE_LIST_FILE" env of 
 		   Just fl -> liftM words $ readFile fl
-  	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
-			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
+  	  	   Nothing -> do BS.putStrLn$BS.pack$ "WARNING: Remote resource: Expected to find machine list in "++
+			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
+                                 return [host]
         runIA (Rem.initAction metadata trans (Rem.Master$ map BS.pack ml)) sa scheds
         runIA Single.initAction sa scheds
 
