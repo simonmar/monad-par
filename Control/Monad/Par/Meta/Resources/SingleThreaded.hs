@@ -30,9 +30,16 @@ initAction = IA ia
           qsem <- newQSem 0
           (cap, _) <- threadCapability =<< myThreadId
           printf " [%d] spawning single worker\n" cap
+          -- This initAction is called from the "main" thread, we need
+          -- to spawn a worker to do the actual work:
           void $ spawnWorkerOnCap' qsem sa cap
+          -- We wait on the qsem for the worker to come online and
+          -- initialize itself before we return to the main thread and
+          -- begin scheduling.
           waitQSem qsem        
 
+-- | In the singlethreaded scenario there are NO other workers from
+--   which to steal.
 stealAction :: StealAction
 stealAction = SA sa 
   where sa _ _ = return Nothing

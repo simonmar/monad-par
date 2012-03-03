@@ -48,9 +48,11 @@ import System.Random.MWC
 import Text.Printf
 import qualified Debug.Trace as DT
 
+import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Monad.Par.Meta.HotVar.IORef
 import qualified Control.Monad.Par.Class as PC
 
+#define DEBUG
 dbg :: Bool
 #ifdef DEBUG
 dbg = True
@@ -132,6 +134,33 @@ instance Show Sched where
   show Sched{ no } = printf "Sched{ no=%d }" no 
 
 --------------------------------------------------------------------------------
+-- Helpers
+
+-- Exceptions that walk up the fork tree of threads:
+forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
+forkWithExceptions forkit descr action = do 
+   parent <- myThreadId
+   forkit $ 
+      Control.Exception.catch action
+	 (\ e -> do
+	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++descr++": "++show e
+	  throwTo parent (e::SomeException)
+	 )
+
+{-# INLINE ensurePinned #-}
+-- Ensure that we execute an action within a pinned thread:
+ensurePinned :: IO a -> IO a
+ensurePinned action = do 
+  tid <- myThreadId
+  (cap, pinned) <- threadCapability tid  
+  if pinned 
+   then action 
+   else do mv <- newEmptyMVar 
+	   forkOn cap (action >>= putMVar mv)
+	   takeMVar mv
+
+
+--------------------------------------------------------------------------------
 -- Work queue helpers
 
 {-# INLINE popWork #-}
@@ -139,7 +168,7 @@ popWork :: Sched -> IO (Maybe (Par ()))
 popWork Sched{ workpool, no } = do
   when dbg $ do
     (cap, _) <- threadCapability =<< myThreadId
-    printf "[%d] trying to pop work from %d\n" cap no
+    dbgTaggedMsg 4 $ BS.pack $ "[meta: cap "++show cap++ "] trying to pop local work on Sched "++ show no
   R.tryPopL workpool
 
 {-# INLINE pushWork #-}
@@ -183,7 +212,9 @@ makeOrGetSched sa cap = do
 --------------------------------------------------------------------------------
 -- Worker routines
 
--- | Note: this does not check for nesting, and should be called
+-- | Spawn a pinned worker that will stay on a capability.
+-- 
+-- Note: this does not check for nesting, and should be called
 -- appropriately. It is the caller's responsibility to manage things
 -- like mortal counts.
 spawnWorkerOnCap :: StealAction -> Int -> IO ThreadId
@@ -192,7 +223,7 @@ spawnWorkerOnCap sa cap =
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
-    when dbg $ printf "[%d] spawning new worker\n" cap
+    when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
     runReaderT (workerLoop 0 errK) sched
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
@@ -203,20 +234,10 @@ spawnWorkerOnCap' qsem sa cap =
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
-    when dbg $ printf "[%d] spawning new worker\n" cap
+    when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
     signalQSem qsem
     runReaderT (workerLoop 0 errK) sched
 
--- Exceptions that walk up the fork tree of threads:
-forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
-forkWithExceptions forkit descr action = do 
-   parent <- myThreadId
-   forkit $ 
-      Control.Exception.catch action
-	 (\ e -> do
-	  BS.hPutStrLn stderr $ BS.pack $ "Exception inside child thread "++descr++": "++show e
-	  throwTo parent (e::SomeException)
-	 )
 
 errK = error "this closure shouldn't be used"
 
@@ -246,9 +267,8 @@ workerLoop failCount _k = do
         mwork <- liftIO (runSA stealAction mysched globalScheds)
         case mwork of
           Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
-          Nothing -> do
-            when dbg $ liftIO $ printf "[%d] failed to find work; looping\n" no
-            -- idle behavior might go here
+          Nothing -> do 
+            when dbg $ liftIO $ dbgTaggedMsg 4 $ BS.pack $ "[meta: cap "++show no++"] failed to find work; looping" 
             workerLoop (failCount + 1) _k 
 
 {-# INLINE fork #-}
@@ -301,11 +321,13 @@ spawn  p = do r <- new; fork (p >>= put  r); return r
 {-# INLINE spawn_ #-}
 spawn_ p = do r <- new; fork (p >>= put_ r); return r
 
+
 --------------------------------------------------------------------------------
 -- Entrypoint
 
 runMetaParIO :: InitAction -> StealAction -> Par a -> IO a
-runMetaParIO ia sa work = do
+runMetaParIO ia sa work = ensurePinned $ 
+  do
   -- gather information
   tid <- myThreadId
   (cap, _) <- threadCapability tid
@@ -317,21 +339,32 @@ runMetaParIO ia sa work = do
   let wrappedComp = do 
         ans <- work
         liftIO $ do
+          dbgTaggedMsg 2 $ BS.pack "[meta] runMetaParIO computation finished, putting final MVar..."
           putMVar ansMVar ans
           -- if we're nested, we need to shut down the extra thread on
           -- our capability. If non-nested, we're done with the whole
           -- thing, and should really shut down.
           modifyHotVar_ mortals (1+)
+          dbgTaggedMsg 2 $ BS.pack "[meta] runMetaParIO: done putting mvar and incrementing mortals."
 
   -- determine whether this is a nested call
   isNested <- Set.member tid <$> readHotVar tids
-  -- if it's not, we need to run the init action
-  unless isNested (runIA ia sa globalScheds)
-  -- if it is, we need to spawn a replacement worker while we wait on ansMVar
-  when isNested $ void $ spawnWorkerOnCap sa cap
+  if isNested then
+        -- if it is, we need to spawn a replacement worker while we wait on ansMVar
+        void $ spawnWorkerOnCap sa cap
+        -- if it's not, we need to run the init action 
+   else runIA ia sa globalScheds
+
+-- TODO -- SCAN FOR WHERE THE ACTIVE WORKERS ARE LIVING AND THEN PUSH:
+
   -- push the work, and then wait for the answer
   pushWork sched wrappedComp
+  dbgTaggedMsg 2 $ BS.pack "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
   ans <- takeMVar ansMVar
+
+  -- TODO: Invariant checking -- make sure there is no work left:
+  -- sanityCheck
+
   return ans
 
 {-# INLINE runMetaPar #-}
