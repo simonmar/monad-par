@@ -26,8 +26,6 @@ import Remote2.Call (mkClosureRec, remotable)
 
 import DistDefaultMain (defaultMain)
 
-partitions = numCapabilities
-
 --------------------------------------------------------------------------------
 
 -- Compute sum_n(1/n)
@@ -46,8 +44,9 @@ kernel (oneshare,jid) =
 
 --------------------------------------------------------------------------------
 
-runit :: Double -> Par ()
-runit expt = 
+-- runit :: [Double] -> Par ()
+runit :: (Double,Int) -> Par ()
+runit (expt,partitions) = 
 --    evaluate $ runPar $ 
    do 
       prnt$ "Running embarassingly parallel benchmark."
@@ -81,7 +80,17 @@ io act = liftIO act
 -- Generate stub code for RPC:
 remotable ['kernel]
 
-main = defaultMain [__remoteCallMetaData] runit 7.5
+-- partitions = numCapabilities
+
+main = defaultMain [__remoteCallMetaData] runit 2
+--                   ["7.5",show numCapabilities]
+                   (\ ranks [s1,s2] -> 
+		      return (case s1 of "" -> 7.5 
+			                 _  -> read s1, 
+			      case s2 of "" -> ranks * numCapabilities
+					 _  -> read s2))
+--                   [ \_     -> return 7.5
+--		   , \ranks -> return ranks]
 
 -- main = do args <- getArgs 
 -- 	  (version, iters) <- case args of 
