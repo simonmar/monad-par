@@ -27,8 +27,8 @@ parfib1 n = do
        mytid <- myThreadId
        host  <- hostName
 --       let host = ""
-#if 0
-       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
+#if 1
+--       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
 #endif
        return ()
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)

@@ -29,7 +29,6 @@ import Control.Exception      (catch, SomeException)
 import Control.Monad          (forM, forM_, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
-import Data.Unique            (hashUnique, newUnique)
 import Data.Typeable          (Typeable)
 import Data.IORef             (writeIORef, readIORef, newIORef, IORef)
 import qualified Data.IntMap as IntMap
@@ -86,7 +85,7 @@ type MachineList = [PeerName]
 type NodeID = Int
 
 -- Format a nodeID:
-showNodeID n = "<"+++ sho n+++">"
+showNodeID n = "<Node"+++ sho n+++">"
 a +++ b = BS.append a b
 
 sho :: Show a => a -> BS.ByteString
@@ -293,7 +292,6 @@ makePayloadClosure (Closure name arg) =
                   False -> Nothing
                   True -> Just $ Closure (name++"Pl") arg
 
-
 -- | Try to exit the whole process and not just the thread.
 errorExit :: String -> IO a
 -- TODO: Might be better to just call "kill" on our own PID:
@@ -499,7 +497,7 @@ initAction metadata initTransport (Master machineList) = IA ia
           case msg of
             AnnounceSlave{name,toAddr} -> do 
 	      dbgTaggedMsg 3$ "Master: register new slave, name: "+++ name
-	      dbgTaggedMsg 4$ "  Full message received from slave: "+++ str
+	      dbgTaggedMsg 4$ "  Full message received from slave: "+++ sho str
 
 	      -- Deserialize each of the sourceEnds received by the slaves:
 	      case T.deserialize transport toAddr of
@@ -591,7 +589,7 @@ initAction metadata initTransport Slave = IA ia
      transport <- readIORef myTransport
      (mySourceAddr, myInbound) <- T.newConnection transport
 
-     dbgTaggedMsg 3$ "  Source addr created: " +++ (T.serialize mySourceAddr)
+     dbgTaggedMsg 3$ "  Source addr created: " +++ sho (T.serialize mySourceAddr)
 
      let 
          waitMasterFile = do  
