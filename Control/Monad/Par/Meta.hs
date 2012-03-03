@@ -52,7 +52,6 @@ import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Monad.Par.Meta.HotVar.IORef
 import qualified Control.Monad.Par.Class as PC
 
-#define DEBUG
 dbg :: Bool
 #ifdef DEBUG
 dbg = True
@@ -175,6 +174,27 @@ popWork Sched{ workpool, no } = do
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched{ workpool } work = R.pushL workpool work
 
+{-# INLINE pushWorkEnsuringWorker #-}
+pushWorkEnsuringWorker :: Sched -> Par () -> IO (Maybe ())
+pushWorkEnsuringWorker Sched { no } work = do
+  let attempt n = do
+        sched@Sched { no, tids } <- getSchedForCap n
+        set <- readHotVar tids
+        case Set.null set of
+          False -> do
+            when dbg $ printf "[meta] pushing ensured work onto cap %d\n" no
+            Just <$> pushWork sched work
+          True -> return Nothing
+      loop []     = return Nothing
+      loop (n:ns) = do
+        msucc <- attempt n
+        case msucc of
+          Just () -> return $ Just ()
+          Nothing -> loop ns
+  msucc <- attempt no
+  case msucc of
+    Just () -> return $ Just ()
+    Nothing -> loop [0..numCapabilities-1]
 --------------------------------------------------------------------------------
 -- Global structure and helpers for proper nesting behavior
 
@@ -249,7 +269,9 @@ workerLoop failCount _k = do
   mysched@Sched{ no, mortals, stealAction, consecutiveFailures } <- ask
   mwork <- liftIO $ popWork mysched
   case mwork of
-    Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
+    Just work -> do
+      when dbg $ liftIO $ printf "[meta %d] popped work from own queue\n" no
+      runContT (unPar work) $ const (workerLoop 0 _k)
     Nothing -> do
       -- check if we need to die
       die <- liftIO $ modifyHotVar mortals $ \ms ->
@@ -358,7 +380,8 @@ runMetaParIO ia sa work = ensurePinned $
 -- TODO -- SCAN FOR WHERE THE ACTIVE WORKERS ARE LIVING AND THEN PUSH:
 
   -- push the work, and then wait for the answer
-  pushWork sched wrappedComp
+  msucc <- pushWorkEnsuringWorker sched wrappedComp
+  when (msucc == Nothing) $ error "[meta] could not find a scheduler with an active worker!"
   dbgTaggedMsg 2 $ BS.pack "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
   ans <- takeMVar ansMVar
 
