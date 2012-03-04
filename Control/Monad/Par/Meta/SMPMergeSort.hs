@@ -13,15 +13,27 @@ import Data.Monoid
 import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.CUDAMergeSort as Merge
 import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
+import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 
 tries :: Int
 tries = 20
 
+{-# INLINE ia #-}
 ia :: InitAction
-ia = SharedMemory.initAction <> Merge.initAction
+ia = mconcat [ SharedMemory.initAction
+             , Merge.initAction
+             , Bkoff.initAction
+             ]
 
+-- ia = SharedMemory.initAction <> Merge.initAction
+
+{-# INLINE sa #-}
 sa :: StealAction
-sa = SharedMemory.stealAction tries <> Merge.stealAction
+sa = mconcat [ SharedMemory.stealAction tries
+             , Merge.stealAction
+             , Bkoff.mkStealAction 1000 (100*1000)
+             ]
+-- sa = SharedMemory.stealAction tries <> Merge.stealAction
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a

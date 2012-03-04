@@ -29,7 +29,7 @@ mkRandomVec :: Int -> IO (V.Vector Word32)
 mkRandomVec k = withSystemRandom $ \g -> uniformVector g (k*1024) :: IO (V.Vector Word32)
 
 parMergeSort :: V.Vector Word32 -> V.Vector Word32
-parMergeSort v = runPar $ get =<< spawnMergeSort v
+parMergeSort v = runPar $ get =<< unsafeSpawnMergeSort v
 
 prop_parSortCorrect :: Positive Word8 -> Property       
 prop_parSortCorrect k = monadicIO $ do

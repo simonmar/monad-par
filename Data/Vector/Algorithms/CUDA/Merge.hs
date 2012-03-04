@@ -74,31 +74,25 @@ mergeSortKeys :: V.Vector CUInt
               -> IO (V.Vector CUInt)
 mergeSortKeys srcKey n dir = do
   when (n `mod` 1024 /= 0) $ error "mergeSort: vector length must be multiple of 1024"
-  allocaArray n $ \skDevPtr ->
+  V.unsafeWith srcKey $ \skPtr ->          
+    allocaArray n $ \skDevPtr ->
     allocaArray n $ \svDevPtr ->
     allocaArray n $ \bkDevPtr ->
     allocaArray n $ \bvDevPtr ->
     allocaArray n $ \dkDevPtr ->
     allocaArray n $ \dvDevPtr -> do
       kHostPtr <- mallocHostArray [DeviceMapped] n 
-      vHostPtr <- mallocHostArray [DeviceMapped] n
-      V.unsafeWith srcKey $ \skPtr ->
-        withHostPtr kHostPtr $ \ptr -> Marsh.copyArray ptr skPtr n
-      vals_ <- M.new n                                     
-      M.unsafeWith vals_ $ \svPtr -> 
-        withHostPtr vHostPtr $ \ptr -> Marsh.copyArray ptr svPtr n
+      withHostPtr kHostPtr $ \ptr -> Marsh.copyArray ptr skPtr n
       pokeArrayAsync n kHostPtr skDevPtr Nothing
-      pokeArrayAsync n vHostPtr svDevPtr Nothing
       cu_initMergeSort
       sync
       cu_mergeSort dkDevPtr dvDevPtr bkDevPtr bvDevPtr skDevPtr svDevPtr (fromIntegral n) dir
       sync
       dstKeyM <- M.new n
       M.unsafeWith dstKeyM $ \dkPtr -> peekArray n dkDevPtr dkPtr
-      dstKeyV <- V.unsafeFreeze dstKeyM                                     
+      dstKeyV <- V.unsafeFreeze dstKeyM
       cu_closeMergeSort
       freeHost kHostPtr
-      freeHost vHostPtr
       return dstKeyV
 
 -- | Unsafely sort a 'Vector' of 'Word32's (corresponding to 'CUInt's)
@@ -114,9 +108,8 @@ unsafeMergeSort v = do
 -- | Imposes a bit of allocation overhead, but maintains referential
 -- transparency.
 mergeSort :: V.Vector Word32 -> IO (V.Vector Word32)
-mergeSort v = do
-  let n = V.length v
-  V.unsafeCast <$> mergeSortKeys (V.unsafeCast v) n 1
+mergeSort v =
+  V.unsafeCast <$> mergeSortKeys (V.unsafeCast v) (V.length v) 1
              
 #ifdef TEST
 test :: IO (V.Vector Word32)
