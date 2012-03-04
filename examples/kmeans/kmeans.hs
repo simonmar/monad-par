@@ -23,6 +23,7 @@ import Data.Array
 import Text.Printf
 import Data.List
 import Data.Function
+import qualified Data.Vector as V
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
 import Control.Monad.Par as Par
@@ -118,15 +119,15 @@ reduce nclusters css =
   combine (c:cs) = [foldr combineClusters c cs]
 
 {-# INLINE step #-}
-step :: [Cluster] -> [Point] -> [Cluster]
+step :: [Cluster] -> (V.Vector Point) -> [Cluster]
 step clusters points
    = makeNewClusters (assign clusters points)
 
 -- assign each vector to the nearest cluster centre
-assign :: [Cluster] -> [Point] -> Array Int [Point]
+assign :: [Cluster] -> (V.Vector Point) -> Array Int [Point]
 assign clusters points =
     accumArray (flip (:)) [] (0, nclusters-1)
-       [ (clId (nearest p), p) | p <- points ]
+       [ (clId (nearest p), p) | p <- V.toList points ]
   where
     nclusters = (length clusters)
     nearest p = fst $ minimumBy (compare `on` snd)
