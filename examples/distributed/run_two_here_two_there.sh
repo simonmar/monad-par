@@ -3,16 +3,29 @@
 THERE=$1
 shift
 if [ "$THERE" == "" ]; then
-   echo "Usage: run_two_here_two_there.sh DOMAINNAME"
+   echo "Usage: run_two_here_two_there.sh DOMAINNAME [other-args]"
    echo "  Where DOMAINNAME is the 'there' machine on which to run two workers."
    exit 1
 fi
 
-# OPTS="-xc"
+# Extra arguments passed through to the executable:
+ARGS=$*
 
-# Error if any command fails:
+# Consider passing -xc when compiled in profiling mode:
+if [ "$ARGS" == "" ]; then
+  ARGS=10 
+fi
+
+if [ "$APP" = "" ]; then 
+  APP=parfib_dist
+fi
+
+# Error if any command below fails:
 set -e 
 set -x
+
+#----------------------------------------
+rm -f worker1.log worker2.log worker3.log *.addr
 
 ROOT=`pwd`
 HERE=`hostname`
@@ -20,18 +33,18 @@ HERE=`hostname`
 export MACHINE_LIST="$HERE $HERE $THERE $THERE"
 
 # Launch master asynchronously:
-./parfib_dist.exe master 10 +RTS -N2 $OPTS -RTS &
+./$APP.exe master tcp $ARGS  &
 MASTERPID=$!
 
-sleep 0.3
+sleep 0.4
 # Launch 1st worker asynchronously:
-./parfib_dist.exe slave +RTS -N2 $OPTS -RTS &> worker1.log & 
+./$APP.exe slave tcp $ARGS &> worker1.log & 
 WORKER1PID=$!
 
 # Launch 2nd and 3rd remotely (asynchronously):
-ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 $OPTS -RTS)" &> worker2.log & 
+ssh $THERE "(cd $ROOT; VERBOSITY=$VERBOSITY ./$APP.exe slave tcp $ARGS )" &> worker2.log & 
 WORKER2PID=$!
-ssh $THERE "(cd $ROOT; ./parfib_dist.exe slave +RTS -N2 $OPTS -RTS)" &> worker3.log & 
+ssh $THERE "(cd $ROOT; VERBOSITY=$VERBOSITY ./$APP.exe slave tcp $ARGS )" &> worker3.log & 
 WORKER3PID=$!
 
 # Now wait until the master is done.

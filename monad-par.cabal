@@ -133,6 +133,7 @@ Library
      Exposed-modules: 
                    Control.Monad.Par.Meta.SharedMemoryAccelerate
                  , Control.Monad.Par.Meta.Resources.Accelerate
+                 , Data.Vector.Algorithms.CUDA.Merge
   }
 
   Build-depends: base >= 4 && < 5
@@ -156,14 +157,15 @@ Library
                , abstract-deque >= 0.1.4
                , binary
                , cereal >= 0.3
+               , bytestring >= 0.9
                 -- AList now depends on binary/cereal.
   if !flag(NoGPU) {
     Build-depends: accelerate >= 0.9.0.1
+                 , cuda >= 0.4.1
   }
   if !flag(NoDist) {
     Build-depends: network
-                 , bytestring >= 0.9
-                 , cereal-derive
+--                 , cereal-derive
                  , directory >= 1.1
                  , ghc-prim
                  , network-transport
@@ -180,7 +182,9 @@ Library
   -- NOTE!  These dependencies DO NOT include all dependencies required
   -- by the examples/benchmarks.  Run "make deps" in the examples
   -- directory.
-
+  c-sources:       cbits/pin.c
+  include-dirs:    include
+  includes:        pin.h
   ghc-options: -O2
   Other-modules:
                ------------------------------------------------------------
@@ -198,6 +202,9 @@ Library
 
                -- Serial Elision is currently experimental:
                , Control.Monad.Par.Scheds.SerialElision
+
+               -- HotVar implementations
+               , Control.Monad.Par.Meta.HotVar.IORef
 
 
                ------------------------------------------------------------
@@ -238,6 +245,7 @@ Library
                -- Deterministic RNG should be released as soon as its tested more.
                , Control.Monad.Par.RNG
 
+               , System.Posix.Affinity
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
@@ -254,7 +262,7 @@ Test-Suite test-monad-par
 
 Flag NoGPU
   Description: Turn of GPU support and therefore accelerate dependencies.
-  Default:     False
+  Default:     True
 
 Flag NoDist
   Description: Turn of Distributed support and therefore certain dependencies.

@@ -14,6 +14,8 @@ import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import Data.Char            (isSpace)
 
+import DistDefaultMain
+
 --------------------------------------------------------------------------------
 
 type FibType = Int64
@@ -25,10 +27,10 @@ parfib1 n = do
     liftIO $ do 
        mypid <- getProcessID
        mytid <- myThreadId
---       host  <- hostName
-       let host = ""
-#if 0
-       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
+       host  <- hostName
+--       let host = ""
+#if 1
+--       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
 #endif
        return ()
     xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
@@ -59,6 +61,9 @@ main = do
         trans = parse trans_
         parse "tcp"   = TCP
 	parse "pipes" = Pipes
+
+    putStr$ "Running parfib with settings: "
+    putStrLn$ show (version, trans_, size, cutoff)
 
     case version of 
         "slave" -> runParSlaveWithTransport [__remoteCallMetaData] trans

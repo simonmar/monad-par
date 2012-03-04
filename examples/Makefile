@@ -98,6 +98,7 @@ install-deps: deps
 deps:
 	cabal install parallel fft carray --with-ghc=$(GHC)
 # For kmeans:
+	cabal install mersenne-random --with-ghc=$(GHC)
 	cabal install binary --with-ghc=$(GHC)
 
 # Redifen clean from common.mk

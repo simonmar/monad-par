@@ -18,6 +18,9 @@ import qualified Data.IntMap as IntMap
 import Data.List
 import qualified Data.Vector as Vector
 
+import System.Environment (getEnvironment)
+import System.IO.Unsafe
+import System.Posix.Affinity
 import System.Random.MWC
 
 import Text.Printf
@@ -32,18 +35,34 @@ dbg = True
 dbg = False
 #endif
 
--- | 'InitAction' for spawning threads on all capabilities.
+{-# NOINLINE getCaps #-}
+getCaps :: [Int]
+getCaps = unsafePerformIO $ do
+  env <- getEnvironment
+  case lookup "SMP_CAPS" env of
+    Just cs -> do
+      when dbg $ printf "[SMP] initialized with capability list %s\n" 
+                   (show ((read cs) :: [Int]))
+      return $ read cs
+    Nothing -> do 
+      n <- getNumCapabilities
+      when dbg $ printf "[SMP] initialized with capability list %s\n" 
+                   (show ([0..n-1] :: [Int]))                  
+      return [0..n-1]
+
+-- | 'InitAction' for spawning threads on all capabilities, or from a
+-- 'read'-able list of capability numbers in the environment variable
+-- @SMP_CAPS@.
 initAction :: InitAction
 initAction = IA ia
-  where ia sa _m = do
-          caps <- getNumCapabilities
-          runIA (initActionForCaps [0..caps-1]) sa _m
+  where ia sa _m = runIA (initActionForCaps getCaps) sa _m
   
 -- | 'InitAction' for spawning threads only on a particular set of
 -- capabilities.
 initActionForCaps :: [Int] -> InitAction
 initActionForCaps caps = IA ia
   where ia sa _ = do
+--          setAffinityRange caps
           when dbg $ do
             printf "spawning worker threads for shared memory on caps:\n"
             printf "\t%s\n" (show caps)
@@ -63,9 +82,9 @@ randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 -- | 'StealAction' for all capabilities.
 stealAction :: Int -> StealAction
 stealAction triesPerCap = SA sa
-  where sa sched schedsRef = do
-          caps <- getNumCapabilities
-          runSA (stealActionForCaps [0..caps-1] triesPerCap) sched schedsRef
+  where sa sched schedsRef = 
+          runSA (stealActionForCaps getCaps triesPerCap) sched schedsRef
+                 
 
 -- | Given a set of capabilities and a number of steals to attempt per
 -- capability, return a 'StealAction'.

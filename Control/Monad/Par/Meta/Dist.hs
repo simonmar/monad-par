@@ -12,8 +12,9 @@ module Control.Monad.Par.Meta.Dist
 ) where
 
 import Control.Monad.Par.Meta
+import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
-import qualified Control.Monad.Par.Meta.Resources.Remote as RemoteRsrc
+import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
@@ -28,9 +29,8 @@ import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
 import qualified Network.Transport.Pipes as PT
 
-import Prelude hiding (catch)
 import System.Random (randomIO)
-import System.IO (hPutStrLn, stderr)
+import System.IO (stderr)
 import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
 import GHC.Conc
@@ -59,21 +59,32 @@ instance Show WhichTransport where
 masterInitAction metadata trans = Single.initAction <> IA ia
   where
     ia sa scheds = do
-        env <- getEnvironment        
+        env <- getEnvironment
+        host <- Rem.hostName 
 	ml <- case lookup "MACHINE_LIST" env of 
 	       Just str -> return (words str)
 	       Nothing -> 
 		 case lookup "MACHINE_LIST_FILE" env of 
 		   Just fl -> liftM words $ readFile fl
-  	  	   Nothing -> error$ "Remote resource: Expected to find machine list in "++
-			             "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
+  	  	   Nothing -> do BS.putStrLn$BS.pack$ "WARNING: Remote resource: Expected to find machine list in "++
+			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
+                                 return [host]
         runIA (Rem.initAction metadata trans (Rem.Master$ map BS.pack ml)) sa scheds
 
 slaveInitAction metadata trans =
-  Single.initAction <> Rem.initAction metadata trans Rem.Slave 
+  mconcat [ Single.initAction
+          , Rem.initAction metadata trans Rem.Slave 
+          , Bkoff.initAction
+          ]
 
 sa :: StealAction
-sa = Single.stealAction <> Rem.stealAction
+sa = mconcat [ Single.stealAction 
+             , Rem.stealAction    
+               -- Start actually sleeping at 1ms and go up to 100ms:
+             , Bkoff.mkStealAction 1000 (100*1000)
+               -- Testing: A CONSTANT backoff:
+--             , Bkoff.mkStealAction 1 1 
+             ]
 
 --------------------------------------------------------------------------------
 -- Running and shutting down the distributed Par monad:
@@ -82,11 +93,11 @@ sa = Single.stealAction <> Rem.stealAction
 runParDist mt = runParDistWithTransport mt TCP
 
 runParDistWithTransport metadata trans comp = 
-   do Rem.taggedMsg 1$ "Initializing distributed Par monad with transport: "++ show trans
-      catch main hndlr 
+   do dbgTaggedMsg 1$ BS.pack$ "Initializing distributed Par monad with transport: "++ show trans
+      Control.Exception.catch main hndlr 
  where 
    main = runMetaParIO (masterInitAction metadata (pickTrans trans)) sa comp
-   hndlr e = do	hPutStrLn stderr $ "Exception inside runParDist: "++show e
+   hndlr e = do	BS.hPutStrLn stderr $ BS.pack $ "Exception inside runParDist: "++show e
 		throw (e::SomeException)
 
 
@@ -96,13 +107,13 @@ runParDistWithTransport metadata trans comp =
 runParSlave meta = runParSlaveWithTransport meta TCP
 
 runParSlaveWithTransport metadata trans = do
-  Rem.taggedMsg 2 "runParSlave invoked."
+  dbgTaggedMsg 2 (BS.pack "runParSlave invoked.")
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
   runMetaParIO (slaveInitAction metadata (pickTrans trans))
 	       (SA $ \ x y -> do res <- runSA sa x y; 
-		                 threadDelay (10 * 1000);
+--		                 threadDelay (10 * 1000);
 	                         return res)
 	       (new >>= get)
 
