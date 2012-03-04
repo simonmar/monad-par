@@ -2,6 +2,7 @@
 
 import Control.Applicative
 import Control.Exception (evaluate)
+import Control.Monad (replicateM)
 
 import Control.Monad.Par.Meta.SMPMergeSort
 import Foreign.CUDA (sync)
@@ -29,7 +30,13 @@ mkRandomVec :: Int -> IO (V.Vector Word32)
 mkRandomVec k = withSystemRandom $ \g -> uniformVector g (k*1024) :: IO (V.Vector Word32)
 
 parMergeSort :: V.Vector Word32 -> V.Vector Word32
-parMergeSort v = runPar $ get =<< unsafeSpawnMergeSort v
+parMergeSort v = runPar $ get =<< spawnMergeSort v
+
+-- | Sorts each vector individually, and then appends them together
+-- for a poor man's version of a parallel mergesort
+parMergeSortN :: [V.Vector Word32] -> V.Vector Word32
+parMergeSortN vs = runPar $ V.concat <$> mapM sortOne vs
+  where sortOne v = get =<< spawnMergeSort v                   
 
 prop_parSortCorrect :: Positive Word8 -> Property       
 prop_parSortCorrect k = monadicIO $ do
@@ -46,7 +53,13 @@ main = do args <- getArgs
               v <- mkRandomVec (read k)
               sync
               withArgs args' $ defaultMain [
-                  bench "parMergeSort" $ whnf (V.head . parMergeSort) v
+                  bench "parMergeSort" $ whnf (V.head . parMergeSort) v                  
+                ]
+            ("criterionN":(k:n:args')) -> do
+              vs <- replicateM (read n) $ mkRandomVec (read k)
+              sync
+              withArgs args' $ defaultMain [
+                  bench "parMergeSortN" $ whnf (V.head . parMergeSortN) vs
                 ]
             [k] -> do
               sync
@@ -57,4 +70,4 @@ main = do args <- getArgs
               end <- getCurrentTime
               let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
               printf "SELFTIMED: %s\n" (show runningTime)
-            _ -> error "usage: cudaParMerge [test | criterion k | k]"
+            _ -> error "usage: cudaParMerge [ test | criterion k | criterionN k n | k ]"
