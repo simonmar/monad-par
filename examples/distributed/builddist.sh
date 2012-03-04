@@ -19,7 +19,7 @@ fi
 
 # -hide-package remote
 set -x
-$GHC -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
+$GHC ../../dist/build/cbits/pin.o -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
 set +x
 
 echo "  Next run this command here:"

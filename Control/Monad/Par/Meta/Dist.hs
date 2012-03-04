@@ -20,7 +20,7 @@ import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.Char (ord)
 import Data.List (lookup)
-import Data.Monoid (mappend)
+import Data.Monoid (mconcat, (<>))
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
@@ -56,7 +56,7 @@ instance Show WhichTransport where
 --------------------------------------------------------------------------------
 -- Init and Steal actions:
 
-masterInitAction metadata trans = IA ia
+masterInitAction metadata trans = Single.initAction <> IA ia
   where
     ia sa scheds = do
         env <- getEnvironment
@@ -70,20 +70,21 @@ masterInitAction metadata trans = IA ia
 			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
                                  return [host]
         runIA (Rem.initAction metadata trans (Rem.Master$ map BS.pack ml)) sa scheds
-        runIA Single.initAction sa scheds
 
 slaveInitAction metadata trans =
-            Rem.initAction metadata trans Rem.Slave 
-  `mappend` Single.initAction                       
-  `mappend` Bkoff.initAction
+  mconcat [ Single.initAction
+          , Rem.initAction metadata trans Rem.Slave 
+          , Bkoff.initAction
+          ]
 
 sa :: StealAction
-sa =           Single.stealAction 
-     `mappend` Rem.stealAction    
-     -- Start actually sleeping at 1ms and go up to 100ms:
-     `mappend` Bkoff.mkStealAction 1000 (100*1000)
--- Testing: A CONSTANT backoff:
---     `mappend` Bkoff.mkStealAction 1 1 
+sa = mconcat [ Single.stealAction 
+             , Rem.stealAction    
+               -- Start actually sleeping at 1ms and go up to 100ms:
+             , Bkoff.mkStealAction 1000 (100*1000)
+               -- Testing: A CONSTANT backoff:
+--             , Bkoff.mkStealAction 1 1 
+             ]
 
 --------------------------------------------------------------------------------
 -- Running and shutting down the distributed Par monad:

@@ -18,8 +18,16 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent ( forkOn, newEmptyMVar, putMVar, takeMVar
-                          , QSem, signalQSem)
+import Control.Concurrent ( forkOn
+                          , MVar
+                          , newEmptyMVar
+                          , putMVar
+                          , readMVar
+                          , takeMVar
+                          , tryPutMVar
+                          , QSem
+                          , signalQSem
+                          )
 import Control.DeepSeq
 import Control.Monad
 import "mtl" Control.Monad.Cont (ContT(..), MonadCont, callCC, runContT)
@@ -198,11 +206,15 @@ pushWorkEnsuringWorker Sched { no } work = do
     Just () -> return $ Just ()
     Nothing -> loop schedNos
 --------------------------------------------------------------------------------
--- Global structure and helpers for proper nesting behavior
+-- Global structures and helpers for proper nesting behavior
 
 {-# NOINLINE globalScheds #-}
 globalScheds :: HotVar (IntMap Sched)
 globalScheds = unsafePerformIO . newHotVar $ IntMap.empty
+
+{-# NOINLINE startBarrier #-}
+startBarrier :: MVar ()
+startBarrier = unsafePerformIO newEmptyMVar
 
 -- | Warning: partial!
 getSchedForCap :: Int -> IO Sched
@@ -247,7 +259,12 @@ spawnWorkerOnCap sa cap =
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
-    when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
+    when dbg$ dbgTaggedMsg 2 $ BS.pack $
+      printf "[meta: cap %d] spawning new worker" cap
+    -- wait on the barrier to start
+    readMVar startBarrier
+    when dbg$ dbgTaggedMsg 2 $ BS.pack $ 
+      printf "[meta: cap %d] new working entering loop" cap
     runReaderT (workerLoop 0 errK) sched
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
@@ -260,8 +277,11 @@ spawnWorkerOnCap' qsem sa cap =
     modifyHotVar_ tids (Set.insert me)
     when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
     signalQSem qsem
+    -- wait on the barrier to start
+    readMVar startBarrier
+    when dbg$ dbgTaggedMsg 2 $ BS.pack $ 
+      printf "[meta: cap %d] new working entering loop" cap
     runReaderT (workerLoop 0 errK) sched
-
 
 errK = error "this closure shouldn't be used"
 
@@ -381,12 +401,14 @@ runMetaParIO ia sa work = ensurePinned $
         -- if it's not, we need to run the init action 
    else runIA ia sa globalScheds
 
--- TODO -- SCAN FOR WHERE THE ACTIVE WORKERS ARE LIVING AND THEN PUSH:
-
   -- push the work, and then wait for the answer
   msucc <- pushWorkEnsuringWorker sched wrappedComp
-  when (msucc == Nothing) $ error "[meta] could not find a scheduler with an active worker!"
-  dbgTaggedMsg 2 $ BS.pack "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
+  when (msucc == Nothing)
+    $ error "[meta] could not find a scheduler with an active worker!"
+  dbgTaggedMsg 2 $ BS.pack
+    "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
+  -- trigger the barrier so that workers start
+  _ <- tryPutMVar startBarrier ()
   ans <- takeMVar ansMVar
 
   -- TODO: Invariant checking -- make sure there is no work left:
