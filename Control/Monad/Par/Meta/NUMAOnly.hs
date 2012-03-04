@@ -10,7 +10,7 @@ import Control.Monad.Par.Meta
 import qualified Control.Monad.Par.Meta.Resources.NUMA as NUMA
 
 tries :: Int
-tries = 5
+tries = 20
 
 ia :: InitAction
 ia = NUMA.initActionFromEnv
