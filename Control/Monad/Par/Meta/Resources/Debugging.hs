@@ -53,7 +53,9 @@ verbosity = unsafePerformIO$ do
 --              putStrLn "GETTING ENV TO READ VERBOSITY..."
 	      env <- getEnvironment
 --              putStrLn$ " ENV LENGTH " ++ show (length env)
-              case lookup "VERBOSITY" env of 
+              case lookup "VERBOSITY" env of
+                    -- if defined and not empty, default to 1
+                    Just "" -> return 1
                     Just s  -> do let n = read s
                                   when (n >= 2)$ putStrLn "(!) Responding to VERBOSITY environment variable!"
                                   return n
