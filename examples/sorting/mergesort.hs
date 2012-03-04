@@ -1,8 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -XFlexibleInstances #-}
 module Main where
 
 import Control.Monad
-import Control.Monad.Par
+-- TODO: switch
 import qualified Data.Vector.Unboxed as V 
 import qualified Data.Vector.Unboxed.Mutable as MV
 
@@ -17,6 +18,13 @@ import Data.List (intersperse)
 import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Intro (sort)
+
+#ifdef PARSCHED 
+import PARSCHED
+#else
+import Control.Monad.Par (runPar, spawn_, get, Par)
+#endif
+
 
 -- import Random.MWC.Pure (seed, range_random)
 
@@ -148,7 +156,9 @@ commaint n =
 -- expt controls the length of the vector to sort (length = 2^expt)
 main = do args <- getArgs
           let (expt, t) = case args of
-                            []  -> (18, 2)
+                            -- The default size should be very small.
+                            -- Just for testing, not for benchmarking:
+                            []  -> (10, 2)
                             [n] -> (read n, 2)
                             [n, t] -> (read n, read t)
 

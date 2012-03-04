@@ -12,15 +12,9 @@
 # 
 # CHANGELOG:
 #   1.1 - bumped for quicksort fix to use AList
-
-# Problems with this:
-parfib_monad  futures monad  38
-parfib_pseq   none           38
-parfib_monad  futures nested 30
+#   1.2 - bumped fo cleaning and pruning of this list for paper
 
 blackscholes  futures 10000 15000000
-
-# cholesky      default 1000 50 cholesky_matrix1000.dat
 
 nbody         ivars  13000
 
@@ -30,20 +24,65 @@ mandel        futures 2000 2000 3000000
 coins         futures 8 1250
 queens        futures 14
 
-quicksort/parquicksort_monad futures 1500000
-quicksort/parquicksort_pseq  none    1500000
+# These don't match the naming convention at the moment.
+matmult/MatMult   futures 768 0 64
+sumeuler/sumeuler futures 38 8000 100
+
+sorting/mergesort futures 19 
 
 # binomial lattice?
 
-stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000
-stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
 
-partree/partree futures 600 20
+
+
+# TODO: Get distributed benchmarks integrated in here:
+#       Although these should probably go in a separate file.
+# ------------------------------------------------------------
+# distributed/parfib_dist
+# distributed/mandel_dist dist pipes 1024a
+
+
+
+# ------------------------------------------------------------
+# Benchmarks that are have problems or have become neglected:
+# ------------------------------------------------------------
+
+# partree/partree futures 600 20
 
 # What should the arguments be here:
+#  The compute times are highly unpredictable.... it's hard to find good inputs.
 # minimax/minimax futures nested ? ? 
 # minimax/minimax futures monad  ? ? 
 
 # These don't match the naming convention at the moment.
 matmult/MatMult   futures 768 0 64
 sumeuler/sumeuler futures 38 8000 100
+
+# We can measure parfib separately... it shouldn't be part of our
+# benchmark suite.
+# -----------------
+# Problems with this fib(38):
+# parfib_monad  futures monad  38
+# parfib_pseq   none           38
+# parfib_monad  futures nested 30
+
+
+# I don't think quicksort was every really fixed/tuned:
+# It looks like it is still generating random data as an AList and
+# getting stack overflows [2012.03.04]
+# -----------------
+# quicksort/parquicksort_monad futures 1500000
+# quicksort/parquicksort_pseq  none    1500000
+
+
+# We could include cholesky, but it is a bit annoying in that it
+# requires generated input files.  Also we'd like to de-unsafePerformIO it:
+# -----------------
+# cholesky      default 1000 50 cholesky_matrix1000.dat
+
+
+# The whole asynchronous/streaming thing needs to be revisited at a later date.
+# -----------------
+# stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000sx
+# stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
+
