@@ -13,7 +13,7 @@ import qualified Control.Monad.Par.Combinator as C
 #ifdef PARSCHED
 import PARSCHED
 #else
-import Control.Monad.Par
+import Control.Monad.Par (runPar, parMap, parMapM, Par)
 #endif
 
 type Player = Evaluation -> Evaluation -> Evaluation
