@@ -20,7 +20,7 @@ import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.Char (ord)
 import Data.List (lookup)
-import Data.Monoid (mappend)
+import Data.Monoid (mconcat, (<>))
 import Control.Monad (liftM)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
