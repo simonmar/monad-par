@@ -4,6 +4,7 @@ module Control.Monad.Par.Meta.SMPMergeSort (
     runPar
   , runParIO
   , Merge.spawnMergeSort
+  , Merge.unsafeSpawnMergeSort
   , module Control.Monad.Par.Meta
 ) where
 

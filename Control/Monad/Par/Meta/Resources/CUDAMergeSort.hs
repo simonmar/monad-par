@@ -5,6 +5,7 @@ module Control.Monad.Par.Meta.Resources.CUDAMergeSort (
     initAction
   , stealAction
   , spawnMergeSort
+  , unsafeSpawnMergeSort
 ) where
 
 import Control.Concurrent
@@ -53,12 +54,21 @@ resultQueue = unsafePerformIO R.newQ
 -- spawnAcc operator and init/steal definitions to export
 
 spawnMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
-spawnMergeSort v = do 
+spawnMergeSort = spawnMergeSort' mergeSort
+
+unsafeSpawnMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
+unsafeSpawnMergeSort = spawnMergeSort' unsafeMergeSort
+
+{-# INLINE spawnMergeSort' #-}
+spawnMergeSort' :: (V.Vector Word32 -> IO (V.Vector Word32))
+                -> V.Vector Word32
+                -> Par (IVar (V.Vector Word32))
+spawnMergeSort' ms v = do 
     when dbg $ liftIO $ printf "spawning CUDA mergesort computation\n"
     iv <- new
     let wrappedComp = do
           when dbg $ printf "running CUDA mergesort computation\n"
-          ans <- unsafeMergeSort v
+          ans <- ms v
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "CUDA mergesort computation finished\n"
             put_ iv ans

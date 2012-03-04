@@ -44,8 +44,9 @@ main = do args <- getArgs
             ["test"] -> quickCheck prop_parSortCorrect
             ("criterion":(k:args')) -> do
               v <- mkRandomVec (read k)
+              sync
               withArgs args' $ defaultMain [
-                  bench "parMergeSort" $ whnfIO $ (V.head . parMergeSort) <$> mkRandomVec (read k)
+                  bench "parMergeSort" $ whnf (V.head . parMergeSort) v
                 ]
             [k] -> do
               sync
