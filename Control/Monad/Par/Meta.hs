@@ -18,8 +18,15 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent ( forkOn, newEmptyMVar, putMVar, takeMVar
-                          , QSem, signalQSem)
+import Control.Concurrent ( forkOn
+                          , newEmptyMVar
+                          , putMVar
+                          , readMVar
+                          , takeMVar
+                          , tryPutMVar
+                          , QSem
+                          , signalQSem
+                          )
 import Control.DeepSeq
 import Control.Monad
 import "mtl" Control.Monad.Cont (ContT(..), MonadCont, callCC, runContT)
@@ -137,11 +144,15 @@ pushWork :: Sched -> Par () -> IO ()
 pushWork Sched{ workpool } work = R.pushL workpool work
 
 --------------------------------------------------------------------------------
--- Global structure and helpers for proper nesting behavior
+-- Global structures and helpers for proper nesting behavior
 
 {-# NOINLINE globalScheds #-}
 globalScheds :: HotVar (IntMap Sched)
 globalScheds = unsafePerformIO . newHotVar $ IntMap.empty
+
+{-# NOINLINE startBarrier #-}
+startBarrier :: MVar ()
+startBarrier = unsafePerformIO newEmptyMVar
 
 -- | Warning: partial!
 getSchedForCap :: Int -> IO Sched
@@ -181,6 +192,9 @@ spawnWorkerOnCap sa cap =
     sched@Sched{ tids } <- makeOrGetSched sa cap
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
+    -- wait on the barrier to start
+    readMVar startBarrier
+    when dbg $ printf "[%d] new working entering loop\n" cap
     runReaderT (workerLoop errK) sched
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
@@ -193,6 +207,9 @@ spawnWorkerOnCap' qsem sa cap =
     modifyHotVar_ tids (Set.insert me)
     when dbg $ printf "[%d] spawning new worker\n" cap
     signalQSem qsem
+    -- wait on the barrier to start
+    readMVar startBarrier
+    when dbg $ printf "[%d] new working entering loop\n" cap
     runReaderT (workerLoop errK) sched
 
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
@@ -313,6 +330,8 @@ runMetaParIO ia sa work = do
   when isNested $ void $ spawnWorkerOnCap sa cap
   -- push the work, and then wait for the answer
   pushWork sched wrappedComp
+  -- trigger the barrier so that workers start
+  _ <- tryPutMVar startBarrier ()
   ans <- takeMVar ansMVar
   return ans
 
