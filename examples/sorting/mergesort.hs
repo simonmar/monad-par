@@ -33,10 +33,22 @@ import Control.Monad.Par (runPar, spawn_, get, Par)
 type ElmT = Word32
 
 -- Here we can choose safe or unsafe operations:
-
+#ifndef SAFE
+thawit  x     = V.unsafeThaw   x
+newMV   x     = MV.unsafeNew   x
+readMV  x y   = MV.unsafeRead  x y
+writeMV x y z = MV.unsafeWrite x y z
+#else
+thawit  x     = V.thaw   x
+newMV   x     = MV.new   x
+readMV  x y   = MV.read  x y
+writeMV x y z = MV.write x y z
+#endif
 {-# INLINE thawit #-}
--- thawit x = V.unsafeThaw x
-thawit x = V.thaw x
+{-# INLINE newMV #-}
+{-# INLINE readMV #-}
+{-# INLINE writeMV #-}
+
 
 ----------------------------------------------------------------------------------------------------
 
@@ -136,7 +148,7 @@ seqmerge left_ right_ =
 	  len  = lenL + lenR 
       left  <- thawit left_
       right <- thawit right_
-      dest  <- MV.new len      
+      dest  <- newMV len      
       -- Ideally this would be replaced with a vectorized sorting
       -- network (e.g. a bitonic network)!
       let 
@@ -144,20 +156,20 @@ seqmerge left_ right_ =
 	  loop li lx ri rx di = 
             let di' = di+1 in
             if lx < rx then do 
-               MV.write dest di lx
+               writeMV dest di lx
                let li' = li+1
                if li' == lenL then
 		  copyOffset right dest ri di' (lenR - ri)
                else when (di' < len) $ do
-                  lx' <- MV.read left li'
+                  lx' <- readMV left li'
                   loop li' lx' ri rx di'
             else do 
-               MV.write dest di rx
+               writeMV dest di rx
                let ri' = ri+1
                if ri' == lenR then
 		  copyOffset left dest li di' (lenL - li)
                else when (di' < len) $ do
-                  rx' <- MV.read right ri'
+                  rx' <- readMV right ri'
                   loop li lx ri' rx' di'
       fstL <- MV.read left  0
       fstR <- MV.read right 0
@@ -165,9 +177,6 @@ seqmerge left_ right_ =
       froze <- V.freeze dest
       return dest
 
-a = (V.fromList [1,3..9])
-b = (V.fromList [2,4..10])
-t1 = seqmerge a b
 
 -- RRN: We could also consider an FFI seqmerge!  That would be
 -- consistent with our FFI calls on the sorting leaves.
