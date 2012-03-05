@@ -87,9 +87,23 @@ mergesort t vec = if V.length vec <= t
                       let n = (V.length vec) `div` 2
                       let (lhalf, rhalf) = V.splitAt n vec
                       ileft <- spawn_ (mergesort t lhalf)
-                      right <-         mergesort t rhalf
+                      right <-         mergesortGPU t rhalf
                       left  <- get ileft
                       merge t left right
+
+
+mergesortGPU :: Int -> V.Vector ElmT -> Par (V.Vector ElmT)
+mergesortGPU t vec = if V.length vec <= t
+--                  then return $ liftIO$ blockingMergsort vec 
+                  then return $ spawnGPUMergsort vec >>= get
+                  else do
+                      let n = (V.length vec) `div` 2
+                      let (lhalf, rhalf) = V.splitAt n vec
+                      ileft <- spawn_ (mergesortGPU t lhalf)
+                      right <-         mergesortGPU t rhalf
+                      left  <- get ileft
+                      merge t left right
+
 
 -- If either list has length less than t, use sequential merge. Otherwise:
 --   1. Find the median of the two combined lists using findSplit
@@ -189,8 +203,8 @@ seqmerge left_ right_ =
                 else when (di' < len) $ do
                   rx' <- readMV right ri'
                   loop li lx ri' rx' di'
-      fstL <- MV.read left  0
-      fstR <- MV.read right 0
+      fstL <- readMV left  0
+      fstR <- readMV right 0
       loop 0 fstL 0 fstR 0
       return dest
 

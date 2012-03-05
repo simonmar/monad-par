@@ -10,6 +10,7 @@ import qualified Prelude
 import Prelude               hiding (zip, map, scanl, scanr, zipWith, fst)
 import Data.Bits             hiding (shiftL, shiftR, bit, testBit)
 import Data.Array.Accelerate as Acc
+import Data.Array.Accelerate.CUDA as CUDA
 
 import Control.Exception     (evaluate)
 import Data.Array.IArray     hiding ((!))
@@ -24,10 +25,10 @@ import System.Random
 import System.Random.MWC
 import Unsafe.Coerce
 
-import Criterion.Main
+-- import Criterion.Main
 
-import Control.Monad.Par.Meta.SharedMemoryAccelerate
-
+-- import Control.Monad.Par.Meta.SharedMemoryAccelerate
+import Foreign.CUDA (sync)
 
 -- Radix sort
 -- ----------
@@ -116,11 +117,13 @@ main = withSystemRandom $ \gen -> do
   vec  <- randomUArrayR (minBound,maxBound) gen n
   vec' <- convertUArray vec
   --
-  withArgs args' $ defaultMain $ [bench "radix" $ whnfIO $ evaluate $ run_par vec' ()]
+--  sync
+--  withArgs args' $ defaultMain $ [bench "radix" $ whnf CUDA.run $ sortAcc (vec' :: Vector Int)]
+  print $ CUDA.run (sortAcc (vec' :: Vector Int))
   where
     {-# NOINLINE run_ref #-}
     run_ref xs () = sortRef xs
     run_acc xs () = sortAcc xs
-    run_par xs () = runPar $ do
-      ans <- spawnAcc $ run_acc (xs :: Vector Int) ()
-      get ans
+--    run_par xs () = runPar $ do
+--      ans <- spawnAcc $ run_acc (xs :: Vector Int) ()
+--      get ans

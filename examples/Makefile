@@ -80,9 +80,12 @@ wiperesults:
 # ================================================================================
 # Benchmarking infrastructure:
 
-bench: benchmark.run
+bench: benchmark.run clusterbench.run
 benchmark.run: benchmark.hs
 	ghc --make benchmark.hs -o benchmark.run -threaded -rtsopts
+
+clusterbench.run: clusterbench.hs
+	ghc --make clusterbench.hs -o clusterbench.run -threaded -rtsopts
 
 # ================================================================================
 datasets:
@@ -100,6 +103,16 @@ deps:
 # For kmeans:
 	cabal install mersenne-random --with-ghc=$(GHC)
 	cabal install binary --with-ghc=$(GHC)
+
+# Make sure we have comparable installed configurations (-O2)
+alldeps:
+	cabal install --with-ghc=$(GHC) -O2 mersenne-random fft carray vector-algorithms --reinstall
+	@echo
+alldepvers:
+	GHC=ghc-6.12.3 $(MAKE) alldeps
+	GHC=ghc-7.0.4  $(MAKE) alldeps
+	GHC=ghc-7.2.1  $(MAKE) alldeps
+	GHC=ghc-7.4.1  $(MAKE) alldeps
 
 # Redifen clean from common.mk
 clean:

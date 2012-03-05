@@ -3,8 +3,9 @@
 module Control.Monad.Par.Meta.SMPMergeSort (
     runPar
   , runParIO
-  , Merge.spawnMergeSort
-  , Merge.unsafeSpawnMergeSort
+  , Merge.blockingGPUMergeSort
+  , Merge.spawnGPUMergeSort
+  , Merge.spawnCPUGPUMergeSort
   , module Control.Monad.Par.Meta
 ) where
 

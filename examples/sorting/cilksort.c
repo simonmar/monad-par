@@ -55,11 +55,10 @@
  */
 
 #include <cilk/cilk.h>
-// #include <cilk-lib.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-// #include <getoptions.h>
+#include <unistd.h>
 
 typedef long ELM;
 
@@ -80,6 +79,18 @@ static inline unsigned long my_rand(void)
 static inline void my_srand(unsigned long seed)
 {
      rand_nxt = seed;
+}
+
+static inline unsigned long long getticks()
+{
+     struct timeval t;
+     gettimeofday(&t, 0);
+     return t.tv_sec * 1000000ULL + t.tv_usec;
+}
+
+static inline double ticks_to_seconds(unsigned long long ticks)
+{
+     return ticks * 1.0e-6;
 }
 
 static inline ELM med3(ELM a, ELM b, ELM c)
@@ -292,7 +303,6 @@ ELM *binsplit(ELM val, ELM *low, ELM *high)
 	  return low;
 }
 
-// cilk 
 void cilkmerge(ELM *low1, ELM *high1, ELM *low2,
 		    ELM *high2, ELM *lowdest)
 {
@@ -355,7 +365,6 @@ void cilkmerge(ELM *low1, ELM *high1, ELM *low2,
      return;
 }
 
-// cilk 
 void cilksort(ELM *low, ELM *tmp, long size)
 {
      /*
@@ -408,7 +417,6 @@ void scramble_array(ELM *arr, unsigned long size)
      }
 }
 
-// cilk 
 void fill_array(ELM *arr, unsigned long size)
 {
      unsigned long i;
@@ -423,58 +431,35 @@ void fill_array(ELM *arr, unsigned long size)
      scramble_array(arr, size);
 }
 
-int usage(void)
+/* Just so that we can pass on arrays via FFI and time things */
+unsigned long long wrap_cilksort(ELM *low, ELM *tmp, long size)
 {
-     fprintf(stderr, "\nUsage: cilksort [<cilk-options>] [-n size] [-benchmark] [-h]\n\n");
-     fprintf(stderr, "Cilksort is a parallel sorting algorithm, donned \"Multisort\", which\n");
-     fprintf(stderr, "is a variant of ordinary mergesort.  Multisort begins by dividing an\n");
-     fprintf(stderr, "array of elements in half and sorting each half.  It then merges the\n");
-     fprintf(stderr, "two sorted halves back together, but in a divide-and-conquer approach\n");
-     fprintf(stderr, "rather than the usual serial merge.\n\n");
+    unsigned long long start, end;
+    int success, i;
 
-     return -1;
+    start = getticks();
+    cilksort(low, tmp, size);
+    end = getticks();
+
+    success = 1;
+    for (i = 0; i < size - 1; ++i)
+	if (low[i] >= low[i+1])
+	    success = 0;
+
+    if (!success)
+	printf("SORTING FAILURE\n");
+
+    return (end - start);
 }
 
-char *specifiers[] =
-{"-n", "-benchmark", "-h", 0};
-// int opt_types[] =
-// {LONGARG, BENCHMARK, BOOLARG, 0};
-
-// cilk 
-int main(int argc, char **argv)
+/* creates arrays and measures cilksort() running time */
+unsigned long long run_cilksort(long size)
 {
-     long size;
      ELM *array, *tmp;
+     unsigned long long start, end, t1;
+     int success;
      long i;
-     int success, benchmark, help;
-     /* Cilk_time tm_begin, tm_elapsed; */
-     /* Cilk_time wk_begin, wk_elapsed; */
-     /* Cilk_time cp_begin, cp_elapsed; */
 
-     /* standard benchmark options */
-     size = 3000000;
-
-//     get_options(argc, argv, specifiers, opt_types, &size, &benchmark, &help);
-     size = 3000000;
-     help = 0; 
-     benchmark = 0;
-
-     if (help)
-	  return usage();
-
-     if (benchmark) {
-	  switch (benchmark) {
-	      case 1:		/* short benchmark options -- a little work */
-		   size = 10000;
-		   break;
-	      case 2:		/* standard benchmark options */
-		   size = 3000000;
-		   break;
-	      case 3:		/* long benchmark options -- a lot of work */
-		   size = 4100000;
-		   break;
-	  }
-     }
      array = (ELM *) malloc(size * sizeof(ELM));
      tmp = (ELM *) malloc(size * sizeof(ELM));
 
@@ -483,17 +468,15 @@ int main(int argc, char **argv)
 
      /* Timing. "Start" timers */
      cilk_sync;
-     /* cp_begin = Cilk_user_critical_path; */
-     /* wk_begin = Cilk_user_work; */
-     /* tm_begin = Cilk_get_wall_time(); */
+     start = getticks();
 
      cilk_spawn cilksort(array, tmp, size);
      cilk_sync;
 
      /* Timing. "Stop" timers */
-     /* tm_elapsed = Cilk_get_wall_time() - tm_begin; */
-     /* wk_elapsed = Cilk_user_work - wk_begin; */
-     /* cp_elapsed = Cilk_user_critical_path - cp_begin; */
+     end = getticks();
+
+     t1 = end - start;
 
      success = 1;
      for (i = 0; i < size; ++i)
@@ -503,20 +486,75 @@ int main(int argc, char **argv)
      if (!success)
 	  printf("SORTING FAILURE");
      else {
-	  printf("\nCilk Example: cilksort\n");
-//	  printf("	      running on %d processor%s\n\n", Cilk_active_size, Cilk_active_size > 1 ? "s" : "");
-	  printf("options: number of elements = %ld\n\n", size);
-	  /* printf("Running time  = %4f s\n", Cilk_wall_time_to_sec(tm_elapsed)); */
-	  /* printf("Work          = %4f s\n", Cilk_time_to_sec(wk_elapsed)); */
-	  /* printf("Critical path = %4f s\n\n", Cilk_time_to_sec(cp_elapsed)); */
+          printf("\nCilk Example: cilksort\n");
+          printf("Number of elements: %ld\n", size);
+          printf("Executed in: %llu ticks (%f s)\n\n",
+                 t1, ticks_to_seconds(t1));
      }
 
      free(array);
      free(tmp);
-     printf("Done sorting.  Successful.\n");
-     return 0;
+
+     return t1;
 }
 
+int usage(void)
+{
+     fprintf(stderr, "\nUsage: cilksort [<cilk-options>] [-n size] [-b benchmark] [-h]\n\n");
+     fprintf(stderr, "Cilksort is a parallel sorting algorithm, donned \"Multisort\", which\n");
+     fprintf(stderr, "is a variant of ordinary mergesort.  Multisort begins by dividing an\n");
+     fprintf(stderr, "array of elements in half and sorting each half.  It then merges the\n");
+     fprintf(stderr, "two sorted halves back together, but in a divide-and-conquer approach\n");
+     fprintf(stderr, "rather than the usual serial merge.\n\n");
+
+     return -1;
+}
+
+#if (USE_MAIN==1)
+int main(int argc, char **argv)
+{
+     long size;
+     int c, benchmark, help;
+
+     /* standard benchmark options */
+     size = 3000000;
+     help = 0;
+
+     while ((c = getopt (argc, argv, "hb:n:")) != -1) {
+	 switch (c) {
+	 case 'h':
+	     return usage();
+	 case 'b':
+	     benchmark = strtol(optarg, NULL, 10);
+	     printf ("benchmark: %d\n", benchmark);
+	     break;
+	 case 'n':
+	     size = strtol(optarg, NULL, 10);
+	     break;
+	 default:
+	     break;
+	 }
+     }
+
+     if (benchmark) {
+	 switch (benchmark) {
+	 case 1:		/* short benchmark options -- a little work */
+	     size = 10000;
+	     break;
+	 case 2:		/* standard benchmark options */
+	     size = 3000000;
+	     break;
+	 case 3:		/* long benchmark options -- a lot of work */
+	     size = 4100000;
+	     break;
+	 }
+     }
+
+     run_cilksort(size);
+     
+     return 0;
+}
+#endif
 
 // HOWTO: build with GCC-4.7/Cilk:
 // $ gcc -lm -lcilkrts cilksort.c -o cilksort_gcc.exe

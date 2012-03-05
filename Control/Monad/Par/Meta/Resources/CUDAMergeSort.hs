@@ -4,8 +4,9 @@
 module Control.Monad.Par.Meta.Resources.CUDAMergeSort (
     initAction
   , stealAction
-  , spawnMergeSort
-  , unsafeSpawnMergeSort
+  , blockingGPUMergeSort
+  , spawnCPUGPUMergeSort
+  , spawnGPUMergeSort
 ) where
 
 import Control.Concurrent
@@ -27,6 +28,8 @@ import System.IO.Unsafe
 
 import Text.Printf
 
+import Foreign.CUDA.Driver (initialise)
+
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import Control.Monad.Par.Meta.HotVar.IORef
 
@@ -41,6 +44,14 @@ dbg = False
 --------------------------------------------------------------------------------
 -- Global structures for communicating between Par threads and GPU
 -- daemon thread
+
+{-# NOINLINE gpuOnlyQueue #-}
+-- | GPU-only queue is pushed to by 'Par' workers on the right, and
+-- popped by the GPU daemon on the left. No backstealing is possible
+-- from this queue.
+gpuOnlyQueue :: WSDeque (IO ())
+gpuOnlyQueue = unsafePerformIO R.newQ
+
 
 {-# NOINLINE gpuBackstealQueue #-}
 -- | GPU-only queue is pushed to by 'Par' workers on the right, and
@@ -61,28 +72,38 @@ daemonTid = unsafePerformIO $ newHotVar Nothing
 --------------------------------------------------------------------------------
 -- spawnMergeSort operator and init/steal definitions to export
 
-spawnMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
-spawnMergeSort v = spawnMergeSort' mergeSort v
+blockingGPUMergeSort :: V.Vector Word32 -> IO (V.Vector Word32)
+blockingGPUMergeSort = mergeSort
 
-unsafeSpawnMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
-unsafeSpawnMergeSort v = spawnMergeSort' unsafeMergeSort v
-
-{-# INLINE spawnMergeSort' #-}
-spawnMergeSort' :: (V.Vector Word32 -> IO (V.Vector Word32))
-                -> V.Vector Word32
-                -> Par (IVar (V.Vector Word32))
-spawnMergeSort' ms v = do 
+spawnGPUMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
+spawnGPUMergeSort v = do
     when dbg $ liftIO $ printf "spawning CUDA mergesort computation\n"
     iv <- new
     let wrappedCUDAComp = do
           when dbg $ printf "running CUDA mergesort computation\n"
-          ans <- ms v
+          ans <- mergeSort v
+          R.pushL resultQueue $ do
+            when dbg $ liftIO $ printf "CUDA mergesort computation finished\n"
+            put_ iv ans          
+    liftIO $ R.pushR gpuOnlyQueue wrappedCUDAComp
+    return iv     
+
+{-# INLINE spawnCPUGPUMergeSort #-}
+spawnCPUGPUMergeSort :: (V.Vector Word32 -> Par (V.Vector Word32))
+                     -> V.Vector Word32
+                     -> Par (IVar (V.Vector Word32))
+spawnCPUGPUMergeSort cpuMS v = do 
+    when dbg $ liftIO $ printf "spawning CUDA mergesort computation\n"
+    iv <- new
+    let wrappedCUDAComp = do
+          when dbg $ printf "running CUDA mergesort computation\n"
+          ans <- mergeSort v
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "CUDA mergesort computation finished\n"
             put_ iv ans          
         wrappedParComp = do
           when dbg $ liftIO $ printf "running backstolen computation\n"
-          put_ iv =<< parMergeSort v          
+          put_ iv =<< cpuMS v          
     liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedCUDAComp)
     return iv     
 
@@ -93,19 +114,25 @@ parMergeSort v = liftIO $ do
   VM.sort (mv :: M.IOVector Word32)
   V.unsafeFreeze mv
 
--- | Loop for the GPU daemon; repeatedly takes work off the 'gpuQueue'
--- and runs it.
+-- | Loop for the GPU daemon; repeatedly takes work off the
+-- 'gpuOnlyQueue' or 'gpuBackstealQueue' and runs it.
 gpuDaemon :: IO ()
 gpuDaemon = do
   when dbg $ printf "gpu daemon entering loop\n" 
-  mwork <- R.tryPopL gpuBackstealQueue
+  mwork <- R.tryPopL gpuOnlyQueue
   case mwork of
-    Just (_, work) -> work >> gpuDaemon
-    Nothing -> gpuDaemon
+    Just work -> work
+    Nothing -> do
+      mwork2 <- R.tryPopL gpuBackstealQueue
+      case mwork2 of
+        Just (_, work) -> work 
+        Nothing -> return ()
+  gpuDaemon
 
 initAction :: InitAction
 initAction = IA ia
   where ia _ _ = do
+          initialise []
           mtid <- readHotVar daemonTid
           when (mtid == Nothing)
             $ writeHotVar daemonTid . Just =<< forkIO gpuDaemon

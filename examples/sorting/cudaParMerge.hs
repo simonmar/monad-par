@@ -5,7 +5,6 @@ import Control.Exception (evaluate)
 import Control.Monad (replicateM)
 
 import Control.Monad.Par.Meta.SMPMergeSort
-import Foreign.CUDA (sync)
 
 import qualified Data.Vector.Storable as V
 import Data.Word (Word8, Word32)
@@ -30,13 +29,13 @@ mkRandomVec :: Int -> IO (V.Vector Word32)
 mkRandomVec k = withSystemRandom $ \g -> uniformVector g (k*1024) :: IO (V.Vector Word32)
 
 parMergeSort :: V.Vector Word32 -> V.Vector Word32
-parMergeSort v = runPar $ get =<< spawnMergeSort v
+parMergeSort v = runPar $ get =<< spawnGPUMergeSort v
 
 -- | Sorts each vector individually, and then appends them together
 -- for a poor man's version of a parallel mergesort
 parMergeSortN :: [V.Vector Word32] -> V.Vector Word32
 parMergeSortN vs = runPar $ V.concat <$> mapM sortOne vs
-  where sortOne v = get =<< spawnMergeSort v                   
+  where sortOne v = get =<< spawnGPUMergeSort v                   
 
 prop_parSortCorrect :: Positive Word8 -> Property       
 prop_parSortCorrect k = monadicIO $ do
@@ -46,27 +45,25 @@ prop_parSortCorrect k = monadicIO $ do
 
 
 
-main = do args <- getArgs
+main = do args <- getArgs          
           case args of
             ["test"] -> quickCheck prop_parSortCorrect
             ("criterion":(k:args')) -> do
               v <- mkRandomVec (read k)
-              sync
+              () <- evaluate $ V.foldl' (flip seq) () v
               withArgs args' $ defaultMain [
                   bench "parMergeSort" $ whnf (V.head . parMergeSort) v                  
                 ]
             ("criterionN":(k:n:args')) -> do
               vs <- replicateM (read n) $ mkRandomVec (read k)
-              sync
               withArgs args' $ defaultMain [
                   bench "parMergeSortN" $ whnf (V.head . parMergeSortN) vs
                 ]
             [k] -> do
-              sync
               v <- mkRandomVec (read k)
               () <- evaluate $ V.foldl' (flip seq) () v
               start <- getCurrentTime
-              evaluate (parMergeSort v)
+              evaluate (V.head $ parMergeSort v)
               end <- getCurrentTime
               let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
               printf "SELFTIMED: %s\n" (show runningTime)
