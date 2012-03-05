@@ -1,6 +1,7 @@
 {-# LANGUAGE CPP, FlexibleInstances #-}
 module Main where
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.ST
 
@@ -15,7 +16,7 @@ import qualified Data.Vector.Storable.Mutable as MV
 
 import qualified Debug.Trace as DT
 
-import System.Random
+import System.Random.MWC
 
 import System.Environment
 import Control.Exception
@@ -140,15 +141,26 @@ staticMergeSort cpuT gpuT cpuMS vec = divide
       right <-         mergeGPU rhalf
       left  <- get ileft
       merge cpuT left right
-            
 
+type RangedThreshold = (Int, Int)            
+
+inRange :: Int -> RangedThreshold -> Bool
+inRange n (lo, hi) = lo <= n && n <= hi
+
+belowRange :: Int -> RangedThreshold -> Bool
+belowRange n (lo, _) = lo > n
+
+-- | Dynamic work-stealing sort; assumes that subproblems are split
+-- into multiples of 1024.
 dynamicMergeSort :: Int                                    -- ^ CPU threshold
-                 -> Int                                    -- ^ GPU threshold
+                 -> RangedThreshold                        -- ^ GPU threshold
                  -> (V.Vector ElmT -> Par (V.Vector ElmT)) -- ^ sequential CPU sort
                  -> V.Vector ElmT                          -- ^ Vector to sort
                  -> Par (V.Vector ElmT)
-dynamicMergeSort cpuT gpuT cpuMS vec | V.length vec <= gpuT =
+dynamicMergeSort cpuT gpuT cpuMS vec | V.length vec `belowRange` gpuT =
   get =<< spawnCPUGPUMergeSort (cpuMergeSort cpuT cpuMS) vec
+dynamicMergeSort cpuT gpuT cpuMS vec | V.length vec `inRange` gpuT =
+  get =<< spawnCPUGPUMergeSort (dynamicMergeSort cpuT gpuT cpuMS) vec
 dynamicMergeSort cpuT gpuT cpuMS vec = do
   let n = (V.length vec) `div` 2
   let (lhalf, rhalf) = V.splitAt n vec
@@ -268,19 +280,27 @@ seqmerge left_ right_ =
 ----------------------------------------------------------------------------------------------------
 -- Misc Helpers:
 
+
+mkRandomVec :: Int -> IO (V.Vector ElmT)
+mkRandomVec n = do
+  g <- create
+  uniformVector g n :: IO (V.Vector ElmT)
+-- mkRandomVec n = withSystemRandom $ \g -> uniformVector g n :: IO (V.Vector ElmT)
+
 -- | Create a vector containing the numbers [0,N) in random order.
-randomPermutation :: Int -> StdGen -> V.Vector ElmT
-randomPermutation len rng = 
-  -- Annoyingly there is no MV.generate:
-  V.create (do v <- thawit$ V.generate len fromIntegral
-               loop 0 v rng)
-  -- loop 0 (MV.generate len id)
- where 
-  loop n vec g | n == len  = return vec
-	       | otherwise = do 
-    let (offset,g') = randomR (0, len - n - 1) g
-    MV.swap vec n (n + offset)
-    loop (n+1) vec g'
+-- randomPermutation :: Int -> StdGen -> V.Vector ElmT
+
+-- randomPermutation len rng = 
+--   -- Annoyingly there is no MV.generate:
+--   V.create (do v <- thawit$ V.generate len fromIntegral
+--                loop 0 v rng)
+--   -- loop 0 (MV.generate len id)
+--  where 
+--   loop n vec g | n == len  = return vec
+-- 	       | otherwise = do 
+--     let (offset,g') = randomR (0, len - n - 1) g
+--     MV.swap vec n (n + offset)
+--     loop (n+1) vec g'
 
 -- | Format a large number with commas.
 commaint :: (Show a, Integral a) => a -> String
@@ -303,30 +323,41 @@ copyOffset from to iFrom iTo len =
 ----------------------------------------------------------------------------------------------------
 
 
--- Main, based on quicksort main
--- Usage: ./Main [expt] [threshold]
+-- | Main, based on quicksort main
+-- Usage: ./Main [mode] [expt] [threshold] [gpulo expt] [gpuhi expt]
+--   mode is one of:
+--     * cpu (parallel cpu sort)
+--     * static (50/50 cpu/gpu work)
+--     * dynamic (work stealing between cpu/gpu)
 --   t is threshold to bottom out to sequential sort and sequential merge
 --   expt controls the length of the vector to sort (length = 2^expt)
+--   gpulo, gpuhi constrain the vector sizes where dynamic will potentially
+--     execute on the GPU; (2^gpulo) <= n <= (2^gpuhi). Has no effect on other modes.
 main = do args <- getArgs
-          let (mode, expt, t) =
+          let (mode, lo, hi, expt, t) =
                   case args of
                     -- The default size should be very small.
                     -- Just for testing, not for benchmarking:
-                    []     -> ("dynamic", 10, 2)
-                    [mode, n]    -> (mode, read n, 8192)
-                    [mode, n, t] -> (mode, read n, read t)
-              gpuT = fromIntegral $ floor (2 ** 22)
+                    []     -> ("dynamic", 16, 22, 10, 2)
+                    ["dynamic", n, t, lo, hi] 
+                        -> ("dynamic", (read lo), (read hi), (read n), (read t))
+                    [mode, n]    -> (mode, 16, 22, read n, 8192)
+                    [mode, n, t] -> (mode, 16, 22, read n, read t)
+              gpuThi = 2 ^ (min 22 hi)
+              gpuTlo = 2 ^ lo
+              gpuT   = (gpuTlo, gpuThi)
               parComp | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
-                      | mode == "static"  = staticMergeSort t gpuT seqsort
+                      | mode == "static"  = staticMergeSort t gpuThi seqsort
                       | mode == "cpu"     = cpuMergeSort t seqsort
           initialise []                            
-          g <- getStdGen
+--          g <- getStdGen
 
           putStrLn $ "Merge sorting " ++ commaint (2^expt) ++ 
                      " elements. First generate a random permutation:"
 
           start <- getCurrentTime
-          let rands = randomPermutation (2^expt) g
+--          let rands = randomPermutation (2^expt) g
+          rands <- mkRandomVec (2^expt)
           evaluate$ rands
           evaluate$ rands V.! 0
           end   <- getCurrentTime
