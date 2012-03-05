@@ -56,8 +56,8 @@ writeMV x y z = MV.write x y z
 -- import Random.MWC.Pure (seed, range_random)
 
 -- | Wrapper for sorting immutable vectors:
-sortVec :: V.Vector ElmT -> V.Vector ElmT
-sortVec v = V.create $ do 
+seqsort :: V.Vector ElmT -> V.Vector ElmT
+seqsort v = V.create $ do 
                 mut <- thawit v
                 -- This is the pure-haskell sort on mutable vectors
                 -- from the vector-algorithms package:
@@ -67,8 +67,8 @@ sortVec v = V.create $ do
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
 mergesort :: Int -> V.Vector ElmT -> Par (V.Vector ElmT)
-mergesort t vec = if (V.length vec) <= t
-                  then return $ sortVec vec
+mergesort t vec = if V.length vec <= t
+                  then return $ seqsort vec
                   else do
                       let n = (V.length vec) `div` 2
                       let (lhalf, rhalf) = V.splitAt n vec
@@ -78,13 +78,14 @@ mergesort t vec = if (V.length vec) <= t
                       merge t left right
 
 -- If either list has length less than t, use sequential merge. Otherwise:
--- 1. Find the median of the two combined lists using findSplit
--- 2. Split the lists at the median
--- 3. Merge each of the lefts and rights
--- 4. Append the merged lefts and the merged rights
+--   1. Find the median of the two combined lists using findSplit
+--   2. Split the lists at the median
+--   3. Merge each of the lefts and rights
+--   4. Append the merged lefts and the merged rights
 merge :: Int -> (V.Vector ElmT) -> (V.Vector ElmT) -> Par (V.Vector ElmT)
 merge t left right =
-        if ((V.length left) < t) || ((V.length right) < t)
+        if V.length left  < t || 
+           V.length right < t
         then return $ seqmerge left right
         else do
             let (splitL, splitR) = findSplit left right
@@ -93,6 +94,9 @@ merge t left right =
             isortLeft <- spawn_ (merge t llhalf lrhalf)
             sortRight <-         merge t rlhalf rrhalf
             sortLeft  <- get isortLeft
+            -- NOTE: this append is where our most expensive copies
+            -- happen, in contrast, for example with the Cilk
+            -- implementation, which is fully inplace:
             return (sortLeft V.++ sortRight)
         
 {-
@@ -195,7 +199,6 @@ randomPermutation len rng =
   loop n vec g | n == len  = return vec
 	       | otherwise = do 
     let (offset,g') = randomR (0, len - n - 1) g
---    MV.unsafeSwap vec n 
     MV.swap vec n (n + offset)
     loop (n+1) vec g'
 
@@ -228,8 +231,9 @@ main = do args <- getArgs
           let (expt, t) = case args of
                             -- The default size should be very small.
                             -- Just for testing, not for benchmarking:
-                            []  -> (10, 2)
-                            [n] -> (read n, 2)
+                            []     -> (10, 2)
+--                            [n]    -> (read n, 1024)
+                            [n]    -> (read n, 8192)
                             [n, t] -> (read n, read t)
 
           g <- getStdGen
