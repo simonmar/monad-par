@@ -8,6 +8,7 @@ import qualified Data.Vector.Unboxed as V
 import qualified Data.Vector.Unboxed.Mutable as MV
 
 import System.Random
+
 import System.Environment
 import Control.Exception
 import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
@@ -15,6 +16,7 @@ import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
 import Data.List.Split (chunk)
 import Data.List (intersperse)
 
+import Data.Word (Word32)
 import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Intro (sort)
@@ -25,9 +27,13 @@ import PARSCHED
 import Control.Monad.Par (runPar, spawn_, get, Par)
 #endif
 
+-- Element type being sorted:
+type ElmT = Word32
 
+-- import System.Random.Mersenne
 -- import Random.MWC.Pure (seed, range_random)
 
+-- | Wrapper for sorting immutable vectors:
 sortVec v = V.create $ do 
                 mut <- V.thaw v
                 sort mut
@@ -35,7 +41,7 @@ sortVec v = V.create $ do
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
-mergesort :: Int -> V.Vector Int -> Par (V.Vector Int)
+mergesort :: Int -> V.Vector ElmT -> Par (V.Vector ElmT)
 mergesort t vec = if (V.length vec) <= t
                   then return $ sortVec vec
                   else do
@@ -51,7 +57,7 @@ mergesort t vec = if (V.length vec) <= t
 -- 2. Split the lists at the median
 -- 3. Merge each of the lefts and rights
 -- 4. Append the merged lefts and the merged rights
-merge :: Int -> (V.Vector Int) -> (V.Vector Int) -> Par (V.Vector Int)
+merge :: Int -> (V.Vector ElmT) -> (V.Vector ElmT) -> Par (V.Vector ElmT)
 merge t left right =
         if ((V.length left) < t) || ((V.length right) < t)
         then return $ seqmerge left right
@@ -77,7 +83,7 @@ merge t left right =
  - Additionally, (lIndex + rIndex) should be as close to 
  - (length(left) + length(right))/2 as possible.
  -}
-findSplit :: V.Vector Int -> V.Vector Int -> (Int, Int)
+findSplit :: V.Vector ElmT -> V.Vector ElmT -> (Int, Int)
 findSplit left right = (lIndex, rIndex)
         where
             (lIndex, rIndex) = split 0 (V.length left) 0 (V.length right)
@@ -107,14 +113,14 @@ findSplit left right = (lIndex, rIndex)
 -- Although vector cons is supported, it requires O(n) time. Since list cons
 -- is much faster, we'll build up a list of tuples and use the batch update
 -- for vectors: (//).
-seqmerge :: V.Vector Int -> V.Vector Int -> V.Vector Int
+seqmerge :: V.Vector ElmT -> V.Vector ElmT -> V.Vector ElmT
 seqmerge left right = 
     -- (left V.++ right) V.// (seqhelp 0 left right)
     V.unsafeUpd (V.replicate len 0) (seqhelp 0 left right)
 
     where
         len = (V.length left) + (V.length right)
-        seqhelp :: Int -> V.Vector Int -> V.Vector Int -> [(Int, Int)]
+        seqhelp :: Int -> V.Vector ElmT -> V.Vector ElmT -> [(Int, ElmT)]
         seqhelp n left right = 
             if n >= len
             then []
@@ -126,11 +132,14 @@ seqmerge left right =
             then (n, V.head left)  : seqhelp (n+1) (V.tail left) right
             else (n, V.head right) : seqhelp (n+1) left (V.tail right)
 
--- Create a vector containing the numbers [0,N) in random order.
-randomPermutation :: Int -> StdGen -> V.Vector Int
+----------------------------------------------------------------------------------------------------
+-- Misc Helpers:
+
+-- | Create a vector containing the numbers [0,N) in random order.
+randomPermutation :: Int -> StdGen -> V.Vector ElmT
 randomPermutation len rng = 
   -- Annoyingly there is no MV.generate:
-  V.create (do v <- V.unsafeThaw$ V.generate len id
+  V.create (do v <- V.unsafeThaw$ V.generate len fromIntegral
                loop 0 v rng)
   -- loop 0 (MV.generate len id)
  where 
@@ -141,7 +150,7 @@ randomPermutation len rng =
     MV.swap vec n (n + offset)
     loop (n+1) vec g'
 
-
+-- | Format a large number with commas.
 commaint :: (Show a, Integral a) => a -> String
 commaint n | n < 0 = "-" ++ commaint (-n)
 commaint n = 
@@ -149,11 +158,13 @@ commaint n =
    intersperse "," $ 
    chunk 3 $ reverse (show n)
 
+----------------------------------------------------------------------------------------------------
+
 
 -- Main, based on quicksort main
 -- Usage: ./Main [expt] [threshold]
--- t is threshold to bottom out to sequential sort and sequential merge
--- expt controls the length of the vector to sort (length = 2^expt)
+--   t is threshold to bottom out to sequential sort and sequential merge
+--   expt controls the length of the vector to sort (length = 2^expt)
 main = do args <- getArgs
           let (expt, t) = case args of
                             -- The default size should be very small.
@@ -178,9 +189,14 @@ main = do args <- getArgs
           putStrLn "Executing monad-par based sort..."
           start <- getCurrentTime
           let sorted = runPar $ mergesort t rands
-          putStr "Prefix of sorted list:\n  "
+          putStr "Beginning of sorted list:\n  "
           print $ V.slice 0 8 sorted
           end   <- getCurrentTime
+          putStr "End of sorted list:\n  "
+          print $ V.slice (V.length rands - 8) 8 sorted
+
+          -- TODO: Verify that the output is correct!  (After timing is finished.)
+
           let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
           printf "Sorting vector took %0.3f sec.\n" runningTime
           putStrLn $ "SELFTIMED " ++ show runningTime
