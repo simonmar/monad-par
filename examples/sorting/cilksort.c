@@ -485,12 +485,12 @@ unsigned long long run_cilksort(long size)
 
      if (!success)
 	  printf("SORTING FAILURE");
-     /* else { */
-     /*      printf("\nCilk Example: cilksort\n"); */
-     /*      printf("Number of elements: %ld\n", size); */
-     /*      printf("Executed in: %llu ticks (%f s)\n\n",  */
-     /*             t1, ticks_to_seconds(t1)); */
-     /* } */
+     else {
+          printf("\nCilk Example: cilksort\n");
+          printf("Number of elements: %ld\n", size);
+          printf("Executed in: %llu ticks (%f s)\n\n",
+                 t1, ticks_to_seconds(t1));
+     }
 
      free(array);
      free(tmp);
