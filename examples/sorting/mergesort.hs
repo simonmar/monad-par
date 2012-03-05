@@ -3,6 +3,7 @@ module Main where
 
 import Control.Applicative
 import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.ST
 
 -- #define UNBOXED
@@ -31,6 +32,7 @@ import Text.Printf
 import Data.Vector.Algorithms.Merge (sort)
 
 import Foreign.CUDA.Driver (initialise)
+import Foreign.CUDA.Runtime.Device (reset)
 
 #ifdef PARSCHED 
 import PARSCHED
@@ -105,9 +107,10 @@ cpuMergeSort t cpuMS vec = if V.length vec <= t
 staticMergeSort :: Int                              -- ^ CPU threshold
                 -> Int                              -- ^ GPU threshold
                 -> (V.Vector ElmT -> Par (V.Vector ElmT)) -- ^ sequential CPU sort
+                -> Bool                                   -- ^ blocking GPU?
                 -> V.Vector ElmT                    -- ^ Vector to sort
                 -> Par (V.Vector ElmT)
-staticMergeSort cpuT gpuT cpuMS vec = divide 
+staticMergeSort cpuT gpuT cpuMS isBlocking vec = divide 
   where
     (k, r) = V.length vec `divMod` 1024
     nGPU   = let (k', parity) = k `divMod` 2 in 1024 * (k' + parity)
@@ -133,7 +136,9 @@ staticMergeSort cpuT gpuT cpuMS vec = divide
       merge cpuT left right
 
     mergeGPU vec | V.length vec <= gpuT =
-      get =<< spawnGPUMergeSort vec                       
+      case isBlocking of
+        False -> get =<< spawnGPUMergeSort vec
+        True  -> liftIO $ blockingGPUMergeSort vec
     mergeGPU vec = do
       let n = (V.length vec) `div` 2
       let (lhalf, rhalf) = V.splitAt n vec
@@ -328,6 +333,7 @@ copyOffset from to iFrom iTo len =
 --   mode is one of:
 --     * cpu (parallel cpu sort)
 --     * static (50/50 cpu/gpu work)
+--     * static_blocking (same as static, but GPU calls block par threads)
 --     * dynamic (work stealing between cpu/gpu)
 --   t is threshold to bottom out to sequential sort and sequential merge
 --   expt controls the length of the vector to sort (length = 2^expt)
@@ -347,7 +353,8 @@ main = do args <- getArgs
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
               parComp | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
-                      | mode == "static"  = staticMergeSort t gpuThi seqsort
+                      | mode == "static"  = staticMergeSort t gpuThi seqsort False
+                      | mode == "static_blocking"  = staticMergeSort t gpuThi seqsort True
                       | mode == "cpu"     = cpuMergeSort t seqsort
           initialise []                            
 --          g <- getStdGen
@@ -381,6 +388,8 @@ main = do args <- getArgs
           when (expt <= 4) $ do
             putStrLn$ "  Unsorted: " ++  show rands
             putStrLn$ "  Sorted  : " ++  show sorted
+          -- reset CUDA driver
+          reset
 
 
 -- Needed for Par monad to work with unboxed vectors

@@ -73,7 +73,7 @@ daemonTid = unsafePerformIO $ newHotVar Nothing
 -- spawnMergeSort operator and init/steal definitions to export
 
 blockingGPUMergeSort :: V.Vector Word32 -> IO (V.Vector Word32)
-blockingGPUMergeSort = mergeSort
+blockingGPUMergeSort v = mergeSort v
 
 spawnGPUMergeSort :: V.Vector Word32 -> Par (IVar (V.Vector Word32))
 spawnGPUMergeSort v = do
