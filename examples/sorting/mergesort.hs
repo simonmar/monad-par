@@ -121,33 +121,15 @@ findSplit left right = (lIndex, rIndex)
                     then split lIndex lHigh rLow rIndex
                     else split lLow lIndex rIndex rHigh
 
--- Sequential merge: takes two sorted vectors and merges them in a sequential
+-- | Sequential merge: takes two sorted vectors and merges them in a sequential
 -- fashion.
--- Although vector cons is supported, it requires O(n) time. Since list cons
--- is much faster, we'll build up a list of tuples and use the batch update
--- for vectors: (//).
-seqmerge_pure :: V.Vector ElmT -> V.Vector ElmT -> V.Vector ElmT
-seqmerge_pure left right = 
-    -- (left V.++ right) V.// (seqhelp 0 left right)
-    V.unsafeUpd (V.replicate len 0) (seqhelp 0 left right)
-
-    where
-        len = (V.length left) + (V.length right)
-        seqhelp :: Int -> V.Vector ElmT -> V.Vector ElmT -> [(Int, ElmT)]
-        seqhelp n left right = 
-            if n >= len
-            then []
-            else if V.null left
-            then zip [n..(n + V.length right)] (V.toList right)
-            else if V.null right
-            then zip [n..(n + V.length left)]  (V.toList left)
-            else if (V.head left) < (V.head right)
-            then (n, V.head left)  : seqhelp (n+1) (V.tail left) right
-            else (n, V.head right) : seqhelp (n+1) left (V.tail right)
-
--- | This is an imperative version using the ST monad:
+-- This is an imperative version using the ST monad:
 seqmerge :: V.Vector ElmT -> V.Vector ElmT -> V.Vector ElmT
 seqmerge left_ right_ = 
+--    DT.trace ("seqmerge "++ show (left_, right_)) $
+    -- TODO: Should probably prevent this being called on empty vectors:
+    if V.null left_  then right_ else 
+    if V.null right_ then left_  else 
     V.create $ do
       let lenL = V.length left_
 	  lenR = V.length right_
@@ -157,9 +139,9 @@ seqmerge left_ right_ =
       dest  <- MV.new len      
       -- Ideally this would be replaced with a vectorized sorting
       -- network (e.g. a bitonic network)!
-      let -- loop _ _ _ _ di | di == len = return ...
+      let 
+          -- lx is the element stored in position li of `left`:
 	  loop li lx ri rx di = 
-           DT.trace ("looping "++ show (li,lx,ri,rx,di)) $
             let di' = di+1 in
             if lx < rx then do 
                MV.write dest di lx
@@ -173,13 +155,14 @@ seqmerge left_ right_ =
                MV.write dest di rx
                let ri' = ri+1
                if ri' == lenR then
-		  copyOffset left dest li di (lenL - li)
+		  copyOffset left dest li di' (lenL - li)
                else when (di' < len) $ do
                   rx' <- MV.read right ri'
                   loop li lx ri' rx' di'
       fstL <- MV.read left  0
       fstR <- MV.read right 0
       loop 0 fstL 0 fstR 0
+      froze <- V.freeze dest
       return dest
 
 a = (V.fromList [1,3..9])
@@ -289,3 +272,28 @@ instance Arbitrary (V.Vector Int) where
     arbitrary = do
         ls <- sized (\n -> choose (0, n) >>= vector)
         return (V.fromList ls)
+
+----------------------------------------------------------------------------------------------------
+-- SCRAP:
+
+-- Although vector cons is supported, it requires O(n) time. Since list cons
+-- is much faster, we'll build up a list of tuples and use the batch update
+-- for vectors: (//).
+seqmerge_pure :: V.Vector ElmT -> V.Vector ElmT -> V.Vector ElmT
+seqmerge_pure left right = 
+    -- (left V.++ right) V.// (seqhelp 0 left right)
+    V.unsafeUpd (V.replicate len 0) (seqhelp 0 left right)
+
+    where
+        len = (V.length left) + (V.length right)
+        seqhelp :: Int -> V.Vector ElmT -> V.Vector ElmT -> [(Int, ElmT)]
+        seqhelp n left right = 
+            if n >= len
+            then []
+            else if V.null left
+            then zip [n..(n + V.length right)] (V.toList right)
+            else if V.null right
+            then zip [n..(n + V.length left)]  (V.toList left)
+            else if (V.head left) < (V.head right)
+            then (n, V.head left)  : seqhelp (n+1) (V.tail left) right
+            else (n, V.head right) : seqhelp (n+1) left (V.tail right)
