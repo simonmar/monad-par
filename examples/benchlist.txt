@@ -27,16 +27,16 @@ coins         futures 8 1250
 
 # These don't match the naming convention at the moment.
 matmult/MatMult   futures 768 0 64
+
 sumeuler/sumeuler futures 38 8000 100
 
-sorting/mergesort futures 19 
-
+sorting/mergesort futures 24 8192
 
 # binomial lattice?
 
 
 
-
+# ------------------------------------------------------------
 # TODO: Get distributed benchmarks integrated in here:
 #       Although these should probably go in a separate file.
 # ------------------------------------------------------------
@@ -56,9 +56,6 @@ sorting/mergesort futures 19
 # minimax/minimax futures nested ? ? 
 # minimax/minimax futures monad  ? ? 
 
-# These don't match the naming convention at the moment.
-matmult/MatMult   futures 768 0 64
-sumeuler/sumeuler futures 38 8000 100
 
 # We can measure parfib separately... it shouldn't be part of our
 # benchmark suite.
