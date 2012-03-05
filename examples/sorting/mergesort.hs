@@ -5,8 +5,15 @@ module Main where
 import Control.Monad
 import Control.Monad.ST
 -- TODO: switch
+#define UNBOXED
+#ifdef UNBOXED
 import qualified Data.Vector.Unboxed as V 
 import qualified Data.Vector.Unboxed.Mutable as MV
+#else
+import qualified Data.Vector.Storable as V 
+import qualified Data.Vector.Storable.Mutable as MV
+#endif
+
 import qualified Debug.Trace as DT
 
 import System.Random
@@ -38,16 +45,22 @@ thawit  x     = V.unsafeThaw   x
 newMV   x     = MV.unsafeNew   x
 readMV  x y   = MV.unsafeRead  x y
 writeMV x y z = MV.unsafeWrite x y z
+sliceMV x y z = MV.unsafeSlice x y z
+copyMV  x y   = MV.unsafeCopy  x y 
 #else
 thawit  x     = V.thaw   x
 newMV   x     = MV.new   x
 readMV  x y   = MV.read  x y
 writeMV x y z = MV.write x y z
+sliceMV x y z = MV.slice x y z
+copyMV  x y   = MV.copy  x y 
 #endif
 {-# INLINE thawit #-}
 {-# INLINE newMV #-}
 {-# INLINE readMV #-}
 {-# INLINE writeMV #-}
+{-# INLINE sliceMV #-}
+{-# INLINE copyMV #-}
 
 
 ----------------------------------------------------------------------------------------------------
@@ -58,7 +71,8 @@ writeMV x y z = MV.write x y z
 -- | Wrapper for sorting immutable vectors:
 seqsort :: V.Vector ElmT -> V.Vector ElmT
 seqsort v = V.create $ do 
-                mut <- thawit v
+--                mut <- thawit v
+                mut <- V.thaw v
                 -- This is the pure-haskell sort on mutable vectors
                 -- from the vector-algorithms package:
                 sort mut
@@ -178,7 +192,6 @@ seqmerge left_ right_ =
       fstL <- MV.read left  0
       fstR <- MV.read right 0
       loop 0 fstL 0 fstR 0
-      froze <- V.freeze dest
       return dest
 
 
@@ -215,8 +228,8 @@ commaint n =
 --            => v (PrimState m) e -> v (PrimState m) e -> Int -> Int -> Int -> m ()
 copyOffset :: MV.MVector s ElmT -> MV.MVector s ElmT -> Int -> Int -> Int -> ST s ()
 copyOffset from to iFrom iTo len =
-  MV.unsafeCopy (MV.unsafeSlice iTo len to) 
-	        (MV.unsafeSlice iFrom len from)
+  copyMV (sliceMV iTo len to)
+	 (sliceMV iFrom len from)
 {-# INLINE copyOffset #-}
 
 
