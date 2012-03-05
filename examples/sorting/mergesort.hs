@@ -1,11 +1,10 @@
-{-# LANGUAGE CPP #-}
-{-# OPTIONS_GHC -XFlexibleInstances #-}
+{-# LANGUAGE CPP, FlexibleInstances #-}
 module Main where
 
 import Control.Monad
 import Control.Monad.ST
--- TODO: switch
-#define UNBOXED
+
+-- #define UNBOXED
 #ifdef UNBOXED
 import qualified Data.Vector.Unboxed as V 
 import qualified Data.Vector.Unboxed.Mutable as MV
@@ -28,12 +27,14 @@ import Data.List (intersperse)
 import Data.Word (Word32)
 import Data.Time.Clock
 import Text.Printf
-import Data.Vector.Algorithms.Intro (sort)
+import Data.Vector.Algorithms.Merge (sort)
+
+import Foreign.CUDA.Driver (initialise)
 
 #ifdef PARSCHED 
 import PARSCHED
 #else
-import Control.Monad.Par (runPar, spawn_, get, Par)
+import Control.Monad.Par.Meta.SMPMergeSort
 #endif
 
 -- Element type being sorted:
@@ -68,9 +69,9 @@ copyMV  x y   = MV.copy  x y
 -- import System.Random.Mersenne
 -- import Random.MWC.Pure (seed, range_random)
 
--- | Wrapper for sorting immutable vectors:
-seqsort :: V.Vector ElmT -> V.Vector ElmT
-seqsort v = V.create $ do 
+-- | Vector.Algorithms sort
+seqsort :: V.Vector ElmT -> Par (V.Vector ElmT)
+seqsort v = return $ V.create $ do 
 --                mut <- thawit v
                 mut <- V.thaw v
                 -- This is the pure-haskell sort on mutable vectors
@@ -78,18 +79,84 @@ seqsort v = V.create $ do
                 sort mut
                 return mut
 
+-- | Sequential Cilk sort
+cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkSeqSort v = undefined
+
+-- | Cilk sort using the Cilk runtime, meant to trigger
+-- oversubscription
+cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkRuntimeSort v = undefined
+
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
-mergesort :: Int -> V.Vector ElmT -> Par (V.Vector ElmT)
-mergesort t vec = if V.length vec <= t
-                  then return $ seqsort vec
-                  else do
+cpuMergeSort :: Int -> (V.Vector ElmT -> Par (V.Vector ElmT)) -> V.Vector ElmT -> Par (V.Vector ElmT)
+cpuMergeSort t cpuMS vec = if V.length vec <= t
+                           then cpuMS vec
+                           else do
                       let n = (V.length vec) `div` 2
                       let (lhalf, rhalf) = V.splitAt n vec
-                      ileft <- spawn_ (mergesort t lhalf)
-                      right <-         mergesort t rhalf
+                      ileft <- spawn_ (cpuMergeSort t cpuMS lhalf)
+                      right <-         cpuMergeSort t cpuMS rhalf
                       left  <- get ileft
                       merge t left right
+
+staticMergeSort :: Int                              -- ^ CPU threshold
+                -> Int                              -- ^ GPU threshold
+                -> (V.Vector ElmT -> Par (V.Vector ElmT)) -- ^ sequential CPU sort
+                -> V.Vector ElmT                    -- ^ Vector to sort
+                -> Par (V.Vector ElmT)
+staticMergeSort cpuT gpuT cpuMS vec = divide 
+  where
+    (k, r) = V.length vec `divMod` 1024
+    nGPU   = let (k', parity) = k `divMod` 2 in 1024 * (k' + parity)
+    divide = do
+      let (gpuHalf, cpuHalf) = V.splitAt nGPU vec
+      case (V.length gpuHalf, V.length cpuHalf) of
+        (0, 0) -> return V.empty
+        (0, _) -> mergeCPU cpuHalf
+        (_, 0) -> mergeGPU gpuHalf
+        _ -> do
+          ileft <- spawn_ (mergeCPU cpuHalf)
+          right <-         mergeGPU gpuHalf
+          left  <- get ileft
+          merge cpuT left right
+
+    mergeCPU vec | V.length vec <= cpuT = cpuMS vec
+                 | otherwise         = do
+      let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- spawn_ (mergeCPU lhalf)
+      right <-         mergeCPU rhalf
+      left  <- get ileft
+      merge cpuT left right
+
+    mergeGPU vec | V.length vec <= gpuT =
+      get =<< spawnGPUMergeSort vec                       
+    mergeGPU vec = do
+      let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- spawn_ (mergeGPU lhalf)
+      right <-         mergeGPU rhalf
+      left  <- get ileft
+      merge cpuT left right
+            
+
+dynamicMergeSort :: Int                                    -- ^ CPU threshold
+                 -> Int                                    -- ^ GPU threshold
+                 -> (V.Vector ElmT -> Par (V.Vector ElmT)) -- ^ sequential CPU sort
+                 -> V.Vector ElmT                          -- ^ Vector to sort
+                 -> Par (V.Vector ElmT)
+dynamicMergeSort cpuT gpuT cpuMS vec | V.length vec <= gpuT =
+  get =<< spawnCPUGPUMergeSort (cpuMergeSort cpuT cpuMS) vec
+dynamicMergeSort cpuT gpuT cpuMS vec = do
+  let n = (V.length vec) `div` 2
+  let (lhalf, rhalf) = V.splitAt n vec
+  ileft <- spawn_ (dynamicMergeSort cpuT gpuT cpuMS lhalf)
+  right <-        (dynamicMergeSort cpuT gpuT cpuMS rhalf)
+  left  <- get ileft
+  merge cpuT left right
+
 
 -- If either list has length less than t, use sequential merge. Otherwise:
 --   1. Find the median of the two combined lists using findSplit
@@ -189,8 +256,8 @@ seqmerge left_ right_ =
                 else when (di' < len) $ do
                   rx' <- readMV right ri'
                   loop li lx ri' rx' di'
-      fstL <- MV.read left  0
-      fstR <- MV.read right 0
+      fstL <- readMV left  0
+      fstR <- readMV right 0
       loop 0 fstL 0 fstR 0
       return dest
 
@@ -241,14 +308,18 @@ copyOffset from to iFrom iTo len =
 --   t is threshold to bottom out to sequential sort and sequential merge
 --   expt controls the length of the vector to sort (length = 2^expt)
 main = do args <- getArgs
-          let (expt, t) = case args of
-                            -- The default size should be very small.
-                            -- Just for testing, not for benchmarking:
-                            []     -> (10, 2)
---                            [n]    -> (read n, 1024)
-                            [n]    -> (read n, 8192)
-                            [n, t] -> (read n, read t)
-
+          let (mode, expt, t) =
+                  case args of
+                    -- The default size should be very small.
+                    -- Just for testing, not for benchmarking:
+                    []     -> ("dynamic", 10, 2)
+                    [mode, n]    -> (mode, read n, 8192)
+                    [mode, n, t] -> (mode, read n, read t)
+              gpuT = fromIntegral $ floor (2 ** 22)
+              parComp | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
+                      | mode == "static"  = staticMergeSort t gpuT seqsort
+                      | mode == "cpu"     = cpuMergeSort t seqsort
+          initialise []                            
           g <- getStdGen
 
           putStrLn $ "Merge sorting " ++ commaint (2^expt) ++ 
@@ -264,7 +335,7 @@ main = do args <- getArgs
 
           putStrLn "Executing monad-par based sort..."
           start <- getCurrentTime
-          let sorted = runPar $ mergesort t rands
+          let sorted = runPar $ parComp rands
           putStr "Beginning of sorted list:\n  "
           print $ V.slice 0 8 sorted
           end   <- getCurrentTime
