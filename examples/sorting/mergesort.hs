@@ -164,7 +164,7 @@ seqmerge left_ right_ =
                let li' = li+1
                if li' == lenL then
 		  copyOffset right dest ri di' (lenR - ri)
-               else when (di' < len) $ do
+                else when (di' < len) $ do
                   lx' <- readMV left li'
                   loop li' lx' ri rx di'
             else do 
@@ -172,7 +172,7 @@ seqmerge left_ right_ =
                let ri' = ri+1
                if ri' == lenR then
 		  copyOffset left dest li di' (lenL - li)
-               else when (di' < len) $ do
+                else when (di' < len) $ do
                   rx' <- readMV right ri'
                   loop li lx ri' rx' di'
       fstL <- MV.read left  0

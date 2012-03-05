@@ -24,7 +24,8 @@ import Prelude hiding (mapM, sequence, head,tail)
 
 -- -----------------------------------------------------------------------------
 
-{-# INLINABLE fork #-}
+-- Not in 6.12: {- INLINABLE fork -}
+{-# INLINE fork #-}
 fork :: Par () -> Par ()
 fork p = Par $ \c -> Fork (runCont p (\_ -> Done)) (c ())
 
