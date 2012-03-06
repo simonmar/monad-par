@@ -27,8 +27,8 @@
    -- Command "./benchmark.hs"
    -- We have so many problems trying to use runhaskell that it's easier to compile:
 --   Command "ghc-7.0.4 --make ./benchmark.hs && ./benchmark"
-   Command "(cd ..; cabal configure --with-ghc=ghc-7.4.1 && cabal build --with-ghc=ghc-7.4.1) && ghc-7.4.1 -threaded -rtsopts --make ./benchmark.hs && ./benchmark --par +RTS -N4",
+   Command "(cd ..; cabal configure --with-ghc=ghc-7.4.1 && cabal build --with-ghc=ghc-7.4.1) && ghc-7.4.1 -threaded -rtsopts --make ./benchmark.hs && ./benchmark --par +RTS -N4"
 
    -- If set it will clone from the server, otherwise from the working directory:
---   GitRepo "git@github.iu.edu:rrnewton/monad-par-mirror.git" "meta" "examples/"
+-- , GitRepo "git@github.iu.edu:rrnewton/monad-par-mirror.git" "meta" "examples/"
 ]
