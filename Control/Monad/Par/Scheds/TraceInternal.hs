@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ParallelListComp
 	     #-}
-{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
+{- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind -}
 
 -- | This module exposes the internals of the @Par@ monad so that you
 -- can build your own scheduler or other extensions.  Do not use this

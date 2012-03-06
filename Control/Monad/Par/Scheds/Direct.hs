@@ -3,7 +3,8 @@
              TypeSynonymInstances, MultiParamTypeClasses,
              GeneralizedNewtypeDeriving, PackageImports
 	     #-}
-{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
+
+{- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind -}
 
 -- {- LANGUAGE Trustworthy -}
 -- TODO: Before declaring this module TRUSTWORTHY/SAFE, we need to

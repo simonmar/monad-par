@@ -1,7 +1,7 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, MultiParamTypeClasses, CPP
 	     #-}
-{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
+{- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports -}
 
 {- | This is the scheduler described in the paper "A Monad for
      Deterministic Parallelism".  It is based on a lazy @Trace@ data
