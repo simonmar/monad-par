@@ -334,6 +334,12 @@ copyOffset from to iFrom iTo len =
 
 ----------------------------------------------------------------------------------------------------
 
+isMode "cpu"     = True
+isMode "dynamic" = True
+isMode "static"  = True
+isMode "static_blocking" = True
+isMode _         = False
+
 
 -- | Main, based on quicksort main
 -- Usage: ./Main [mode] [expt] [threshold] [gpulo expt] [gpuhi expt]
@@ -352,10 +358,13 @@ main = do args <- getArgs
                     -- The default size should be very small.
                     -- Just for testing, not for benchmarking:
                     []     -> ("dynamic", 16, 22, 10, 2)
+
+                    -- "Dynamic partitioning takes extra arguments:"
                     ["dynamic", n, t, lo, hi] 
                            -> ("dynamic", (read lo), (read hi), (read n), (read t))
-                    [mode, n]    -> (mode, 16, 22, read n, 8192)
-                    [mode, n, t] -> (mode, 16, 22, read n, read t)
+                    [mode, n]    | isMode mode -> (mode, 16, 22, read n, 8192)
+                    [mode, n, t] | isMode mode -> (mode, 16, 22, read n, read t)
+
               gpuThi = 2 ^ (min 22 hi)
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)

@@ -30,7 +30,7 @@ matmult/MatMult   futures 768 0 64
 
 sumeuler/sumeuler futures 38 8000 100
 
-sorting/mergesort futures 24 8192
+sorting/mergesort futures cpu 24 8192
 
 # binomial lattice?
 
