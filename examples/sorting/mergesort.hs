@@ -17,7 +17,7 @@ import qualified Data.Vector.Storable.Mutable as MV
 
 import qualified Debug.Trace as DT
 
-import System.Random.MWC
+import System.Random.MWC (create, uniformVector, uniformR)
 
 import System.Environment
 import Control.Exception
@@ -292,27 +292,33 @@ seqmerge left_ right_ =
 ----------------------------------------------------------------------------------------------------
 -- Misc Helpers:
 
-
+#if 0
+-- RRN: This appears to space leak:
 mkRandomVec :: Int -> IO (V.Vector ElmT)
 mkRandomVec n = do
   g <- create
   uniformVector g n :: IO (V.Vector ElmT)
 -- mkRandomVec n = withSystemRandom $ \g -> uniformVector g n :: IO (V.Vector ElmT)
 
+#else 
 -- | Create a vector containing the numbers [0,N) in random order.
--- randomPermutation :: Int -> StdGen -> V.Vector ElmT
+mkRandomVec :: Int -> IO (V.Vector ElmT)
+mkRandomVec len = return $ 
+  -- Annoyingly there is no MV.generate:
+  V.create (do g <- create
+               v <- thawit$ V.generate len fromIntegral
+               loop 0 v g)
+ where 
+  -- Note: creating 2^24 elements takes 1.6 seconds under -O2 but 36
+  -- seconds under -O0.  This sorely needs optimization!
+  loop n vec g | n == len  = return vec
+	       | otherwise = do 
+--    let (offset,g') = randomR (0, len - n - 1) g
+    offset <- uniformR (0, len - n - 1) g
+    MV.swap vec n (n + offset)
+    loop (n+1) vec g
+#endif
 
--- randomPermutation len rng = 
---   -- Annoyingly there is no MV.generate:
---   V.create (do v <- thawit$ V.generate len fromIntegral
---                loop 0 v rng)
---   -- loop 0 (MV.generate len id)
---  where 
---   loop n vec g | n == len  = return vec
--- 	       | otherwise = do 
---     let (offset,g') = randomR (0, len - n - 1) g
---     MV.swap vec n (n + offset)
---     loop (n+1) vec g'
 
 -- | Format a large number with commas.
 commaint :: (Show a, Integral a) => a -> String
@@ -357,7 +363,8 @@ main = do args <- getArgs
                   case args of
                     -- The default size should be very small.
                     -- Just for testing, not for benchmarking:
-                    []     -> ("dynamic", 16, 22, 10, 2)
+--                    []     -> ("dynamic", 16, 22, 10, 2)
+                    []     -> ("cpu", 16,22, 10, 32)
 
                     -- "Dynamic partitioning takes extra arguments:"
                     ["dynamic", n, t, lo, hi] 

@@ -14,6 +14,7 @@ BENCHMARKS= queens.hs mandel.hs blackscholes.hs nbody.hs \
             primes.hs cholesky/cholesky.hs coins.hs \
             quicksort/parquicksort_monad.hs quicksort/parquicksort_pseq.hs \
             sumeuler/sumeuler.hs \
+            sorting/mergesort.hs \
             matmult/MatMult.hs \
             minimax/Main.hs \
             stream/simple1_measureSrc.hs \
@@ -43,7 +44,7 @@ dist: $(DISTEXES)
 
 %.exe : %.hs $(ALLPARSRC)
 	@echo "Building executable: $@"
-	$(GHC) $(GHC_FLAGS) --make -i.. -i$(shell dirname $<) $< -o $@ -rtsopts
+	$(GHC) -DPARSCHED=Control.Monad.Par.Scheds.Direct $(GHC_FLAGS) --make -i.. -i$(shell dirname $<) $< -o $@ -rtsopts
 
 # ================================================================================
 # Testing:
