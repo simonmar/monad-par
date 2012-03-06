@@ -31,13 +31,13 @@ import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Merge (sort)
 
-import Foreign.CUDA.Driver (initialise)
-import Foreign.CUDA.Runtime.Device (reset)
-
 #ifdef PARSCHED 
 import PARSCHED
 #else
 import Control.Monad.Par.Meta.SMPMergeSort
+import Foreign.CUDA.Driver    (initialise)
+import Foreign.CUDA.Runtime.Device (reset)
+#define GPU_ENABLED
 #endif
 
 -- Element type being sorted:
@@ -66,7 +66,7 @@ copyMV  x y   = MV.copy  x y
 {-# INLINE sliceMV #-}
 {-# INLINE copyMV #-}
 
-
+-- A zoo of mergesort variations!
 ----------------------------------------------------------------------------------------------------
 
 -- import System.Random.Mersenne
@@ -104,6 +104,16 @@ cpuMergeSort t cpuMS vec = if V.length vec <= t
                       left  <- get ileft
                       merge t left right
 
+type RangedThreshold = (Int, Int)            
+
+inRange :: Int -> RangedThreshold -> Bool
+inRange n (lo, hi) = lo <= n && n <= hi
+
+belowRange :: Int -> RangedThreshold -> Bool
+belowRange n (lo, _) = lo > n
+
+#ifdef GPU_ENABLED
+-- | This one statically does HALF the work on the GPU and HALF on the CPU.
 staticMergeSort :: Int                              -- ^ CPU threshold
                 -> Int                              -- ^ GPU threshold
                 -> (V.Vector ElmT -> Par (V.Vector ElmT)) -- ^ sequential CPU sort
@@ -126,6 +136,7 @@ staticMergeSort cpuT gpuT cpuMS isBlocking vec = divide
           left  <- get ileft
           merge cpuT left right
 
+    -- | All leaves bottom out to cpu mergesort:
     mergeCPU vec | V.length vec <= cpuT = cpuMS vec
                  | otherwise         = do
       let n = (V.length vec) `div` 2
@@ -135,6 +146,7 @@ staticMergeSort cpuT gpuT cpuMS isBlocking vec = divide
       left  <- get ileft
       merge cpuT left right
 
+    -- | All leaves bottom out to GPU (blocking or not):
     mergeGPU vec | V.length vec <= gpuT =
       case isBlocking of
         False -> get =<< spawnGPUMergeSort vec
@@ -147,13 +159,6 @@ staticMergeSort cpuT gpuT cpuMS isBlocking vec = divide
       left  <- get ileft
       merge cpuT left right
 
-type RangedThreshold = (Int, Int)            
-
-inRange :: Int -> RangedThreshold -> Bool
-inRange n (lo, hi) = lo <= n && n <= hi
-
-belowRange :: Int -> RangedThreshold -> Bool
-belowRange n (lo, _) = lo > n
 
 -- | Dynamic work-stealing sort; assumes that subproblems are split
 -- into multiples of 1024.
@@ -173,6 +178,8 @@ dynamicMergeSort cpuT gpuT cpuMS vec = do
   right <-        (dynamicMergeSort cpuT gpuT cpuMS rhalf)
   left  <- get ileft
   merge cpuT left right
+
+#endif // End if GPU_ENABLED
 
 
 -- If either list has length less than t, use sequential merge. Otherwise:
@@ -346,17 +353,21 @@ main = do args <- getArgs
                     -- Just for testing, not for benchmarking:
                     []     -> ("dynamic", 16, 22, 10, 2)
                     ["dynamic", n, t, lo, hi] 
-                        -> ("dynamic", (read lo), (read hi), (read n), (read t))
+                           -> ("dynamic", (read lo), (read hi), (read n), (read t))
                     [mode, n]    -> (mode, 16, 22, read n, 8192)
                     [mode, n, t] -> (mode, 16, 22, read n, read t)
               gpuThi = 2 ^ (min 22 hi)
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
-              parComp | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
+              parComp 
+                      | mode == "cpu"     = cpuMergeSort t seqsort
+#ifdef GPU_ENABLED
+                      | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
                       | mode == "static"  = staticMergeSort t gpuThi seqsort False
                       | mode == "static_blocking"  = staticMergeSort t gpuThi seqsort True
-                      | mode == "cpu"     = cpuMergeSort t seqsort
-          initialise []                            
+
+          initialise [] -- CUDA initialize.
+#endif
 --          g <- getStdGen
 
           putStrLn $ "Merge sorting " ++ commaint (2^expt) ++ 
@@ -388,8 +399,10 @@ main = do args <- getArgs
           when (expt <= 4) $ do
             putStrLn$ "  Unsorted: " ++  show rands
             putStrLn$ "  Sorted  : " ++  show sorted
+#ifdef GPU_ENABLED
           -- reset CUDA driver
           reset
+#endif
 
 
 -- Needed for Par monad to work with unboxed vectors
