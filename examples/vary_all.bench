@@ -1,0 +1,36 @@
+
+
+-- Benchmark: Vary ALL relevant garbage collector knobs.
+--
+
+[  
+   Vary (RTS "-A") ["256K", "512K", "1M", "2M"],
+   Vary (RTS "-H") ["0", "128M", "256M", "512M", "1G"],
+--   Vary (RTS "")   ["", "-qa","-qm"]
+   Vary (RTS "")   ["", "-qa"],
+   Vary (RTS "")   ["-qb", "-qb0", "-qb1"],
+   Vary (RTS "")   ["-qg", "-qg0", "-qg1"],
+   Set (RTS "-s")  "",
+   Set (Compile "-O")  "2",
+
+   -- Next, set up the environment for benchmark.hs:
+   -- For now all the relevant info is passed through environment vars:
+--   Vary (EnvVar "GHC") ["ghc-7.0.4","ghc-7.2.1", "ghc-7.4.1"],
+   Set (EnvVar "GHC") "ghc-7.4.1",
+   Set (EnvVar "TRIALS")  "3",
+   -- For THREADS, the "Vary" is implicit:
+   Set (EnvVar "THREADS") "0 1 2 3 4",
+   Set (EnvVar "KEEPGOING") "1",
+   Set (EnvVar "SCHEDS")   "Trace Direct Sparks SMP",
+
+   Set (EnvVar "BENCHLIST") "clusterbench1.txt",
+
+   -- Command "./benchmark.hs"
+   -- We have so many problems trying to use runhaskell that it's easier to compile:
+--   Command "ghc-7.0.4 --make ./benchmark.hs && ./benchmark"
+--   Command "ghc-7.4.1 --make ./benchmark.hs && ./benchmark", 
+   Command "ls"
+
+   -- If set it will clone from the server, otherwise from the working directory:
+--   GitRepo "git@github.iu.edu:rrnewton/monad-par-mirror.git" "meta" "examples/"
+]

@@ -9,4 +9,4 @@
 	url = git@github.com:rrnewton/monad-par-results.git
 [submodule "distributed-process"]
 	path = distributed-process
-	url = https://rrnewton@github.com/haskell-distributed/distributed-process.git
+	url = https://github.com/haskell-distributed/distributed-process.git
