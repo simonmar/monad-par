@@ -1,7 +1,10 @@
 GHC=ghc
 CC=icc
 
-all: cilkWrap 
+all: cilkWrap mergesort
+
+mergesort: mergesort.hs cilksort-nomain.o
+	$(GHC) --make $^ -lm -lcilkrts -lirc -limf -o $@
 
 cilksort: cilksort.o
 	$(CC) -Wall $^ -o $@
