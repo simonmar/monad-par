@@ -199,6 +199,11 @@ void seqquick(ELM *low, ELM *high)
      insertion_sort(low, high);
 }
 
+void wrap_seqquick(ELM *low, long len)
+{
+    seqquick(low, low + len);
+}
+
 void seqmerge(ELM *low1, ELM *high1, ELM *low2, ELM *high2,
 	      ELM *lowdest)
 {
