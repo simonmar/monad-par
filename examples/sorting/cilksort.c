@@ -60,7 +60,7 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef long ELM;
+typedef uint32_t ELM;
 
 /* MERGESIZE must be >= 2 */
 #define KILO 1024

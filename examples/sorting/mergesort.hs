@@ -45,9 +45,11 @@ import Foreign.CUDA.Runtime.Device (reset)
 
 import Foreign.Ptr
 import Foreign.C.Types
+import Foreign.Marshal.Array (allocaArray)
 
 -- Element type being sorted:
-type ElmT = Word32
+type ElmT  = Word32
+type CElmT = CUInt
 
 -- Here we can choose safe or unsafe operations:
 #ifndef SAFE
@@ -89,28 +91,27 @@ seqsort v = return $ V.create $ do
                 return mut
 
 foreign import ccall unsafe "wrap_seqquick"
-  c_seqquick :: Ptr CLong -> CLong -> IO (Ptr CLong)
+  c_seqquick :: Ptr CElmT -> CLong -> IO (Ptr CElmT)
 
 -- | Sequential Cilk sort
 -- cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
 cilkSeqSort v = do
-  mutv <- thawit v
+  mutv <- V.thaw v
   MV.unsafeWith mutv $ \vptr ->
     c_seqquick (castPtr vptr) (fromIntegral $ V.length v)
   V.unsafeFreeze mutv
 
 foreign import ccall unsafe "wrap_cilksort"
-  c_cilksort ::  Ptr CLong -> Ptr CLong -> CLong -> IO CLong
+  c_cilksort ::  Ptr CElmT -> Ptr CElmT -> CLong -> IO CLong
 
 -- | Cilk sort using the Cilk runtime, meant to trigger
 -- oversubscription
--- cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkRuntimeSort v = do
-    mutv <- thawit v
-    mutt <- thawit v -- cilksort needs a temporary array
+cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkRuntimeSort v = liftIO $ do
+    mutv <- V.thaw v
     MV.unsafeWith mutv $ \vptr ->
-      MV.unsafeWith mutt $ \tptr ->
-      c_cilksort (castPtr vptr) (castPtr tptr) (fromIntegral $ V.length v)
+      allocaArray (V.length v) $ \tptr ->
+        c_cilksort (castPtr vptr) tptr (fromIntegral $ V.length v)
     V.unsafeFreeze mutv  
 
 -- Merge sort for a Vector using the Par monad
