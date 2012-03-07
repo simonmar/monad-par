@@ -10,7 +10,7 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import System.IO
 import System.IO.Unsafe
-
+import KMeansCommon
 import Control.Applicative
 import Control.Monad.IO.Class (liftIO)
 import Data.Array
@@ -130,88 +130,6 @@ makeNewClusters arr =
                         -- no points.  This can happen when a cluster is not
                         -- close to any points.  If we leave these in, then
                         -- the NaNs mess up all the future calculations.
-
-
------------------------------------------------------------
--- from KMeansCommon
-
--- change vectorSize to control how many dimensions Point has and then
--- recompile
-vectorSize :: Int
-vectorSize = 50
-
-type Point = SV.Vector Double
-
-data Cluster = Cluster
-               {
-                  clId    :: {-#UNPACK#-}!Int,
-                  clCount :: {-#UNPACK#-}!Int,
-                  clSum   :: !Point,
-                  clCent  :: !Point
-               } deriving (Show,Read,Typeable,Data,Eq)
-
-instance Ser.Serialize Cluster where
-  put Cluster{ clId, clCount, clSum, clCent } =
-    Ser.put clId >> Ser.put clCount >> Ser.put clSum >> Ser.put clCent
-  get = Cluster <$> Ser.get <*> Ser.get <*> Ser.get <*> Ser.get
-
-
-instance NFData Cluster  -- default should be fine
-
-sqDistance :: Point -> Point -> Double
-sqDistance p1 p2 =
-   foldl' (\a i -> a + ((p1 SV.! i) - (p2 SV.! i)) ^ 2) 0 [0..vectorSize-1] :: Double
-
-makeCluster :: Int -> [Point] -> Cluster
-makeCluster clid pts
-   = Cluster { clId = clid,
-               clCount = count,
-               clSum = vecsum,
-               clCent = centre
-             }
-   where vecsum = foldl' addPoint zeroPoint pts
-         centre = SV.map (\a -> a / fromIntegral count) vecsum
-         count = length pts
-
-combineClusters c1 c2 =
-  Cluster {clId = clId c1,
-           clCount = count,
-           clSum = vecsum,
-           clCent = centre }
-  where count = clCount c1 + clCount c2
-        centre = SV.map (\a -> a / fromIntegral count) vecsum
-        vecsum = addPoint (clSum c1) (clSum c2)
-
-addPoint p1 p2 = SV.imap (\i v -> v + (p2 SV.! i)) p1
-zeroPoint = SV.replicate vectorSize 0
-
-genChunk :: Int -> Int -> IO (V.Vector Point)
-genChunk id n = do
-  g <- initialize $ SV.singleton $ fromIntegral id
-  V.replicateM n (SV.replicateM vectorSize (uniform g))
-
--- getPoints :: FilePath -> IO [Point]
--- getPoints fp = do c <- readFile fp
---                   return $ read c
-
-genCluster :: Int -> IO Cluster
-genCluster id = do
-  g <- initialize (SV.singleton (fromIntegral $ -1 * id))
-  centre <- SV.replicateM vectorSize (uniform g)
-  return (Cluster id 0 centre centre)
-
-getClusters :: FilePath -> IO [Cluster]
-getClusters fp = do c <- readFile fp
-                    return $ read c
-
---readPoints :: FilePath -> IO [Point]
---readPoints f = do
---  s <- B.readFile f
---  let ls = map B.words $ B.lines s
---      points = [ Point (read (B.unpack sx)) (read (B.unpack sy))
---               | (sx:sy:_) <- ls ]
---
---  return points
 
 remotable ['splitChunks]
 
