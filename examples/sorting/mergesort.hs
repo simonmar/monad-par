@@ -182,7 +182,7 @@ dynamicMergeSort cpuT gpuT cpuMS vec = do
   left  <- get ileft
   merge cpuT left right
 
-#endif // End if GPU_ENABLED
+#endif /* End if GPU_ENABLED */
 
 
 -- If either list has length less than t, use sequential merge. Otherwise:
