@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP, FlexibleInstances #-}
+{-# LANGUAGE ForeignFunctionInterface #-}
 module Main where
 
 import Control.Applicative
@@ -43,6 +44,9 @@ import Foreign.CUDA.Driver    (initialise)
 import Foreign.CUDA.Runtime.Device (reset)
 #endif
 
+import Foreign.Ptr
+import Foreign.C.Types
+
 -- Element type being sorted:
 type ElmT = Word32
 
@@ -85,14 +89,29 @@ seqsort v = return $ V.create $ do
                 sort mut
                 return mut
 
+foreign import ccall unsafe "wrap_seqquick"
+  c_seqquick :: Ptr CLong -> CLong -> IO (Ptr CLong)
+
 -- | Sequential Cilk sort
-cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkSeqSort v = undefined
+-- cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkSeqSort v = do
+  mutv <- thawit v
+  MV.unsafeWith mutv $ \vptr ->
+    c_seqquick (castPtr vptr) (fromIntegral $ V.length v)
+
+foreign import ccall unsafe "wrap_cilksort"
+  c_cilksort ::  Ptr CLong -> Ptr CLong -> CLong -> IO CLong
 
 -- | Cilk sort using the Cilk runtime, meant to trigger
 -- oversubscription
-cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkRuntimeSort v = undefined
+-- cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkRuntimeSort v = do
+    mutv <- thawit v
+    mutt <- thawit v -- cilksort needs a temporary array
+    MV.unsafeWith mutv $ \vptr ->
+      MV.unsafeWith mutt $ \tptr ->
+      c_cilksort (castPtr vptr) (castPtr tptr) (fromIntegral $ V.length v)
+    V.unsafeFreeze mutv  
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
