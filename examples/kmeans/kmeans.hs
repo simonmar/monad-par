@@ -17,11 +17,13 @@
 --   $ ./kmeans-par par 600 +RTS -N4
 
 import System.IO
+import System.IO.Unsafe
 import KMeansCommon
 import Data.Array
 import Text.Printf
 import Data.List
 import Data.Function
+import qualified Data.Vector as V
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
 import Control.Monad.Par as Par
@@ -30,23 +32,18 @@ import System.Environment
 import Data.Time.Clock
 import Control.Exception
 import System.Random.Mersenne
+import Control.Monad
+
+nClusters = 4
 
 main = do
-  clusters <- getClusters "kmeans-clusters"
-  printf "%d clusters read\n" (length clusters)
-  rs <- newMTGen (Just 42) >>= randoms :: IO [Double]
-  let nclusters = length clusters
   args <- getArgs
   t0 <- getCurrentTime
-  let points = case args of
-                [_, _, npts] -> genPoints rs (read npts)
-                _        -> genPoints rs 21
-  evaluate (length points)
-  printf "%d points generated\n" (length points)
   final_clusters <- case args of
-   ["strat",n, _] -> kmeans_strat (read n) nclusters points clusters
-   ["par",n, _] -> kmeans_par (read n) nclusters points clusters
-   _other -> kmeans_par 5 nclusters points clusters
+-- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
+   [nChunks, chunkSize] ->
+     kmeans_par (read nChunks) (read chunkSize)
+   _other -> kmeans_par 2 14
   t1 <- getCurrentTime
   print final_clusters
   printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
@@ -55,72 +52,42 @@ main = do
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (sequential)
 
-kmeans_seq :: Int -> [Point] -> [Cluster] -> IO [Cluster]
-kmeans_seq nclusters points clusters = do
-  let
-      loop :: Int -> [Cluster] -> IO [Cluster]
-      loop n clusters | n > tooMany = do printf "giving up."; return clusters
-      loop n clusters = do
-      --hPrintf stderr "iteration %d\n" n
-      --hPutStr stderr (unlines (map show clusters))
-        let clusters' = step nclusters clusters points
-        if clusters' == clusters
-           then do
-               printf "%d iterations\n" n
-               return clusters
-           else loop (n+1) clusters'
-  --
-  loop 0 clusters
+-- kmeans_seq :: Int -> [Cluster] -> IO [Cluster]
+-- kmeans_seq nclusters points clusters = do
+--   let
+--       loop :: Int -> [Cluster] -> IO [Cluster]
+--       loop n clusters | n > tooMany = do printf "giving up."; return clusters
+--       loop n clusters = do
+--       --hPrintf stderr "iteration %d\n" n
+--       --hPutStr stderr (unlines (map show clusters))
+--         let clusters' = step nclusters clusters points
+--         if clusters' == clusters
+--            then do
+--                printf "%d iterations\n" n
+--                return clusters
+--            else loop (n+1) clusters'
+--   --
+--   loop 0 clusters
 
 tooMany = 50
 
 -- -----------------------------------------------------------------------------
--- K-Means: repeatedly step until convergence (Strategies)
-
-split :: Int -> [a] -> [[a]] 
-split numChunks l = splitSize (ceiling $ fromIntegral (length l) / fromIntegral numChunks) l
-   where
-      splitSize _ [] = []
-      splitSize i v = take i v : splitSize i (drop i v)
-
-kmeans_strat :: Int -> Int -> [Point] -> [Cluster] -> IO [Cluster]
-kmeans_strat mappers nclusters points clusters = do
-  let chunks = split mappers points
-  let
-      loop :: Int -> [Cluster] -> IO [Cluster]
-      loop n clusters | n > tooMany = do printf "giving up."; return clusters
-      loop n clusters = do
-        hPrintf stderr "iteration %d\n" n
-        hPutStr stderr (unlines (map show clusters))
-        let
-             new_clusterss = map (step nclusters clusters) chunks
-                               `using` parList rdeepseq
-
-             clusters' = reduce nclusters new_clusterss
-
-        if clusters' == clusters
-           then return clusters
-           else loop (n+1) clusters'
-  --
-  final <- loop 0 clusters
-  return final
-
--- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (Par monad)
 
-kmeans_par :: Int -> Int -> [Point] -> [Cluster] -> IO [Cluster]
-kmeans_par mappers nclusters points clusters = do
-  let chunks = split mappers points
+kmeans_par :: Int -> Int -> IO [Cluster]
+kmeans_par nChunks chunkSize = do
+  clusters <- mapM genCluster [0..nClusters-1]
+  printf "%d clusters generated\n" (length clusters)
   let
       loop :: Int -> [Cluster] -> IO [Cluster]
       loop n clusters | n > tooMany = do printf "giving up."; return clusters
       loop n clusters = do
         hPrintf stderr "iteration %d\n" n
-        hPutStr stderr (unlines (map show clusters))
+     -- hPutStr stderr (unlines (map show clusters))
         let
-             new_clusterss = runPar $ Par.parMap (step nclusters clusters) chunks
+             new_clusterss = runPar $ doChunks nChunks chunkSize clusters
 
-             clusters' = reduce nclusters new_clusterss
+             clusters' = reduce nClusters new_clusterss
 
         if clusters' == clusters
            then return clusters
@@ -128,6 +95,17 @@ kmeans_par mappers nclusters points clusters = do
   --
   final <- loop 0 clusters
   return final
+
+doChunks :: Int -> Int -> [Cluster] -> Par [[Cluster]]
+-- parMap f xs = mapM (spawnP . f) xs >>= mapM get
+doChunks n chunkSize clusters = mapM (spawn . return . (kmeans_chunk chunkSize clusters)) [0..(n-1)]
+  >>= mapM get
+
+
+kmeans_chunk :: Int -> [Cluster] -> Int -> [Cluster]
+kmeans_chunk chunkSize clusters id =
+  let points = unsafePerformIO $ genChunk id chunkSize in
+    step clusters points
 
 -- -----------------------------------------------------------------------------
 -- Perform one step of the K-Means algorithm
@@ -140,17 +118,18 @@ reduce nclusters css =
   combine [] = []
   combine (c:cs) = [foldr combineClusters c cs]
 
-
-step :: Int -> [Cluster] -> [Point] -> [Cluster]
-step nclusters clusters points
-   = makeNewClusters (assign nclusters clusters points)
+{-# INLINE step #-}
+step :: [Cluster] -> (V.Vector Point) -> [Cluster]
+step clusters points
+   = makeNewClusters (assign clusters points)
 
 -- assign each vector to the nearest cluster centre
-assign :: Int -> [Cluster] -> [Point] -> Array Int [Point]
-assign nclusters clusters points =
+assign :: [Cluster] -> (V.Vector Point) -> Array Int [Point]
+assign clusters points =
     accumArray (flip (:)) [] (0, nclusters-1)
-       [ (clId (nearest p), p) | p <- points ]
+       [ (clId (nearest p), p) | p <- V.toList points ]
   where
+    nclusters = (length clusters)
     nearest p = fst $ minimumBy (compare `on` snd)
                           [ (c, sqDistance (clCent c) p) | c <- clusters ]
 
