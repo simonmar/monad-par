@@ -1,6 +1,6 @@
 # See README.md for format description.
 #
-# Version: server 1.0
+# Version: server 1.2
 # 
 # I'm attempting to keep track of changes to this config with the above.
 # Note that changes to the benchmarks themselves also require changing
