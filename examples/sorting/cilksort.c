@@ -60,7 +60,7 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef long ELM;
+typedef uint32_t ELM;
 
 /* MERGESIZE must be >= 2 */
 #define KILO 1024
@@ -197,6 +197,11 @@ void seqquick(ELM *low, ELM *high)
      }
 
      insertion_sort(low, high);
+}
+
+void wrap_seqquick(ELM *low, long len)
+{
+    seqquick(low, low + len);
 }
 
 void seqmerge(ELM *low1, ELM *high1, ELM *low2, ELM *high2,

@@ -1,4 +1,4 @@
-{-# LANGUAGE CPP, FlexibleInstances #-}
+{-# LANGUAGE CPP, FlexibleInstances, ForeignFunctionInterface #-}
 module Main where
 
 import Control.Applicative
@@ -35,13 +35,21 @@ import Data.Vector.Algorithms.Merge (sort)
 import PARSCHED
 #else
 import Control.Monad.Par.Meta.SMPMergeSort
-import Foreign.CUDA.Driver    (initialise)
-import Foreign.CUDA.Runtime.Device (reset)
-#define GPU_ENABLED
 #endif
 
+#define GPU_ENABLED
+#ifdef GPU_ENABLED
+import Foreign.CUDA.Driver    (initialise)
+import Foreign.CUDA.Runtime.Device (reset)
+#endif
+
+import Foreign.Ptr
+import Foreign.C.Types
+import Foreign.Marshal.Array (allocaArray)
+
 -- Element type being sorted:
-type ElmT = Word32
+type ElmT  = Word32
+type CElmT = CUInt
 
 -- Here we can choose safe or unsafe operations:
 #ifndef SAFE
@@ -82,14 +90,29 @@ seqsort v = return $ V.create $ do
                 sort mut
                 return mut
 
+foreign import ccall unsafe "wrap_seqquick"
+  c_seqquick :: Ptr CElmT -> CLong -> IO (Ptr CElmT)
+
 -- | Sequential Cilk sort
 cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkSeqSort v = undefined
+cilkSeqSort v = liftIO $ do
+  mutv <- V.thaw v
+  MV.unsafeWith mutv $ \vptr ->
+    c_seqquick (castPtr vptr) (fromIntegral $ V.length v)
+  V.unsafeFreeze mutv
+
+foreign import ccall unsafe "wrap_cilksort"
+  c_cilksort ::  Ptr CElmT -> Ptr CElmT -> CLong -> IO CLong
 
 -- | Cilk sort using the Cilk runtime, meant to trigger
 -- oversubscription
 cilkRuntimeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkRuntimeSort v = undefined
+cilkRuntimeSort v = liftIO $ do
+    mutv <- V.thaw v
+    MV.unsafeWith mutv $ \vptr ->
+      allocaArray (V.length v) $ \tptr ->
+        c_cilksort (castPtr vptr) tptr (fromIntegral $ V.length v)
+    V.unsafeFreeze mutv  
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
@@ -179,7 +202,7 @@ dynamicMergeSort cpuT gpuT cpuMS vec = do
   left  <- get ileft
   merge cpuT left right
 
-#endif // End if GPU_ENABLED
+#endif /* End if GPU_ENABLED */
 
 
 -- If either list has length less than t, use sequential merge. Otherwise:

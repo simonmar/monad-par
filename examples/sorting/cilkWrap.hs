@@ -8,8 +8,11 @@ import Data.List
 import System.CPUTime (getCPUTime)
 import Text.Printf
 
+type ElmT  = Word32
+type CElmT = CUInt
+
 foreign import ccall unsafe "wrap_cilksort"
-  c_cilksort ::  Ptr CLong -> Ptr CLong -> CLong -> IO CLong
+  c_cilksort ::  Ptr CElmT -> Ptr CElmT -> CLong -> IO CLong
 
 foreign import ccall unsafe "run_cilksort"
   c_run_cilksort :: CLong -> IO CLong 
@@ -48,13 +51,13 @@ runCilkSort  sz n = do
   putStrLn $ "ran in " ++ show ticks ++ " ticks"
   runCilkSort sz (n - 1)
 
-runCilkSort' :: Ptr CLong -> Ptr CLong -> CLong -> Int -> IO ()
+runCilkSort' :: Ptr CElmT -> Ptr CElmT -> CLong -> Int -> IO ()
 runCilkSort' _ _ _ 0 = return ()
 runCilkSort' xs ys sz n = do
   ticks <- c_cilksort xs ys sz
   putStrLn $ "ran in " ++ show ticks ++ " ticks"
   runCilkSort' xs ys sz (n - 1)
 
-randomList :: Int -> StdGen -> [Int]
+randomList :: Int -> StdGen -> [ElmT]
 randomList n = take n . unfoldr (Just . random)
 
