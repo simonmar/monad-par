@@ -2,12 +2,23 @@ ifeq ($(GHC),)
   GHC=ghc
 endif
 
+# Hack to control which CPU sort gets called at the bottom of the div/conq.
+# Choices are:
+#
+# * CPU_SORT=HASKELL_SEQ for vector-algorithms
+# * CPU_SORT=CILK_SEQ for the cilk sequential quicksort
+# * CPU_SORT=CILK_PAR for the cilk parallel runtime
+
+ifeq ($(CPU_SORT),)
+  CPU_SORT=HASKELL_SEQ
+endif
+
 CC=icc
 
 all: mergesort cilkWrap
 
 mergesort: mergesort.hs cilksort-nomain.o
-	$(GHC) --make -O2 $^ -lm -lcilkrts -lirc -limf -o $@
+	$(GHC) --make -O2 -rtsopts -threaded $^ -lm -lcilkrts -lirc -limf -D$(CPU_SORT) -o $@
 
 cilksort: cilksort.o
 	$(CC) -Wall $^ -o $@
