@@ -13,6 +13,9 @@ ifeq ($(CPU_SORT),)
   CPU_SORT=HASKELL_SEQ
 endif
 
+# enable ICC with this:
+# module load intel/composer_xe_2011_sp1.7.256-intel64
+
 CC=icc
 
 all: mergesort cilkWrap
