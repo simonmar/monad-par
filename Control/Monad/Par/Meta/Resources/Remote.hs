@@ -11,7 +11,7 @@
 -- | Resource for Remote execution.
 
 module Control.Monad.Par.Meta.Resources.Remote 
-  ( defaultInit, defaultSteal, 
+  ( sharedInit, defaultSteal, 
     initiateShutdown, waitForShutdown, 
     longSpawn, 
     InitMode(..),
@@ -467,7 +467,7 @@ masterInit metadata trans = IA ia
   	  	   Nothing -> do BS.putStrLn$BS.pack$ "WARNING: Remote resource: Expected to find machine list in "++
 			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
                                  return [host]
-        runIA (defaultInit metadata trans (Master$ map BS.pack ml)) sa scheds
+        runIA (sharedInit metadata trans (Master$ map BS.pack ml)) sa scheds
 
 
 sharedInit :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
@@ -610,7 +610,7 @@ sharedInit metadata initTransport (Master machineList) = IA ia
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-defaultInit metadata initTransport Slave = IA ia
+sharedInit metadata initTransport Slave = IA ia
   where
     ia topStealAction schedMap = do 
      dbgTaggedMsg 2 "Init slave: creating connection... " 
