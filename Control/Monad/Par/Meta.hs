@@ -51,11 +51,14 @@ import Data.IORef (IORef, writeIORef, newIORef)
 
 import System.IO.Unsafe (unsafePerformIO)
 import System.IO (stderr)
-import System.Posix.Affinity (setAffinityOS)
 import System.Random.MWC
 
 import Text.Printf
 import qualified Debug.Trace as DT
+
+#ifdef AFFINITY
+import System.Posix.Affinity (setAffinityOS)
+#endif
 
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Monad.Par.Meta.HotVar.IORef
@@ -246,7 +249,11 @@ makeOrGetSched sa cap = do
 --------------------------------------------------------------------------------
 -- Worker routines
 
+#ifdef AFFINITY
 forkOn' cap k = forkOn cap $ setAffinityOS cap >> k
+#else
+forkOn' = forkOn
+#endif
 
 -- | Spawn a pinned worker that will stay on a capability.
 -- 

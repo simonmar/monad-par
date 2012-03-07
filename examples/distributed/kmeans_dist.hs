@@ -27,24 +27,6 @@ import Remote2.Call (mkClosureRec, remotable)
 
 nClusters = 4
 
-main = do
-  args <- getArgs
-  t0 <- getCurrentTime
-  final_clusters <- case args of
--- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
-   ["master", trans, nChunks, chunkSize] ->
-     kmeans_par trans (read nChunks) (read chunkSize)
-   ["slave", trans] -> runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
-   _other -> kmeans_par 2 14
-  t1 <- getCurrentTime
-  shutdownDist
-  print final_clusters
-  printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
-
-parse_trans "tcp" = TCP
-parse_trans "pipes" = Pipes
-
-
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (sequential)
 
@@ -90,8 +72,6 @@ kmeans_par nChunks chunkSize = do
   final <- loop 0 clusters
   return final
 
-remotable ['splitChunks]
-
 splitChunks :: Int -> Int -> Int -> [Cluster] -> Par [Cluster]
 splitChunks n0 nn chunkSize clusters =
   case nn - n0 of
@@ -104,7 +84,7 @@ splitChunks n0 nn chunkSize clusters =
            return $ reduce nClusters [l, r]
     otherwise -> do
            lx <- spawn     $ splitChunks n0 (halve n0 nn) chunkSize clusters
-           rx <- longspawn $ splitChunks (halve n0 nn) nn chunkSize clusters
+           rx <- longSpawn $ splitChunks (halve n0 nn) nn chunkSize clusters
            l <- get lx
            r <- get rx
            return $ reduce nClusters [l, r]
@@ -158,3 +138,23 @@ makeNewClusters arr =
                         -- no points.  This can happen when a cluster is not
                         -- close to any points.  If we leave these in, then
                         -- the NaNs mess up all the future calculations.
+
+remotable ['splitChunks]
+
+
+main = do
+  args <- getArgs
+  t0 <- getCurrentTime
+  final_clusters <- case args of
+-- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
+   ["master", trans, nChunks, chunkSize] ->
+     kmeans_par trans (read nChunks) (read chunkSize)
+   ["slave", trans] -> runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
+   _other -> kmeans_par 2 14
+  t1 <- getCurrentTime
+  shutdownDist
+  print final_clusters
+  printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
+
+parse_trans "tcp" = TCP
+parse_trans "pipes" = Pipes
