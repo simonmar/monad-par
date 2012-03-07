@@ -34,10 +34,13 @@ import Data.Vector.Algorithms.Merge (sort)
 #ifdef PARSCHED 
 import PARSCHED
 #else
-import Control.Monad.Par.Meta.SMPMergeSort
+import Control.Monad.Par
+#endif
+
+#undef GPU_ENABLED
+#ifdef GPU_ENABLED
 import Foreign.CUDA.Driver    (initialise)
 import Foreign.CUDA.Runtime.Device (reset)
-#define GPU_ENABLED
 #endif
 
 -- Element type being sorted:
