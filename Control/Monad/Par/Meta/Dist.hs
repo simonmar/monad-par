@@ -8,6 +8,7 @@ module Control.Monad.Par.Meta.Dist
   , Rem.longSpawn
   , Rem.globalRPCMetadata
   , WhichTransport(..)
+  , readTransport
   , module Control.Monad.Par.Meta
 ) where
 
@@ -52,6 +53,10 @@ instance Show WhichTransport where
   show TCP = "TCP"
   show Pipes = "Pipes"
   show (Custom _) = "<CustomTransport>"
+
+readTransport :: String -> WhichTransport
+readTransport "TCP"   = TCP
+readTransport "Pipes" = Pipes
 
 --------------------------------------------------------------------------------
 -- Init and Steal actions:

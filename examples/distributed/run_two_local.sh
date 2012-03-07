@@ -20,7 +20,7 @@ set -e
 
 
 # Some hygiene:
-rm -f /tmp/pipe_*
+#rm -f /tmp/pipe_*
 
 HOST=`hostname`
 
