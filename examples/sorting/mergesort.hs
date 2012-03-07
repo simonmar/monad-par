@@ -94,8 +94,8 @@ foreign import ccall unsafe "wrap_seqquick"
   c_seqquick :: Ptr CElmT -> CLong -> IO (Ptr CElmT)
 
 -- | Sequential Cilk sort
--- cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-cilkSeqSort v = do
+cilkSeqSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+cilkSeqSort v = liftIO $ do
   mutv <- V.thaw v
   MV.unsafeWith mutv $ \vptr ->
     c_seqquick (castPtr vptr) (fromIntegral $ V.length v)
