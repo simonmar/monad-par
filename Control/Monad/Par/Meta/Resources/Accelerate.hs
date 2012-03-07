@@ -5,14 +5,14 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Control.Monad.Par.Meta.Resources.Accelerate (
-    initAction
-  , stealAction
+    defaultInit
+  , defaultSteal
   , spawnAcc
   , spawnAccIArray
   , spawnAccVector
+  , mkResource
   ) where
 
-import Control.Applicative
 import Control.Concurrent
 import Control.Exception.Base (evaluate)
 import Control.Monad
@@ -42,7 +42,7 @@ import System.IO.Unsafe
 
 import Text.Printf
 
-import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import Control.Monad.Par.Meta hiding (dbg)
 
 dbg :: Bool
 #ifdef DEBUG
@@ -161,13 +161,16 @@ gpuDaemon = do
         Nothing -> return ()
   gpuDaemon
 
-initAction :: InitAction
-initAction = IA ia
+mkResource :: Resource
+mkResource = Resource defaultInit defaultSteal
+
+defaultInit :: InitAction
+defaultInit = IA ia
   where ia _ _ = do
           void $ forkIO gpuDaemon
 
-stealAction :: StealAction
-stealAction = SA sa 
+defaultSteal :: StealAction
+defaultSteal = SA sa 
   where sa _ _ = do
           mfinished <- R.tryPopR resultQueue
           case mfinished of

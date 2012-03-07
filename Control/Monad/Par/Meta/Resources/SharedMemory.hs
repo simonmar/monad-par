@@ -1,21 +1,23 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 
-{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind #-}
+{-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 
 module Control.Monad.Par.Meta.Resources.SharedMemory (
-    initAction
-  , initActionForCaps
-  , stealAction
-  , stealActionForCaps
-  ) where
+    defaultInit
+  , defaultSteal
+  , initForCaps
+  , stealForCaps
+  , mkResource
+  , mkResourceOn
+) where
 
 import Control.Concurrent
 import Control.Monad
 
 import Data.Concurrent.Deque.Reference as R
 import qualified Data.IntMap as IntMap
-import Data.List
+import Data.List (nub)
 import qualified Data.Vector as Vector
 
 import System.Environment (getEnvironment)
@@ -33,6 +35,16 @@ dbg = True
 #else
 dbg = False
 #endif
+
+-- | Produce an SMP resource on all capabilities. The second
+-- argument is the number of steal attempts per steal request.
+mkResource :: Int -> Resource
+mkResource tries = Resource defaultInit (defaultSteal tries)
+
+-- | Produce an SMP resource on the given capabilities. The second
+-- argument is the number of steal attempts per steal request.
+mkResourceOn :: [Int] -> Int -> Resource
+mkResourceOn caps tries = Resource (initForCaps caps) (stealForCaps caps tries)
 
 {-# NOINLINE getCaps #-}
 getCaps :: [Int]
@@ -52,14 +64,13 @@ getCaps = unsafePerformIO $ do
 -- | 'InitAction' for spawning threads on all capabilities, or from a
 -- 'read'-able list of capability numbers in the environment variable
 -- @SMP_CAPS@.
-initAction :: InitAction
-initAction = IA ia
-  where ia sa _m = runIA (initActionForCaps getCaps) sa _m
+defaultInit :: InitAction
+defaultInit = initForCaps getCaps
   
 -- | 'InitAction' for spawning threads only on a particular set of
 -- capabilities.
-initActionForCaps :: [Int] -> InitAction
-initActionForCaps caps = IA ia
+initForCaps :: [Int] -> InitAction
+initForCaps caps = IA ia
   where ia sa _ = do
 --          setAffinityRange caps
           when dbg $ do
@@ -79,16 +90,13 @@ randModN :: Int -> HotVar GenIO -> IO Int
 randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 
 -- | 'StealAction' for all capabilities.
-stealAction :: Int -> StealAction
-stealAction triesPerCap = SA sa
-  where sa sched schedsRef = 
-          runSA (stealActionForCaps getCaps triesPerCap) sched schedsRef
-                 
+defaultSteal :: Int -> StealAction
+defaultSteal = stealForCaps getCaps                
 
 -- | Given a set of capabilities and a number of steals to attempt per
 -- capability, return a 'StealAction'.
-stealActionForCaps :: [Int] -> Int -> StealAction
-stealActionForCaps caps triesPerCap = SA sa
+stealForCaps :: [Int] -> Int -> StealAction
+stealForCaps caps triesPerCap = SA sa
   where 
     numCaps = length caps
     numTries = numCaps * triesPerCap

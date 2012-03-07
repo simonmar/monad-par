@@ -11,12 +11,14 @@
 -- | Resource for Remote execution.
 
 module Control.Monad.Par.Meta.Resources.Remote 
-  ( initAction, stealAction, 
+  ( defaultInit, defaultSteal, 
     initiateShutdown, waitForShutdown, 
     longSpawn, 
     InitMode(..),
     hostName,
-    globalRPCMetadata
+    globalRPCMetadata,
+    mkMasterResource,
+    mkSlaveResource
   )  
  where
 
@@ -26,7 +28,7 @@ import Control.Concurrent     (myThreadId, threadDelay, writeChan, readChan, new
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
 import Control.Exception      (catch, SomeException)
-import Control.Monad          (forM, forM_, when, unless)
+import Control.Monad          (forM, forM_, liftM, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Data.Typeable          (Typeable)
@@ -49,6 +51,7 @@ import Data.Serialize (encode, decode, Serialize)
 import qualified Data.Serialize as Ser
 -- import Data.Serialize.Derive (deriveGet, derivePut)
 import GHC.Generics       (Generic)
+import System.Environment (getEnvironment)
 import System.IO          (hFlush, stdout, stderr)
 import System.IO.Unsafe   (unsafePerformIO)
 import System.Process     (readProcess)
@@ -58,7 +61,7 @@ import System.Random      (randomIO)
 import Control.Monad.Par.Meta.Resources.Debugging
    (dbg, dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
 import Control.Monad.Par.Meta (forkWithExceptions, new, put_, Sched(Sched,no,ivarUID),
-			       IVar, Par, InitAction(IA), StealAction(SA))
+			       IVar, Par, InitAction(..), StealAction(SA), Resource(..))
 import qualified Network.Transport     as T
 import Remote2.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
@@ -439,10 +442,38 @@ extendPeerTable id entry =
 -- Main scheduler components (init & steal)
 -----------------------------------------------------------------------------------
 
-initAction :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
+mkMasterResource :: [Reg.RemoteCallMetaData]
+                 -> (InitMode -> IO T.Transport)
+                 -> Resource
+mkMasterResource metadata trans =
+  Resource (masterInit metadata trans) defaultSteal
+
+mkSlaveResource :: [Reg.RemoteCallMetaData]
+                -> (InitMode -> IO T.Transport)
+                -> Resource
+mkSlaveResource metadata trans =
+  Resource (sharedInit metadata trans Slave) defaultSteal
+
+masterInit metadata trans = IA ia
+  where
+    ia sa scheds = do
+        env <- getEnvironment
+        host <- hostName 
+	ml <- case lookup "MACHINE_LIST" env of 
+	       Just str -> return (words str)
+	       Nothing -> 
+		 case lookup "MACHINE_LIST_FILE" env of 
+		   Just fl -> liftM words $ readFile fl
+  	  	   Nothing -> do BS.putStrLn$BS.pack$ "WARNING: Remote resource: Expected to find machine list in "++
+			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
+                                 return [host]
+        runIA (defaultInit metadata trans (Master$ map BS.pack ml)) sa scheds
+
+
+sharedInit :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-initAction metadata initTransport (Master machineList) = IA ia
+sharedInit metadata initTransport (Master machineList) = IA ia
   where
     ia topStealAction schedMap = do 
      dbgTaggedMsg 2 "Initializing master..."
@@ -579,7 +610,7 @@ initAction metadata initTransport (Master machineList) = IA ia
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-initAction metadata initTransport Slave = IA ia
+defaultInit metadata initTransport Slave = IA ia
   where
     ia topStealAction schedMap = do 
      dbgTaggedMsg 2 "Init slave: creating connection... " 
@@ -743,8 +774,8 @@ workerShutdown schedMap = do
 
 --------------------------------------------------------------------------------
 
-stealAction :: StealAction
-stealAction = SA sa
+defaultSteal :: StealAction
+defaultSteal = SA sa
   where 
     sa Sched{no} _ = do
       dbgDelay "stealAction"

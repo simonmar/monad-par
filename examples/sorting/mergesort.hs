@@ -398,12 +398,23 @@ main = do args <- getArgs
               gpuThi = 2 ^ (min 22 hi)
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
+#ifdef CILK_SEQ
+              cpuMS = cilkSeqSort
+#endif
+#ifdef CILK_PAR
+              cpuMS = cilkRuntimeSort
+#endif
+#ifdef HASKELL_SEQ
+              cpuMS = seqsort
+#endif
+
+
               parComp 
-                      | mode == "cpu"     = cpuMergeSort t seqsort
+                      | mode == "cpu"     = cpuMergeSort t cpuMS
 #ifdef GPU_ENABLED
-                      | mode == "dynamic" = dynamicMergeSort t gpuT seqsort
-                      | mode == "static"  = staticMergeSort t gpuThi seqsort False
-                      | mode == "static_blocking"  = staticMergeSort t gpuThi seqsort True
+                      | mode == "dynamic" = dynamicMergeSort t gpuT cpuMS
+                      | mode == "static"  = staticMergeSort t gpuThi cpuMS False
+                      | mode == "static_blocking"  = staticMergeSort t gpuThi cpuMS True
 
           initialise [] -- CUDA initialize.
 #endif

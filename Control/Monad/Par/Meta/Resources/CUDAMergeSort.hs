@@ -2,11 +2,12 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Control.Monad.Par.Meta.Resources.CUDAMergeSort (
-    initAction
-  , stealAction
+    defaultInit
+  , defaultSteal
   , blockingGPUMergeSort
   , spawnCPUGPUMergeSort
   , spawnGPUMergeSort
+  , mkResource
 ) where
 
 import Control.Concurrent
@@ -40,6 +41,9 @@ dbg = True
 #else
 dbg = False
 #endif
+
+mkResource :: Resource
+mkResource = Resource defaultInit defaultSteal
 
 --------------------------------------------------------------------------------
 -- Global structures for communicating between Par threads and GPU
@@ -129,8 +133,8 @@ gpuDaemon = do
         Nothing -> return ()
   gpuDaemon
 
-initAction :: InitAction
-initAction = IA ia
+defaultInit :: InitAction
+defaultInit = IA ia
   where ia _ _ = do
           initialise []
           mtid <- readHotVar daemonTid
@@ -139,15 +143,15 @@ initAction = IA ia
 
 #define GPU_BACKSTEALING
 #ifdef GPU_BACKSTEALING
-stealAction :: StealAction
-stealAction = SA sa 
+defaultSteal :: StealAction
+defaultSteal = SA sa 
   where sa _ _ = do
           mfinished <- R.tryPopR resultQueue
           case mfinished of
             finished@(Just _) -> return finished
             Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue        
 #else
-stealAction :: StealAction
-stealAction = SA sa 
+defaultSteal :: StealAction
+defaultSteal = SA sa 
   where sa _ _ = R.tryPopR resultQueue
 #endif

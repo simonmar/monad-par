@@ -11,20 +11,24 @@
 --   should include this at tho bottom of their stack.
 
 module Control.Monad.Par.Meta.Resources.Backoff
-  ( initAction, mkStealAction )
+  ( defaultInit, mkStealAction, mkResource )
 where 
 
 import Data.IORef (readIORef)
 import Data.Word (Word64)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Concurrent     (myThreadId, threadDelay)
 import qualified Data.Vector.Unboxed as V
 import qualified Data.ByteString.Char8 as BS
 
+mkResource :: Word64 -> Word64 -> Resource
+mkResource shortest longest =
+  Resource defaultInit (mkStealAction shortest longest)
 
-initAction :: InitAction
-initAction = IA (\ sa _ -> return () )
+defaultInit :: InitAction
+defaultInit = IA (\ sa _ -> return () )
 
 -- | To construct a StealAction we need to know the minimum and
 -- maximum amount of time (nanoseconds) to sleep.  The exponential

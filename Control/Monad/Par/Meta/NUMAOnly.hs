@@ -12,13 +12,10 @@ import qualified Control.Monad.Par.Meta.Resources.NUMA as NUMA
 tries :: Int
 tries = 20
 
-ia :: InitAction
-ia = NUMA.initActionFromEnv
-
-sa :: StealAction
-sa = NUMA.stealActionFromEnv tries
+resource :: Resource
+resource = NUMA.mkResource Nothing tries
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a
-runPar   = runMetaPar   ia sa
-runParIO = runMetaParIO ia sa
+runPar   = runMetaPar   resource
+runParIO = runMetaParIO resource

@@ -54,11 +54,19 @@
  * log factor in the critical path (left as homework).
  */
 
+#ifdef __INTEL_COMPILER
 #include <cilk/cilk.h>
+#else
+#define cilk_sync
+#define cilk_spawn
+#endif
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 typedef uint32_t ELM;
 
