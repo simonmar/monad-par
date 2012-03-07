@@ -20,7 +20,6 @@ import qualified Data.Vector as Vector
 
 import System.Environment (getEnvironment)
 import System.IO.Unsafe
-import System.Posix.Affinity
 import System.Random.MWC
 
 import Text.Printf
