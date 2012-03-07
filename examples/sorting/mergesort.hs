@@ -1,5 +1,4 @@
-{-# LANGUAGE CPP, FlexibleInstances #-}
-{-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE CPP, FlexibleInstances, ForeignFunctionInterface #-}
 module Main where
 
 import Control.Applicative
@@ -98,6 +97,7 @@ cilkSeqSort v = do
   mutv <- thawit v
   MV.unsafeWith mutv $ \vptr ->
     c_seqquick (castPtr vptr) (fromIntegral $ V.length v)
+  V.unsafeFreeze mutv
 
 foreign import ccall unsafe "wrap_cilksort"
   c_cilksort ::  Ptr CLong -> Ptr CLong -> CLong -> IO CLong
