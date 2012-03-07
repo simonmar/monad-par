@@ -19,24 +19,12 @@ import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 tries :: Int
 tries = 20
 
-{-# INLINE ia #-}
-ia :: InitAction
-ia = mconcat [ SharedMemory.initAction
-             , Merge.initAction
-             , Bkoff.initAction
-             ]
-
--- ia = SharedMemory.initAction <> Merge.initAction
-
-{-# INLINE sa #-}
-sa :: StealAction
-sa = mconcat [ SharedMemory.stealAction tries
-             , Merge.stealAction
-             , Bkoff.mkStealAction 1000 (100*1000)
-             ]
--- sa = SharedMemory.stealAction tries <> Merge.stealAction
+resource = mconcat [ SharedMemory.mkResource tries
+                   , Merge.mkResource
+                   , Bkoff.mkResource 1000 (100*1000)
+                   ]
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a
-runPar   = runMetaPar   ia sa
-runParIO = runMetaParIO ia sa
+runPar   = runMetaPar   resource
+runParIO = runMetaParIO resource

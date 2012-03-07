@@ -5,10 +5,11 @@
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 
 module Control.Monad.Par.Meta.Resources.NUMA (
-    initAction
-  , initActionFromEnv
-  , stealAction
-  , stealActionFromEnv
+    defaultInit
+  , defaultSteal
+  , initForTopo
+  , stealForTopo
+  , mkResource
   ) where
 
 import Control.Monad
@@ -32,23 +33,30 @@ dbg = True
 dbg = False
 #endif
 
+-- | If no topology given, reads @NUMA_TOPOLOGY@ env variable.
+mkResource :: Maybe SimpleTopology -> Int -> Resource
+mkResource Nothing     tries =
+  Resource defaultInit (defaultSteal tries)
+mkResource (Just topo) tries = 
+  Resource (initForTopo topo) (stealForTopo topo tries)
+
 -- | A 'SimpleTopology is a list of lists of capabilities, where each
 -- nested list represents the capabilities in a NUMA node.
 type SimpleTopology = [[Int]]
 
 -- | 'InitAction' for spawning a NUMA scheduler.
-initAction :: SimpleTopology -> InitAction
-initAction topo = IA ia
+initForTopo :: SimpleTopology -> InitAction
+initForTopo topo = IA ia
   where ia sa _m = do
           when dbg $ printf "NUMA scheduler spawning subordinate schedulers\n"
           forM_ topo $ \node -> 
-            runIA (SharedMemory.initActionForCaps node) sa _m
+            runIA (SharedMemory.initForCaps node) sa _m
 
 -- | A version of 'initAction' that reads a 'SimpleTopology' from the
 -- @NUMA_TOPOLOGY@ environment variable. For example,
 -- @NUMA_TOPOLOGY='[[1,2],[3,4]]'@ configures a 2x2 system.
-initActionFromEnv :: InitAction
-initActionFromEnv = initAction topoFromEnv
+defaultInit :: InitAction
+defaultInit = initForTopo topoFromEnv
 
 {-# NOINLINE topoFromEnv #-}
 topoFromEnv :: SimpleTopology
@@ -64,13 +72,13 @@ randModN n rngRef = uniformR (0, n-1) =<< readHotVar rngRef
 
 -- | Given a 'SimpleTopology' and a number of steals to attempt per
 -- invocation, return a 'StealAction'.
-stealAction :: SimpleTopology -> Int -> StealAction
-stealAction topo numTries = SA sa
+stealForTopo :: SimpleTopology -> Int -> StealAction
+stealForTopo topo numTries = SA sa
   where
     numNodes = length topo
     triesPerNode = numTries `quot` numNodes
     buildSteal caps = 
-      SharedMemory.stealActionForCaps caps triesPerNode
+      SharedMemory.stealForCaps caps triesPerNode
     subSteals = map buildSteal topo
     capAssocs = concat [map (\cap -> (cap, sa)) caps
                        | caps <- topo
@@ -99,5 +107,5 @@ stealAction topo numTries = SA sa
                 maybe (loop (n-1) =<< getNext) (return . return) mtask
           loop numTries =<< getNext
 
-stealActionFromEnv :: Int -> StealAction
-stealActionFromEnv = stealAction topoFromEnv
+defaultSteal :: Int -> StealAction
+defaultSteal = stealForTopo topoFromEnv

@@ -99,7 +99,6 @@ instance Monoid InitAction where
   (IA ia1) `mappend` (IA ia2) = IA ia'
     where ia' sa schedMap = ia1 sa schedMap >> ia2 sa schedMap            
                              
-
 newtype StealAction = SA { runSA ::
      -- 'Sched' for the current thread
      Sched
@@ -120,6 +119,16 @@ instance Monoid StealAction where
               Nothing -> sa2 sched schedMap
               _ -> return mwork                
 
+data Resource = Resource {
+    initAction  :: InitAction
+  , stealAction :: StealAction
+  } deriving (Show)
+
+instance Monoid Resource where
+  mempty = Resource mempty mempty
+  Resource ia1 sa1 `mappend` Resource ia2 sa2 =
+    Resource (ia1 `mappend` ia2) (sa1 `mappend` sa2)
+
 data Sched = Sched 
     { 
       ---- Per capability ----
@@ -138,7 +147,7 @@ data Sched = Sched
       ivarUID :: HotVar Int,
 
       ---- Meta addition ----
-      stealAction :: StealAction
+      schedSa :: StealAction
     }
 
 instance Show Sched where
@@ -297,7 +306,7 @@ reschedule = Par $ ContT (workerLoop 0)
 
 workerLoop :: Int -> ignoredCont -> ROnly ()
 workerLoop failCount _k = do
-  mysched@Sched{ no, mortals, stealAction, consecutiveFailures } <- ask
+  mysched@Sched{ no, mortals, schedSa=sa, consecutiveFailures } <- ask
   mwork <- liftIO $ popWork mysched
   case mwork of
     Just work -> do
@@ -317,7 +326,7 @@ workerLoop failCount _k = do
         -- passing an extra argument to the steal action, and if we
         -- could tolerate it, it should perhaps become an additional argument:
         liftIO$ writeIORef consecutiveFailures failCount
-        mwork <- liftIO (runSA stealAction mysched globalScheds)
+        mwork <- liftIO (runSA sa mysched globalScheds)
         case mwork of
           Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
           Nothing -> do 
@@ -378,8 +387,8 @@ spawn_ p = do r <- new; fork (p >>= put_ r); return r
 --------------------------------------------------------------------------------
 -- Entrypoint
 
-runMetaParIO :: InitAction -> StealAction -> Par a -> IO a
-runMetaParIO ia sa work = ensurePinned $ 
+runMetaParIO :: Resource -> Par a -> IO a
+runMetaParIO Resource{ initAction=ia, stealAction=sa } work = ensurePinned $ 
   do
   -- gather information
   tid <- myThreadId
@@ -424,8 +433,8 @@ runMetaParIO ia sa work = ensurePinned $
   return ans
 
 {-# INLINE runMetaPar #-}
-runMetaPar :: InitAction -> StealAction -> Par a -> a
-runMetaPar ia sa work = unsafePerformIO $ runMetaParIO ia sa work
+runMetaPar :: Resource -> Par a -> a
+runMetaPar rsrc work = unsafePerformIO $ runMetaParIO rsrc work
 
 --------------------------------------------------------------------------------
 -- Boilerplate

@@ -12,13 +12,10 @@ import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
 tries :: Int
 tries = 20
 
-ia :: InitAction
-ia = SharedMemory.initAction
-
-sa :: StealAction
-sa = SharedMemory.stealAction tries
+resource :: Resource
+resource = SharedMemory.mkResource tries
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a
-runPar   = runMetaPar   ia sa
-runParIO = runMetaParIO ia sa
+runPar   = runMetaPar   resource
+runParIO = runMetaParIO resource
