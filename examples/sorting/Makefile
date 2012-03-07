@@ -20,6 +20,8 @@ endif
 # * CPU_SORT=CILK_SEQ for the cilk sequential quicksort
 # * CPU_SORT=CILK_PAR for the cilk parallel runtime
 
+CFLAGS= -Wall -O3
+
 ifeq ($(CPU_SORT),)
   CPU_SORT=HASKELL_SEQ
 endif
@@ -30,13 +32,13 @@ mergesort: mergesort.hs cilksort-nomain.o
 	$(GHC) --make -O2 -rtsopts -threaded $^ $(LDFLAGS) -D$(CPU_SORT) -o $@
 
 cilksort: cilksort.o
-	$(CC) -Wall $^ -o $@
+	$(CC) $(CFLAGS) $^ -o $@
 
 cilksort-nomain.o: cilksort.c
-	$(CC) -Wall -c $^ -o $@
+	$(CC) $(CFLAGS) -c $^ -o $@
 
 cilksort.o: cilksort.c
-	$(CC) -Wall -DUSE_MAIN=1 -c $^ -o $@
+	$(CC) $(CFLAGS) -DUSE_MAIN=1 -c $^ -o $@
 
 cilkWrap: cilkWrap.hs cilksort-nomain.o
 	$(GHC) --make -O2 $^ $(LDFLAGS) -o $@

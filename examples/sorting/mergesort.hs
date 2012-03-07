@@ -31,13 +31,13 @@ import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Merge (sort)
 
-#ifdef PARSCHED 
+#ifdef PARSCHED
 import PARSCHED
 #else
 import Control.Monad.Par.Meta.SMPMergeSort
+#define GPU_ENABLED
 #endif
 
-#define GPU_ENABLED
 #ifdef GPU_ENABLED
 import Foreign.CUDA.Driver    (initialise)
 import Foreign.CUDA.Runtime.Device (reset)
@@ -74,6 +74,7 @@ copyMV  x y   = MV.copy  x y
 {-# INLINE sliceMV #-}
 {-# INLINE copyMV #-}
 
+----------------------------------------------------------------------------------------------------
 -- A zoo of mergesort variations!
 ----------------------------------------------------------------------------------------------------
 
@@ -90,6 +91,7 @@ seqsort v = return $ V.create $ do
                 sort mut
                 return mut
 
+#if defined(CILK_SEQ) || defined (CILK_PAR)
 foreign import ccall unsafe "wrap_seqquick"
   c_seqquick :: Ptr CElmT -> CLong -> IO (Ptr CElmT)
 
@@ -113,6 +115,7 @@ cilkRuntimeSort v = liftIO $ do
       allocaArray (V.length v) $ \tptr ->
         c_cilksort (castPtr vptr) tptr (fromIntegral $ V.length v)
     V.unsafeFreeze mutv  
+#endif
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
@@ -400,14 +403,11 @@ main = do args <- getArgs
               gpuT   = (gpuTlo, gpuThi)
 #ifdef CILK_SEQ
               cpuMS = cilkSeqSort
-#endif
-#ifdef CILK_PAR
+#elif defined(CILK_PAR)
               cpuMS = cilkRuntimeSort
-#endif
-#ifdef HASKELL_SEQ
+#else
               cpuMS = seqsort
 #endif
-
 
               parComp 
                       | mode == "cpu"     = cpuMergeSort t cpuMS
@@ -422,6 +422,12 @@ main = do args <- getArgs
 
           putStrLn $ "Merge sorting " ++ commaint (2^expt) ++ 
                      " elements. First generate a random permutation:"
+
+#ifdef CILK_SEQ
+          putStrLn $ "CILK_SEQ: Using sequential quicksort from cilksort.c ..."
+#elif defined(CILK_PAR)
+          putStrLn $ "CILK_PAR: Using paralell mergesort from cilksort.c ..."
+#endif
 
           start <- getCurrentTime
 --          let rands = randomPermutation (2^expt) g

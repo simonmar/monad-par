@@ -209,7 +209,7 @@ void seqquick(ELM *low, ELM *high)
 
 void wrap_seqquick(ELM *low, long len)
 {
-    seqquick(low, low + len);
+    seqquick(low, low + len - 1);
 }
 
 void seqmerge(ELM *low1, ELM *high1, ELM *low2, ELM *high2,
