@@ -1,10 +1,13 @@
-GHC=ghc
+ifeq ($(GHC),)
+  GHC=ghc
+endif
+
 CC=icc
 
-all: cilkWrap mergesort
+all: mergesort cilkWrap
 
 mergesort: mergesort.hs cilksort-nomain.o
-	$(GHC) --make $^ -lm -lcilkrts -lirc -limf -o $@
+	$(GHC) --make -O2 $^ -lm -lcilkrts -lirc -limf -o $@
 
 cilksort: cilksort.o
 	$(CC) -Wall $^ -o $@
@@ -16,7 +19,7 @@ cilksort.o: cilksort.c
 	$(CC) -Wall -DUSE_MAIN=1 -c $^ -o $@
 
 cilkWrap: cilkWrap.hs cilksort-nomain.o
-	$(GHC) --make $^ -lm -lcilkrts -lirc -limf -o $@
+	$(GHC) --make -O2 $^ -lm -lcilkrts -lirc -limf -o $@
 
 clean:
 	rm -f cilkWrap mergesort cilksort *.hi *.o
