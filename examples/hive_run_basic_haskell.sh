@@ -1,5 +1,7 @@
 #!/bin/bash
 
+ht-disable
+
 export SCHEDS="Trace Direct Sparks SMP"
 export GHC_RTS="-qa -A1M" 
 export BENCHLIST=benchlist_server.txt  
