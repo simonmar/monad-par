@@ -19,7 +19,7 @@ cilkWrap: cilkWrap.hs cilksort-nomain.o
 	$(GHC) --make $^ -lm -lcilkrts -lirc -limf -o $@
 
 clean:
-	rm -f cilkWrap cilksort *.hi *.o
+	rm -f cilkWrap mergesort cilksort *.hi *.o
 
 .PHONY: clean
 
