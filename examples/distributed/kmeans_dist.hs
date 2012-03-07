@@ -1,21 +1,11 @@
 -- K-Means sample from "Parallel and Concurrent Programming in Haskell"
 -- Simon Marlow
--- with minor modifications for benchmarking: erjiang
+-- with modifications for benchmarking: erjiang
 --
--- With three versions:
---   [ kmeans_seq   ]  a sequential version
---   [ kmeans_strat ]  a parallel version using Control.Parallel.Strategies
---   [ kmeans_par   ]  a parallel version using Control.Monad.Par
---
--- Usage (sequential):
---   $ ./kmeans-par
---
--- Usage (Strategies):
---   $ ./kmeans-par strat 600 +RTS -N4
 
--- Usage (Par monad):
---   $ ./kmeans-par par 600 +RTS -N4
-
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# OPTIONS_GHC -O2 -ddump-splices #-}
 import System.IO
 import System.IO.Unsafe
 import KMeansCommon
@@ -26,12 +16,14 @@ import Data.Function
 import qualified Data.Vector as V
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, spawn)
+import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, spawn, runParDistWithTransport,
+  runParSlaveWithTransport, WhichTransport(Pipes, TCP), shutdownDist)
 import Control.DeepSeq
 import System.Environment
 import Data.Time.Clock
 import Control.Exception
 import Control.Monad
+import Remote2.Call (mkClosureRec, remotable)
 
 nClusters = 4
 
@@ -40,12 +32,17 @@ main = do
   t0 <- getCurrentTime
   final_clusters <- case args of
 -- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
-   [nChunks, chunkSize] ->
-     kmeans_par (read nChunks) (read chunkSize)
+   ["master", trans, nChunks, chunkSize] ->
+     kmeans_par trans (read nChunks) (read chunkSize)
+   ["slave", trans] -> runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
    _other -> kmeans_par 2 14
   t1 <- getCurrentTime
+  shutdownDist
   print final_clusters
   printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
+
+parse_trans "tcp" = TCP
+parse_trans "pipes" = Pipes
 
 
 -- -----------------------------------------------------------------------------
@@ -84,7 +81,7 @@ kmeans_par nChunks chunkSize = do
         hPrintf stderr "iteration %d\n" n
      -- hPutStr stderr (unlines (map show clusters))
         let
-             clusters' = runPar $ splitChunks 0 nChunks chunkSize clusters
+             clusters' = runParDistWithTransport $ splitChunks 0 nChunks chunkSize clusters
 
         if clusters' == clusters
            then return clusters
