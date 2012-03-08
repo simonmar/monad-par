@@ -40,7 +40,12 @@ data VecTree = Leaf (V.Vector Int)
 
 instance V.Unbox a => NFData (V.Vector a) where
   rnf v = rnf (V.length v)
+instance NFData VecTree where
+  rnf (Leaf v) = rnf v
+  rnf (MkNode v1 v2) = rnf v1 `seq` rnf v2
 
+leftmost (Leaf v)     = v
+leftmost (MkNode l _) = leftmost l
 
 #ifdef ALIST
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (AList [Int])
@@ -51,19 +56,19 @@ runMandel minX minY maxX maxY winX winY max_depth = do
           deepseq l (return l)
 
 #else
---runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
-runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
+runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
+--runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
 runMandel minX minY maxX maxY winX winY max_depth = do
---  C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
+  -- Auto-partitioning version.  A bit worse:
+  -- C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
   C.parMapReduceRangeThresh threshold (C.InclusiveRange 0 (winY-1)) 
      (\y -> 
        do
           let vec = V.generate winX (\x -> mandelStep y x)
           seq (vec V.! 0) $ 
-           return (vec))
---     MkNode
-     (\ a b -> return (a V.++ b))
-     V.empty
+           return (Leaf vec))
+     (\ a b -> return$ MkNode a b)
+     (Leaf V.empty)
 #endif
   where
     mandelStep i j = mandel max_depth z
@@ -93,8 +98,7 @@ simple x y depth = runMandel (-2) (-2) 2 2 x y depth
 
 --------------------------------------------------------------------------------
 
--- A meaningless checksum.
-#ifdef ALIST
+-- A meaningless checksum.  This match the C++ CnC benchmark:
 mandelCheck :: AList [Int] -> Int -> Int -> Int
 mandelCheck als max_col max_depth = loop 0 als 0
  where 
@@ -105,13 +109,13 @@ mandelCheck als max_col max_depth = loop 0 als 0
  loop2 i j []    !sum = sum
  loop2 i j (h:t) !sum | h == max_depth = loop2 i (j+1) t (sum + i*max_col + j)
 		      | otherwise      = loop2 i (j+1) t  sum
-#else
+
  -- This kind of checksum is much simpler:
-checkSum :: V.Vector Int -> Int -> Int -> Int
-checkSum vec max_col max_depth = 
-  V.foldl (+) 0 vec
-#endif
-	      
+checkSum :: VecTree -> Int
+checkSum (Leaf vec) = V.foldl (+) 0 vec
+checkSum (MkNode v1 v2) = checkSum v1 + checkSum v2  
+
+
 main = do args <- getArgs
 
           let (x,y,depth) = 
@@ -138,9 +142,10 @@ main = do args <- getArgs
 #ifdef WRITE_IMAGE
 	  writePng "mandel_image.png" (makeImage (fromIntegral x) (fromIntegral y) depth pixels)
 	  putStrLn$ "File written."
-          putStrLn$ "Checksum " ++ show (mandelCheck pixels y depth)
+          putStrLn$ "Checksum " ++ show (checkSumpixels y depth)
 #endif
-          putStrLn$ "Spot check: " ++ show (pixels V.! (x `quot` 2))
+--          putStrLn$ "Spot check: " ++ show (pixels V.! (x `quot` 2))
+          putStrLn$ "Spot check: " ++ show (leftmost pixels V.! 0)
           return ()
 
 
