@@ -54,13 +54,14 @@ runMandel minX minY maxX maxY winX winY max_depth = do
 --runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
 runMandel minX minY maxX maxY winX winY max_depth = do
-  C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
+--  C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
+  C.parMapReduceRangeThresh threshold (C.InclusiveRange 0 (winY-1)) 
      (\y -> 
        do
           let vec = V.generate winX (\x -> mandelStep y x)
           seq (vec V.! 0) $ 
            return (vec))
-     -- MkNode -- 
+--     MkNode
      (\ a b -> return (a V.++ b))
      V.empty
 #endif
@@ -97,6 +98,7 @@ simple x y depth = runMandel (-2) (-2) 2 2 x y depth
 mandelCheck :: AList [Int] -> Int -> Int -> Int
 mandelCheck als max_col max_depth = loop 0 als 0
  where 
+ -- Sum positions of the pixels that are equal to max_depth:
  loop i als !sum | A.null als = sum
  loop i als !sum = loop (i+1) (A.tail als)
 		        (loop2 i 0 (A.head als) sum)
@@ -104,8 +106,9 @@ mandelCheck als max_col max_depth = loop 0 als 0
  loop2 i j (h:t) !sum | h == max_depth = loop2 i (j+1) t (sum + i*max_col + j)
 		      | otherwise      = loop2 i (j+1) t  sum
 #else
-mandelCheck :: V.Vector Int -> Int -> Int -> Int
-mandelCheck vec max_col max_depth = 
+ -- This kind of checksum is much simpler:
+checkSum :: V.Vector Int -> Int -> Int -> Int
+checkSum vec max_col max_depth = 
   V.foldl (+) 0 vec
 #endif
 	      
@@ -130,14 +133,15 @@ main = do args <- getArgs
 		 -- 		      (read maxX) (read maxY)
 		 -- 		      (read winX) (read winY) (read depth)
 
-          let ls = runPar$ simple x y depth
+          let pixels = runPar$ simple x y depth
 
 #ifdef WRITE_IMAGE
-	  writePng "mandel_image.png" (makeImage (fromIntegral x) (fromIntegral y) depth ls)
+	  writePng "mandel_image.png" (makeImage (fromIntegral x) (fromIntegral y) depth pixels)
 	  putStrLn$ "File written."
+          putStrLn$ "Checksum " ++ show (mandelCheck pixels y depth)
 #endif
-          putStrLn$ "Spot check: " ++ show (mandelCheck ls y depth)
-
+          putStrLn$ "Spot check: " ++ show (pixels V.! (x `quot` 2))
+          return ()
 
 
 {-
