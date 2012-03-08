@@ -35,6 +35,9 @@ mandel max_depth c = loop 0 0
 threshold = 1
 
 
+data VecTree = Leaf (V.Vector Int)
+	     | MkNode VecTree VecTree
+
 instance V.Unbox a => NFData (V.Vector a) where
   rnf v = rnf (V.length v)
 
@@ -48,14 +51,16 @@ runMandel minX minY maxX maxY winX winY max_depth = do
           deepseq l (return l)
 
 #else
+--runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
 runMandel minX minY maxX maxY winX winY max_depth = do
   C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
      (\y -> 
        do
           let vec = V.generate winX (\x -> mandelStep y x)
---        evaluate (vec V.! 0)
-          return vec)
+          seq (vec V.! 0) $ 
+           return (vec))
+     -- MkNode -- 
      (\ a b -> return (a V.++ b))
      V.empty
 #endif
