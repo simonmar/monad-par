@@ -15,6 +15,8 @@ import PARSCHED
 import Control.Monad.Par
 #endif
 
+import qualified Data.Vector.Unboxed as V
+
 #ifdef WRITE_IMAGE
 import Codec.Picture  -- JuicyPixels
 import qualified Data.Vector.Storable as V
@@ -32,19 +34,35 @@ mandel max_depth c = loop 0 0
 
 threshold = 1
 
+
+instance V.Unbox a => NFData (V.Vector a) where
+  rnf v = rnf (V.length v)
+
+
+#ifdef ALIST
 runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (AList [Int])
 runMandel minX minY maxX maxY winX winY max_depth = do
-
+  -- This version does a ROW at a time in parallel:
   A.parBuildThreshM threshold (C.InclusiveRange 0 (winY-1)) $ \y -> 
-       do
-          let l = [ mandelStep y x | x <- [0.. winX-1] ]
+       do let l = [ mandelStep y x | x <- [0.. winX-1] ]
           deepseq l (return l)
 
+#else
+runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
+runMandel minX minY maxX maxY winX winY max_depth = do
+  C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
+     (\y -> 
+       do
+          let vec = V.generate winX (\x -> mandelStep y x)
+--        evaluate (vec V.! 0)
+          return vec)
+     (\ a b -> return (a V.++ b))
+     V.empty
+#endif
   where
     mandelStep i j = mandel max_depth z
         where z = ((fromIntegral j * r_scale) / fromIntegral winY + minY) :+
                   ((fromIntegral i * c_scale) / fromIntegral winX + minX)
-
     r_scale  =  maxY - minY  :: Double
     c_scale =   maxX - minX  :: Double
 
@@ -70,6 +88,7 @@ simple x y depth = runMandel (-2) (-2) 2 2 x y depth
 --------------------------------------------------------------------------------
 
 -- A meaningless checksum.
+#ifdef ALIST
 mandelCheck :: AList [Int] -> Int -> Int -> Int
 mandelCheck als max_col max_depth = loop 0 als 0
  where 
@@ -79,6 +98,11 @@ mandelCheck als max_col max_depth = loop 0 als 0
  loop2 i j []    !sum = sum
  loop2 i j (h:t) !sum | h == max_depth = loop2 i (j+1) t (sum + i*max_col + j)
 		      | otherwise      = loop2 i (j+1) t  sum
+#else
+mandelCheck :: V.Vector Int -> Int -> Int -> Int
+mandelCheck vec max_col max_depth = 
+  V.foldl (+) 0 vec
+#endif
 	      
 main = do args <- getArgs
 
@@ -108,3 +132,20 @@ main = do args <- getArgs
 	  putStrLn$ "File written."
 #endif
           putStrLn$ "Spot check: " ++ show (mandelCheck ls y depth)
+
+
+
+{-
+
+[2012.03.08] {Updated to use Vector}
+
+Looks like this was out of date in that it was still using AList.
+AList has never performed well enough, and sure enough, this test was
+falling to ~50% productivity at >16 threads.
+
+However, simply replacing AList with vector is no good (14.4s for 512
+512 2048 as opposed to 15.5).  It is of course a quadratic copy at
+that point.
+
+
+-}

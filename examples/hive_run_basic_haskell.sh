@@ -10,6 +10,8 @@ export GHC=ghc-7.4.1
 export THREADS="1 2 4 8 12 16 20 24 28 32" 
 # export THREADS="1 2 4 8 12 16 20 24 28 32" 
 
+export TRIALS=5
+
 make bench
 ./benchmark.run --par +RTS -N
 
