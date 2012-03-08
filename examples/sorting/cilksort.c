@@ -286,6 +286,12 @@ void seqmerge(ELM *low1, ELM *high1, ELM *low2, ELM *high2,
      }
 }
 
+void wrap_seqmerge(ELM *low1, long len1, ELM* low2, long len2, ELM* dest)
+{
+    seqmerge(low1, low1 + len1 - 1, 
+             low2, low2 + len2 - 1, dest);
+}
+
 #define swap_indices(a, b) \
 { \
   ELM *tmp;\

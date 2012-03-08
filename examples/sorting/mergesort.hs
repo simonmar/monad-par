@@ -46,6 +46,8 @@ import Foreign.CUDA.Runtime.Device (reset)
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Array (allocaArray)
+import System.IO.Unsafe(unsafePerformIO)
+
 
 -- Element type being sorted:
 type ElmT  = Word32
@@ -115,6 +117,28 @@ cilkRuntimeSort v = liftIO $ do
       allocaArray (V.length v) $ \tptr ->
         c_cilksort (castPtr vptr) tptr (fromIntegral $ V.length v)
     V.unsafeFreeze mutv  
+
+foreign import ccall unsafe "wrap_seqmerge"
+  c_seqmerge ::  Ptr CElmT -> CLong -> Ptr CElmT -> CLong -> Ptr CElmT -> IO ()
+
+cilkSeqMerge :: V.Vector ElmT -> V.Vector ElmT -> V.Vector ElmT
+cilkSeqMerge v1 v2 = unsafePerformIO $ do
+    mutv1 <- thawit v1
+    mutv2 <- thawit v2
+    let len1 = V.length v1
+	len2 = V.length v2
+--    V.create $ do 
+    do
+       dest <- newMV (len1 + len2)
+--       dest <- MV.unsafeNew (len1 + len2)
+       MV.unsafeWith mutv1 $ \vptr1 ->
+	MV.unsafeWith mutv2 $ \vptr2 ->         
+	 MV.unsafeWith dest $ \vdest ->
+	    c_seqmerge (castPtr vptr1) (fromIntegral len1) 
+		       (castPtr vptr2) (fromIntegral len2) 
+		       (castPtr vdest)
+--       return dest
+       V.unsafeFreeze dest
 #endif
 
 -- Merge sort for a Vector using the Par monad
@@ -217,7 +241,11 @@ merge :: Int -> (V.Vector ElmT) -> (V.Vector ElmT) -> Par (V.Vector ElmT)
 merge t left right =
         if V.length left  < t || 
            V.length right < t
+#if  defined(CILK_SEQ) || defined(CILK_PAR)
+        then return $ cilkSeqMerge left right
+#else
         then return $ seqmerge left right
+#endif
         else do
             let (splitL, splitR) = findSplit left right
             let (llhalf, rlhalf) = V.splitAt splitL left
@@ -310,7 +338,6 @@ seqmerge left_ right_ =
       fstR <- readMV right 0
       loop 0 fstL 0 fstR 0
       return dest
-
 
 -- RRN: We could also consider an FFI seqmerge!  That would be
 -- consistent with our FFI calls on the sorting leaves.
