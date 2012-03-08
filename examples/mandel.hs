@@ -139,13 +139,16 @@ main = do args <- getArgs
 
           let pixels = runPar$ simple x y depth
 
+          putStrLn$ "About to poke pixels to launch runPar:"
+          evaluate pixels
+          putStrLn$ "Should be done with runpar at this point."
+
 #ifdef WRITE_IMAGE
 	  writePng "mandel_image.png" (makeImage (fromIntegral x) (fromIntegral y) depth pixels)
 	  putStrLn$ "File written."
           putStrLn$ "Checksum " ++ show (checkSumpixels y depth)
 #endif
---          putStrLn$ "Spot check: " ++ show (pixels V.! (x `quot` 2))
-          putStrLn$ "Spot check: " ++ show (leftmost pixels V.! 0)
+          putStrLn$ "Spot check, length of leftmost leaf: " ++ show (V.length (leftmost pixels))
           return ()
 
 
