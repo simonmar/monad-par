@@ -39,7 +39,7 @@ kernel (oneshare,jid) =
       let tag = show (host,"PID "++show mypid,tid) ++ " job "++show jid
       prnt$ (tag++":  About to do a chunk of work ("++ show oneshare ++" iterations)...")
       res <- io$ evaluate $ work (oneshare * jid) oneshare 0.0
-      prnt$ (tag++":  done with work (result "++ show res ++")")
+      prnt$ (tag++":   -> done with work (result "++ show res ++")")
       return res
  where 
   hostName = do s <- readProcess "hostname" [] ""
@@ -48,6 +48,7 @@ kernel (oneshare,jid) =
   trim :: String -> String
   trim = f . f
      where f = reverse . dropWhile isSpace
+
 --------------------------------------------------------------------------------
 
 -- runit :: [Double] -> Par ()
@@ -74,6 +75,8 @@ runit (expt,partitions) =
   total    = round (10 ** expt)
   oneshare = total `quot` partitions
 
+--------------------------------------------------------------------------------
+
 prnt :: String -> Par ()
 prnt = io . BS.putStrLn . BS.pack 
 
@@ -86,38 +89,14 @@ io act = liftIO act
 -- Generate stub code for RPC:
 remotable ['kernel]
 
--- partitions = numCapabilities
+--------------------------------------------------------------------------------
 
 main = defaultMain [__remoteCallMetaData] runit 2
---                   ["7.5",show numCapabilities]
                    (\ ranks [s1,s2] -> 
 		      return (case s1 of "" -> 7.5 
 			                 _  -> read s1, 
+			      -- Default: split things up to exactly
+			      -- the number of processors.  No overpartitioning:
 			      case s2 of "" -> ranks * numCapabilities
 					 _  -> read s2))
---                   [ \_     -> return 7.5
---		   , \ranks -> return ranks]
-
--- main = do args <- getArgs 
--- 	  (version, iters) <- case args of 
--- 		[]   -> ("master",50*1000*1000)
--- 		[v]  -> (v,       50*1000*1000)
--- 		-- The input is a power of 10:
--- 		[v,n] -> (v, round (10 ** read n))
---           let trans = parse trans_
---               parse "tcp"   = TCP
--- 	      parse "pipes" = Pipes
-
--- 	  case version of 
--- 	      "slave" -> runParSlaveWithTransport [__remoteCallMetaData] trans
--- 	      "master" -> do 
--- 			     putStrLn "Using non-thresholded version:"
--- 			     ans <- (runParDistWithTransport [__remoteCallMetaData] trans
--- 				     (parfib1 size) :: IO FibType)
--- 			     putStrLn $ "Final answer: " ++ show ans
--- 			     putStrLn $ "Calling SHUTDOWN..."
--- 			     shutdownDist
--- 			     putStrLn $ "... returned from shutdown, apparently successful."
-
--- 	      str -> error$"Unhandled mode: " ++ str
 

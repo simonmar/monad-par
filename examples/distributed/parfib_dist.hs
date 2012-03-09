@@ -4,39 +4,61 @@
 import Data.Int (Int64)
 import System.Environment (getArgs)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
-				   runParDistWithTransport, runParSlaveWithTransport)
--- Tweaked version of CloudHaskell's closures:
-import Remote2.Call (mkClosureRec, remotable)
-
+-- import Control.Monad.Par.Meta.Dist 
 import Control.Concurrent   (myThreadId)
 import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import Data.Char            (isSpace)
 
+import Control.Monad.Par.Meta.DistSMP
+        (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
+	 runParDistWithTransport, runParSlaveWithTransport, spawn_)
+-- Tweaked version of CloudHaskell's closures:
+import Remote2.Call (mkClosureRec, remotable)
 import DistDefaultMain
-
---------------------------------------------------------------------------------
 
 type FibType = Int64
 
+--------------------------------------------------------------------------------
+
 -- Par monad version + distributed execution:
-parfib1 :: FibType -> Par FibType
-parfib1 n | n < 2 = return 1
-parfib1 n = do 
+-- This version is NOT thresholded.
+parfib0 :: Int -> Par FibType
+parfib0 n | n < 2     = return 1
+	  | otherwise = do
+    xf <- longSpawn$ $(mkClosureRec 'parfib0) (n-1)
+    y  <-             parfib0                 (n-2)
+    x  <- get xf
+    return (x+y)
+
+--------------------------------------------------------------------------------
+
+-- Par monad version + distributed execution:
+parfib1 :: (Int,Int) -> Par FibType
+parfib1 (n,thresh) | n < 2       = return 1
+		   | n <= thresh = parfib2 n
+		   | otherwise   = do
+#if 0
     liftIO $ do 
        mypid <- getProcessID
        mytid <- myThreadId
        host  <- hostName
---       let host = ""
-#if 1
---       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
+       putStrLn $ " [host "++host++" pid "++show mypid++" "++show mytid++"] PARFIB "++show n
 #endif
-       return ()
-    xf <- longSpawn $ $(mkClosureRec 'parfib1) (n-1)
-    y  <-             parfib1 (n-2)
+    xf <- longSpawn$ $(mkClosureRec 'parfib1) (n-1, thresh)
+    y  <-             parfib1                 (n-2, thresh)
     x  <- get xf
     return (x+y)
+
+parfib2 :: Int -> Par FibType
+parfib2 n | n < 2 = return 1
+parfib2 n = do 
+    xf <- spawn_$ parfib2 (n-1)
+    y  <-         parfib2 (n-2)
+    x  <- get xf
+    return (x+y)
+
+------------------------------------------------------------
 
 hostName = do s <- readProcess "hostname" [] ""
 	      return (trim s)
@@ -48,7 +70,7 @@ hostName = do s <- readProcess "hostname" [] ""
 
 
 -- Generate stub code for RPC:
-remotable ['parfib1]
+remotable ['parfib1, 'parfib0]
 
 main = do 
     args <- getArgs
@@ -70,7 +92,7 @@ main = do
         "master" -> do 
 		       putStrLn "Using non-thresholded version:"
 		       ans <- (runParDistWithTransport [__remoteCallMetaData] trans
-			       (parfib1 size) :: IO FibType)
+			       (parfib1 (size,cutoff)) :: IO FibType)
 		       putStrLn $ "Final answer: " ++ show ans
 		       putStrLn $ "Calling SHUTDOWN..."
                        shutdownDist
