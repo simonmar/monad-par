@@ -4,8 +4,10 @@
 import Data.Int (Int64)
 import System.Environment (getArgs)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
-				   runParDistWithTransport, runParSlaveWithTransport)
+-- import Control.Monad.Par.Meta.Dist 
+import Control.Monad.Par.Meta.DistSMP
+        (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
+	 runParDistWithTransport, runParSlaveWithTransport)
 -- Tweaked version of CloudHaskell's closures:
 import Remote2.Call (mkClosureRec, remotable)
 
