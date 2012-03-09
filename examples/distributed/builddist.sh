@@ -17,9 +17,11 @@ if [ "$GHC" = "" ]; then
   GHC=ghc
 fi
 
+# OBJ=../../dist/build/cbits/pin.o
+
 # -hide-package remote
 set -x
-$GHC ../../dist/build/cbits/pin.o -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
+$GHC $OBJ -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
 set +x
 
 echo "  Next run this command here:"

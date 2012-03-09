@@ -18,8 +18,8 @@
 module Control.Monad.Par.Meta where
 
 import Control.Applicative
-import Control.Concurrent ( forkOn
-                          , MVar
+import Control.Concurrent ( 
+                            MVar
                           , newEmptyMVar
                           , putMVar
                           , readMVar
@@ -34,7 +34,6 @@ import "mtl" Control.Monad.Cont (ContT(..), MonadCont, callCC, runContT)
 import "mtl" Control.Monad.Reader (ReaderT, MonadReader, runReaderT, ask)
 import Control.Monad.IO.Class
 import Control.Exception (catch, throwTo, SomeException)
-import GHC.Conc
 
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
@@ -64,12 +63,23 @@ import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Monad.Par.Meta.HotVar.IORef
 import qualified Control.Monad.Par.Class as PC
 
+#if  (__GLASGOW_HASKELL__ < 700)
+import GHC.Conc (forkOnIO, ThreadId, myThreadId)
+forkOn = forkOnIO
+threadCapability n = n -- ERROR, the scheduler won't work.  Need to find something here.
+void = fmap (const ())
+#else
+import GHC.Conc (forkOn, ThreadId, myThreadId, threadCapability)
+#endif
+
+
 dbg :: Bool
 #ifdef DEBUG
 dbg = True
 #else
 dbg = False
 #endif
+
 
 --------------------------------------------------------------------------------
 -- Types

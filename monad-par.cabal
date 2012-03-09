@@ -130,6 +130,7 @@ Library
                  , Control.Monad.Par.Meta.SharedMemoryOnly
                  , Control.Monad.Par.Meta.Resources.SharedMemory
                  , Control.Monad.Par.Meta.Resources.Backoff
+                 , Data.Vector.Serialize 
                  , Data.Vector.Storable.Serialize
   if !flag(NoGPU) {
      Exposed-modules: 
@@ -162,6 +163,10 @@ Library
                , binary
                , cereal >= 0.3
                , bytestring >= 0.9
+
+  if flag(MichaelScott) {
+    Build-depends: lockfree-queue
+  }
                 -- AList now depends on binary/cereal.
   if !flag(NoGPU) {
     Build-depends:
@@ -288,4 +293,8 @@ Flag NoDist
 
 Flag affinity
   Description: Turn on pinning to CPUs via pthread/linux scheduler calls.
+  Default:     False
+
+Flag MichaelScott
+  Description: Temporary flag.  Turn on MichaelScott lockfree queues for Remote.hs
   Default:     False

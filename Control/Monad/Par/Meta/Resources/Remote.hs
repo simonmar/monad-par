@@ -40,7 +40,12 @@ import Data.Word              (Word8)
 import Data.Maybe             (fromMaybe)
 import Data.Char              (isSpace)
 import qualified Data.ByteString.Char8 as BS
+#ifdef MSQUEUE
+import Data.Concurrent.Queue.MichaelScott as R
+#else
 import Data.Concurrent.Deque.Reference as R
+#endif
+
 import Data.Concurrent.Deque.Class     as DQ
 import Data.List as L
 import Data.List.Split    (splitOn)
@@ -176,7 +181,11 @@ data LongWork = LongWork {
   }
 
 {-# NOINLINE longQueue #-}
-longQueue :: DQ.Queue LongWork
+#ifdef MSQUEUE
+longQueue :: R.LinkedQueue LongWork
+#else
+longQueue :: DQ.ConcQueue LongWork
+#endif
 longQueue = unsafePerformIO $ R.newQ
 
 {-# NOINLINE peerTable #-}
@@ -840,7 +849,12 @@ longSpawn (local, clo@(Closure n pld)) = do
     -- Update the table with a Par computation that can write in the result.
     modifyHotVar_ remoteIvarTable (IntMap.insert ivarid ivarCont)
 
+#ifdef MSQUEUE
+    -- For a basic queue it's only push left, pop right:
+    R.pushL longQueue 
+#else
     R.pushR longQueue 
+#endif
        (LongWork{ stealver= Just (ivarid,pclo),
 		  localver= do x <- local
                                liftIO$ do 
@@ -883,7 +897,11 @@ receiveDaemon targetEnd schedMap =
        dbgCharMsg 3 "!" ("[rcvdmn] Received StealRequest from: "+++ showNodeID ndid)
 
        -- There are no "peek" operations currently.  Instead assuming pushL:
-       p <- R.tryPopL longQueue
+#ifdef MSQUEUE
+       p <- R.tryPopR longQueue -- Queue's only popR
+#else
+       p <- R.tryPopL longQueue -- (WS)Deques popL
+#endif
        case p of 
 	 Just (LongWork{stealver= Just stealme}) -> do 
 	   dbgTaggedMsg 2 "[rcvdmn]   StealRequest: longwork in stock, responding with StealResponse..."
