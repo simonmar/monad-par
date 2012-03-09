@@ -1,0 +1,104 @@
+#! /usr/bin/env perl
+
+use strict;
+use Sys::Hostname;
+use Net::Ping;
+
+my $nodelist  = "";
+my $name_base = (split(/\./, hostname))[0];
+$name_base =~ s/^(\D+).*$/\1/;
+# my $name_post = "cs.indiana.edu:2";
+my $name_post = "cs.indiana.edu";
+
+my @lst;
+my $item;
+my $i_first;
+my $i_last;
+my $i;
+
+#
+# Access SLURM_NODELIST Environment variable
+#
+$nodelist = `echo \$SLURM_NODELIST`;
+chomp($nodelist);
+
+if(!defined($nodelist) || length($nodelist) <= 0) {
+  $nodelist = `squeue | grep \$USER | awk '{print \$8}'`;
+  chomp($nodelist);
+  if(!defined($nodelist) || length($nodelist) <= 0) {
+    print "Not in a slurm allocation. Please run 'srun' before this command\n";
+    exit;
+  }
+}
+
+#print "Converting <$nodelist>\n";
+
+#
+# Strip off excess
+#
+$nodelist =~ s/^\D+//;
+$nodelist =~ s/\[//;
+$nodelist =~ s/\]$//;
+
+my $p = Net::Ping->new();
+
+#
+# Get ranges
+#
+@lst = split(',',$nodelist);
+foreach $item (@lst) {
+  #
+  # Get the first number
+  $item =~ m/^\d+/;
+  $i_first = $&;
+
+  if($item =~ s/^\d*-// ) {
+    #
+    # Get the last number
+    $item =~ m/^\d*/;
+    $i_last = $&;
+  }
+  else {
+    $i_last = $i_first;
+  }
+  
+  #
+  # Add this range to the machine file
+  #
+  for ( $i = $i_first ; $i <= $i_last ; ++$i) {
+    print $name_base;
+    prec($i);
+    print "." . $name_post;
+    print " " if ($i != $i_last);
+  }
+}
+
+$p->close();
+exit;
+
+sub prec(@) {
+  my $dig = shift(@_);
+
+  # If it starts in 0's, then just print
+  if($dig =~ m/^0+/) {
+    print "$dig";
+  }
+  elsif($dig < 10) {
+    if ($p->ping($name_base . "00" . $dig)) {
+      print "00" . $dig;
+    } else {
+      print $dig;
+    }
+  }
+  elsif ($dig < 100) {
+    if ($p->ping($name_base . "0" . $dig)) {
+      print "0" . $dig;
+    } else {
+      print $dig;
+    }
+  }
+  else {
+    print $dig;
+  }
+}
+
