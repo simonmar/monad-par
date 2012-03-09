@@ -130,6 +130,7 @@ Library
                  , Control.Monad.Par.Meta.SharedMemoryOnly
                  , Control.Monad.Par.Meta.Resources.SharedMemory
                  , Control.Monad.Par.Meta.Resources.Backoff
+                 , Data.Vector.Serialize 
                  , Data.Vector.Storable.Serialize
   if !flag(NoGPU) {
      Exposed-modules: 
