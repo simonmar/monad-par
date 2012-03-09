@@ -20,7 +20,7 @@ HEADER="# SORTSIZE   GpuMode CpuMode HaskellThreads CilkThreads SeqsortThreshold
 
 echo $HEADER > $RESULTS
 
-TRIALS=3
+TRIALS=9
 NUMTOSORT=24
 THREADCOUNTS="1 2 3 4"
 GPUMODES="cpu static static_blocking dynamic"
@@ -35,7 +35,7 @@ CURCONFIG=1
 ntimes="../ntimes_minmedmax"
 RTS="+RTS -s -qa -A1M -N"
 
-#lock_for_experiments
+lock_for_experiments
 
 for threads in $THREADCOUNTS; do
   for gpumode in $GPUMODES; do
@@ -125,4 +125,4 @@ for threads in $THREADCOUNTS; do
   done
 done
 
-#unlock_for_experiments
+unlock_for_experiments

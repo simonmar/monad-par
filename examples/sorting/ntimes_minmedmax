@@ -1,0 +1,55 @@
+#!/bin/bash
+
+# Ported from Haskell CnC script (BSD license)
+
+# Usage: ntimes <N> cmd args ...
+# Returns two lines of output on stdout:
+#   REALTIME MIN MED MAX
+#   PRODUCTIVITY X Y Z
+
+# Note the productivities correspond to the realtimes.  I.e. it makes
+# sense to zip these together; it's sorted only on realtime.
+
+ntimes=`dirname $0`/ntimes_with_args
+
+function mytempfile {
+  date=`date +"%Y.%m.%d"`
+  secs=`date +"%s"`
+  #index=$(($index+1))
+  index=$1
+  file=./runs/"$date"_"$base"_"$NUMTHREADS"_"$secs"_"$index".log
+#  touch $file
+  mkdir -p ./runs/
+  echo > $file
+  echo $file
+}
+
+tmpfile=`mytempfile`
+$ntimes $* | grep NTIMES_ONE_RESULT | sed 's/NTIMES_ONE_RESULT//' > $tmpfile
+CODE=${PIPESTATUS[0]}
+# CODE=$?
+if [ "$CODE" != "0" ];
+then exit $CODE
+fi
+
+lines=`cat $tmpfile | wc -l`
+half=$((($lines+1)/2))
+
+echo "Median time (of $lines): " >> /dev/stderr
+
+# Take the first middle and last line out of the file:
+MIN=`cat $tmpfile | head -n1`
+MED=`cat $tmpfile | head -n$half | tail -n1`
+MAX=`cat $tmpfile | tail -n1`
+
+
+# Yuck, a tedious unzip:
+MINT=`echo $MIN | awk '{ print $1 }'`
+MINP=`echo $MIN | awk '{ print $2 }'`
+MEDT=`echo $MED | awk '{ print $1 }'`
+MEDP=`echo $MED | awk '{ print $2 }'`
+MAXT=`echo $MAX | awk '{ print $1 }'`
+MAXP=`echo $MAX | awk '{ print $2 }'`
+
+echo REALTIME      $MINT $MEDT $MAXT
+echo PRODUCTIVITY  $MINP $MEDP $MAXP
