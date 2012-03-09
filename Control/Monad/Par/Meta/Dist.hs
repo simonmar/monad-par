@@ -77,7 +77,7 @@ masterResource metadata trans =
               20
 #endif
           , Rem.mkMasterResource metadata trans
-          , Bkoff.mkResource 1000 (100*1000)
+--          , Bkoff.mkResource 1000 (100*1000)
           ]
 
 slaveResource metadata trans =
@@ -86,7 +86,7 @@ slaveResource metadata trans =
               20
 #endif
           , Rem.mkSlaveResource metadata trans
-          , Bkoff.mkResource 1000 (100*1000)
+--          , Bkoff.mkResource 1000 (100*1000)
           ]
 
 --------------------------------------------------------------------------------

@@ -5,17 +5,16 @@ import Data.Int (Int64)
 import System.Environment (getArgs)
 import Control.Monad.IO.Class (liftIO)
 -- import Control.Monad.Par.Meta.Dist 
-import Control.Monad.Par.Meta.DistSMP
-        (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
-	 runParDistWithTransport, runParSlaveWithTransport, spawn_)
--- Tweaked version of CloudHaskell's closures:
-import Remote2.Call (mkClosureRec, remotable)
-
 import Control.Concurrent   (myThreadId)
 import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import Data.Char            (isSpace)
 
+import Control.Monad.Par.Meta.DistSMP
+        (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
+	 runParDistWithTransport, runParSlaveWithTransport, spawn_)
+-- Tweaked version of CloudHaskell's closures:
+import Remote2.Call (mkClosureRec, remotable)
 import DistDefaultMain
 
 type FibType = Int64
