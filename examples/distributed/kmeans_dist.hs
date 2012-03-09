@@ -10,6 +10,7 @@
 {-# OPTIONS_GHC -O2 -ddump-splices #-}
 import System.IO
 import System.IO.Unsafe
+import Data.IORef
 import KMeansCommon
 import Control.Applicative
 import Control.Monad.IO.Class (liftIO)
@@ -34,6 +35,7 @@ import Data.Time.Clock
 import Control.Exception
 import Control.Monad
 import Remote2.Call (mkClosure, mkClosureRec, remotable)
+import Data.ByteString (readFile)
 
 nClusters = 4
 
@@ -59,24 +61,41 @@ nClusters = 4
 
 tooMany = 50
 
+{-# NOINLINE pointData #-}
+pointData :: IORef (Maybe (V.Vector (V.Vector Point)))
+pointData = unsafePerformIO $ newIORef Nothing
+
+loadPoints :: String -> IO (V.Vector (V.Vector Point))
+loadPoints filename = do
+  bin <- Data.ByteString.readFile filename
+  return $ case Ser.decode bin of
+              Left err -> error $ "Could not deserialize data: "++err
+              Right d -> V.fromList d :: V.Vector (V.Vector Point)
+
+getChunk id = do
+  dat <- readIORef pointData
+  return $ case dat of
+    Just chunks -> chunks V.! id
+    Nothing -> error "Point data not loaded!"
+
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (Par monad)
 
-splitChunks :: (Int, Int, Int, [Cluster]) -> Par [Cluster]
-splitChunks (n0, nn, chunkSize, clusters) =
+splitChunks :: (Int, Int, [Cluster]) -> Par [Cluster]
+splitChunks (n0, nn, clusters) =
   case nn - n0 of
-    0 -> kmeans_chunk chunkSize clusters nn
+    0 -> kmeans_chunk clusters nn
     1 -> do
 --           liftIO $ printf "local branch\n"
-           lx <- spawn $ kmeans_chunk chunkSize clusters n0
-           rx <- spawn $ kmeans_chunk chunkSize clusters nn
+           lx <- spawn $ kmeans_chunk clusters n0
+           rx <- spawn $ kmeans_chunk clusters nn
            l <- get lx
            r <- get rx
            return $ reduce nClusters [l, r]
     otherwise -> do
 --           liftIO $ printf "longSpawn branch\n"
-           lx <- longSpawn $ $(mkClosureRec 'splitChunks) (n0, (halve n0 nn), chunkSize, clusters)
-           rx <- longSpawn $ $(mkClosureRec 'splitChunks) ((halve n0 nn), nn, chunkSize, clusters)
+           lx <- longSpawn $ $(mkClosureRec 'splitChunks) (n0, (halve n0 nn), clusters)
+           rx <- longSpawn $ $(mkClosureRec 'splitChunks) ((halve n0 nn), nn, clusters)
            l <- get lx
            r <- get rx
            return $ reduce nClusters [l, r]
@@ -91,9 +110,9 @@ halve n0 nn = n0 + (div (nn - n0) 2)
 --   >>= mapM get
 
 
-kmeans_chunk :: Int -> [Cluster] -> Int -> Par [Cluster]
-kmeans_chunk chunkSize clusters id = do
-  points <- liftIO $ genChunk id chunkSize 
+kmeans_chunk :: [Cluster] -> Int -> Par [Cluster]
+kmeans_chunk clusters id = do
+  points <- liftIO $ getChunk id
   return $ step clusters points
 
 -- -----------------------------------------------------------------------------
@@ -133,15 +152,15 @@ makeNewClusters arr =
 
 remotable ['splitChunks]
 
-kmeans_par :: [Cluster] -> Int -> Int -> Par [Cluster]
-kmeans_par clusters nChunks chunkSize = do
+kmeans_par :: [Cluster] -> Int -> Par [Cluster]
+kmeans_par clusters nChunks = do
   let
       loop :: Int -> [Cluster] -> Par [Cluster]
       loop n clusters | n > tooMany = do liftIO (printf "giving up."); return clusters
       loop n clusters = do
         liftIO $ hPrintf stderr "iteration %d\n" n
      -- hPutStr stderr (unlines (map show clusters))
-        clusters' <- splitChunks (0, nChunks, chunkSize, clusters)
+        clusters' <- splitChunks (0, nChunks-1, clusters)
 
         if clusters' == clusters
            then return clusters
@@ -152,21 +171,29 @@ kmeans_par clusters nChunks chunkSize = do
 main = do
   args <- getArgs
   case args of
--- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
-   ["master", trans, nChunks, chunkSize] -> do
+   ["master", trans, filename] -> do
+     pts <- loadPoints filename
+     writeIORef pointData (Just pts)
      clusters <- mapM genCluster [0..nClusters-1]
      printf "%d clusters generated\n" (length clusters)
      t0 <- getCurrentTime
      final_clusters <- runParDistWithTransport 
                          [__remoteCallMetaData] 
                          (parse_trans trans)
-                         $ kmeans_par clusters (read nChunks) (read chunkSize)
+                         $ kmeans_par clusters (V.length pts)
      t1 <- getCurrentTime
      print final_clusters
      printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
-   ("slave":trans:_) -> runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
---   _other -> kmeans_par 2 14
+   ["slave", trans, filename] -> do
+     pts <- loadPoints filename
+     writeIORef pointData (Just pts)
+     return $ runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
+   ["test", filename] -> do
+     pts <- loadPoints filename
+     printf "%d chunks of %d points each loaded\n" (V.length pts) (V.length (pts V.! 0))
+   otherwise -> error "Usage: kmeans_dist.exe (master|slave) (tcp|pipes) datafile"
   shutdownDist
 
 parse_trans "tcp" = TCP
 parse_trans "pipes" = Pipes
+parse_trans _ = error "chicken"

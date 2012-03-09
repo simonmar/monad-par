@@ -9,6 +9,7 @@ import qualified Data.Serialize as Ser
 import qualified Data.ByteString.Char8 as B
 import qualified Data.Vector.Storable as SV
 import qualified Data.Vector         as V
+import Data.Vector.Serialize
 import Data.Vector.Storable.Serialize
 import Control.DeepSeq
 import Control.Monad
