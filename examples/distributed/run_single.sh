@@ -33,6 +33,6 @@ ARGS=$*
 
 export MACHINE_LIST=`./cluster-machinelist`
 
-./$APP.exe $ROLE tcp $ARGS &
+time ./$APP.exe $ROLE tcp $ARGS &
 PID=$!
 wait $PID
