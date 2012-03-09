@@ -1,0 +1,172 @@
+#!/bin/bash
+
+# Ported from Haskell-CnC script (BSD license)
+
+# Usage: ntimes <N> cmd args ...
+# ========================================
+# Takes the best time out of N runs.
+# Returns that best time in seconds to stdout.
+
+# This script writes a bunch of stuff to stderr, but only timings to
+# stdout.  The one thing, the "return value" of this process is 
+# a series of times in seconds (each on a line).
+
+# Environment Variables
+# ----------------------
+#  * Responds to the environment variable HIDEOUTPUT, which, if non-empty
+#    suppresses echoing of the child command's output.
+
+#  * Also responds to NOTIME which turns off the timing.
+
+# Take a look at how SELFTIMED is used below as well.
+
+# ================================================================================
+
+# TIMEOUT is in seconds.  By default we time out processes after a few minutes:
+# TIMEOUT=2
+TIMEOUT=150
+# TIMEOUT=1000
+
+
+# Unfortunately 'tempfile' is not a standard command:
+function mytempfile {
+  date=`date +"%Y.%m.%d"`
+  secs=`date +"%s"`
+  #index=$(($index+1))
+  index=$1
+  file=./runs/"$date"_"$base"_"$NUMTHREADS"_"$secs"_"$index".log
+# [2012.03.05] Got a "cannot touch" error here... it's not NFS problems either.  I wonder what?
+#  touch $file
+  mkdir -p ./runs/
+  echo > $file
+# Or wait, maybe ./runs isn't getting created properly?
+  echo $file
+}
+
+N=$1
+shift
+CMD=$*
+
+if [ "$CMD" == "" ];
+then echo Usage: "ntimes <trials> <cmd> <cmdargs> ..."
+     exit 1
+fi
+base=`basename $1`
+
+if [ ! -d "./runs" ]; then mkdir ./runs; fi 
+
+CAT=/bin/cat
+
+# This serves as the log:
+ALLRUNSOUT=`mytempfile 1`
+RESULTS=`mytempfile 3`
+
+# There are THREE TMP files.  Here are their rough purposes:
+#   ONERUNOUT  -- Stores an individual executables full output.
+#   ALLRUNSOUT -- Accumulates ALL output from all trials.  This is the log.
+#   RESLTS     -- Temporary for the final sorted (output) times/productivities.
+
+echo "Execution log file: " >> /dev/stderr
+echo "   $ALLRUNSOUT"       >> /dev/stderr
+
+echo "$CMD" >> $ALLRUNSOUT
+
+#echo "=================== ASYNCHRONOUS TEST OUTPUT TO FOLLOW ======================" > $TMP1
+
+EXITCODE=0
+
+
+# Iterate over N trials:
+ for ((i=1; i <= $N; i++)); do
+    # Stores just this one executable's output:
+    ONERUNOUT=`mytempfile 2`
+
+    # [2009.12.17] I need to get a good cross-platform process time-out system:
+    # HACK: Sometimes I run this on systems WITHOUT a working GHC thus bash:
+    if [ -e ./timeout.sh ];
+    then TIMEOUTRUN="./timeout.sh -t $TIMEOUT"
+    elif [ -e ./timeout ];
+    # [2010.06.03] --RTS is a hack for working around a problem with +RTS flags:
+    then TIMEOUTRUN="./timeout $TIMEOUT --RTS "
+    else TIMEOUTRUN=
+    fi
+
+    if [ "$HIDEOUTPUT" == "" ];
+    then MYOUT=/dev/stderr
+    else MYOUT=/dev/null
+    fi
+
+    echo                           | tee -a $ONERUNOUT >> $MYOUT
+    echo "Running trial $i of $N:" | tee -a $ONERUNOUT >> $MYOUT
+    echo "------------------------------------------------------------" | tee -a $ONERUNOUT >> $MYOUT
+
+    # This is hackish, it depends on the program output not containing
+    # the string "real".  (Aside from the timing results.)
+
+    if [ "$NOTIME" != "" ];
+    then                                  ($TIMEOUTRUN $CMD) &> /dev/stdout | tee -a $ONERUNOUT >> $MYOUT; CODE=${PIPESTATUS[0]}
+    elif [ `uname` == "Linux" ];
+    then (/usr/bin/time --format="%e real" $TIMEOUTRUN $CMD) &> /dev/stdout | tee -a $ONERUNOUT >> $MYOUT; CODE=${PIPESTATUS[0]}
+    else (/usr/bin/time                    $TIMEOUTRUN $CMD) &> /dev/stdout | tee -a $ONERUNOUT >> $MYOUT; CODE=${PIPESTATUS[0]}
+    fi
+
+    # If there was an error, we don't commit the output to $ALLRUNSOUT:
+    if [ "$CODE" == "0" ];
+    then echo "   Run $i of command succeeded" >> /dev/stderr
+
+	# SUPERHACK terrain... Here's a special symbol that the script can
+	# use to override the external timing and use internal timing
+	# mechinasms.
+	selftime=`grep SELFTIMED $ONERUNOUT`        
+        cat $ONERUNOUT >> $ALLRUNSOUT 
+
+        # First we get out JUST the real time:
+	if [ "$selftime" != "" ]; then 
+	  echo "  +++ Executable appears self-timed!!:"  >> $MYOUT
+	  echo "$selftime"                               >> $MYOUT
+          REALTIME=`grep SELFTIMED $ONERUNOUT | head -n1 | awk '{ print $2 }'`
+	else
+          REALTIME=`grep real $ONERUNOUT | head -n1 | awk '{ print $1 }'`  
+	fi
+
+        # And get out JUST the productivity, if it exists (+RTS -s):
+        GC_WALL=` grep GC  $ONERUNOUT | grep time | head -n2 | tail -n1 | awk '{ print $5 }' | sed 's/s//'`
+        MUT_WALL=`grep MUT $ONERUNOUT | grep time | head -n2 | tail -n1 | awk '{ print $5 }' | sed 's/s//'`
+
+        # Option 2, output may be from "+RTS --machine-readable -t"
+	# The user-time metric for sequential GC is meaningless.
+        if [ "$GC_WALL" == "" ]; then 
+          GC_WALL=` grep GC_wall_seconds      $ONERUNOUT | head -n1 | awk '{ print $2 }' | sed 's/\"//g' | sed 's/)//'`
+          MUT_WALL=`grep mutator_wall_seconds $ONERUNOUT | head -n1 | awk '{ print $2 }' | sed 's/\"//g' | sed 's/)//'`
+        fi
+
+        # Time in GC may be more intuitive than "productivity":
+        # echo "$GC_WALL / ($GC_WALL + $MUT_WALL)" | bc -l
+        PRODUCTIVITY=`echo "100.0 * $MUT_WALL / ($GC_WALL + $MUT_WALL)" | bc -l`
+
+        # NOTE: [2012.02.29] When testing this on very short runs, I
+        # saw an odd bug where it could run TWO "trial 1 of 1"s and
+        # therefore have two productivities/realtimes above.
+        # E.g.:  ./runs/2012.02.29_parfib_monad_Trace_threaded.exe__1330545135_1.log
+
+        # Here's a lame form of truncation of the longe numbers (e.g. 100.0000000000000000000)
+        echo NTIMES_ONE_RESULT $REALTIME ${PRODUCTIVITY:0:6} >> $RESULTS
+
+    # [2010.05.11] I used to just give warnings when not ALL of the trials failed:
+    # This was for timing the nondeterministic hashtable hack:
+    #else echo "Warning: run $i of command failed with code $CODE: $CMD" >> /dev/stderr
+    else echo "ERROR run $i of command failed with code $CODE: $CMD" >> /dev/stderr
+         #exit $CODE
+	 EXITCODE=$CODE
+    fi
+
+    rm -f $ONERUNOUT
+done;  # End trials loop.
+
+  # Finally, sort the results:
+
+  # Echo the final output to stdout:
+  echo "Final Timings/Productivities: " >> /dev/stderr
+  cat $RESULTS | sort -n
+
+exit $EXITCODE
