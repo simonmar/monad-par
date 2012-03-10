@@ -23,12 +23,18 @@ import Remote2.Call (mkClosureRec, remotable)
 import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import DistDefaultMain (defaultMain)
+import System.IO.Unsafe (unsafePerformIO)
+import Control.Concurrent (yield)
 
 --------------------------------------------------------------------------------
 
 -- Compute sum_n(1/n)
 work :: Int -> Int -> Double -> Double
 work offset 0 n = n
+work offset i n | i `mod` 10000 == 0 = 
+  unsafePerformIO $ do yield
+--		       putStr "."
+		       return (work offset (i-1) (n + 1 / fromIntegral (i+offset)))
 work offset (!i) (!n) = work offset (i-1) (n + 1 / fromIntegral (i+offset))
 
 kernel :: (Int, Int) -> Par Double

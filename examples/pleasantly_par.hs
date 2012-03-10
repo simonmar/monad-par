@@ -19,15 +19,21 @@ import qualified Data.ByteString.Char8 as BS
 
 import Control.Monad.Par.Scheds.Direct (Par, spawn_, get, runPar)
 import Control.Monad.Par.Unsafe
+import System.IO.Unsafe (unsafePerformIO)
+import Control.Concurrent (yield)
 
 -- Compute sum_n(1/n)
 work :: Int -> Int -> Double -> Double
 work offset 0 n = n
+work offset i n | i `mod` 10000 == 0 = 
+  unsafePerformIO $ do yield
+--		       putStr "."
+		       return (work offset (i-1) (n + 1 / fromIntegral (i+offset)))
 work offset (!i) (!n) = work offset (i-1) (n + 1 / fromIntegral (i+offset))
 
-partitions = numCapabilities
-
-runit total = evaluate $ runPar $ 
+-- runit :: (Double,Int) -> IO ()
+runit :: Int -> Int -> IO ()
+runit total partitions = evaluate $ runPar $ 
    do 
       prnt$ "Running embarassingly parallel benchmark."
       prnt$ "Running "++ show total ++" total iterations"
@@ -61,6 +67,7 @@ io act = unsafeParIO act
 
 main = do args <- getArgs 
 	  case args of 
-	      []  -> runit $ 50*1000*1000
+	      []        -> runit  (50*1000*1000) numCapabilities
 	      -- The input is a power of 10:
-	      [n] -> runit $ round (10 ** read n)
+	      [n]       -> runit  (round (10 ** read n)) numCapabilities
+	      [n,parts] -> runit  (round (10 ** read n)) (read parts)
