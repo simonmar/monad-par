@@ -5,7 +5,11 @@ module DistDefaultMain (defaultMain) where
 
 import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
 				    runParDistWithTransport, runParSlaveWithTransport)
+import Data.Time.Clock
 import System.Environment
+import GHC.Conc
+import Control.Concurrent.MVar
+import Control.Monad.Trans (liftIO)
 
 -- defaultMain metadat parcomp defaults = do 
 --defaultMain metadat parcomp defaults parseargs = do 
@@ -32,8 +36,26 @@ defaultMain metadat parcomp numargs parseargs = do
     case version of 
         "slave" -> runParSlaveWithTransport metadat trans
         "master" -> do 
-		       ans <- runParDistWithTransport metadat trans (parcomp args)
+--                        putStrLn "Running dummy computation to get connected..."
+-- 		       runParDistWithTransport metadat trans (return "hello")
+--                        putStrLn "All done with dummy computation.  Now the real thing."
+
+              -- Adam came up with an even better hack:
+                       mv    <- newEmptyMVar
+                       start <- newEmptyMVar
+                       -- Block until we start up the par computation:
+                       forkIO $ do takeMVar mv 
+				   getCurrentTime >>= putMVar start
+
+		       ans   <- runParDistWithTransport metadat trans 
+                                    -- First, start timing by unblocking the thread:
+				    (do liftIO$ putMVar mv ()
+				        parcomp args)
+                       end    <- getCurrentTime
+                       start' <- takeMVar start
+
 		       putStrLn $ "Final answer: " ++ show ans
+                       putStrLn $ "SelfTimed: "++ show ((fromRational $ toRational $ diffUTCTime end start') :: Double)
 		       putStrLn $ "Calling SHUTDOWN..."
                        shutdownDist
 		       putStrLn $ "... returned from shutdown, apparently successful."
