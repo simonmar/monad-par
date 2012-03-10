@@ -968,6 +968,7 @@ receiveDaemon targetEnd schedMap =
        if master then masterShutdown token targetEnd
 		 else workerShutdown schedMap'
 
+     other -> error$ "ERROR: ReceiveDaemon received unexpected message: "++ show other
 
 
 
