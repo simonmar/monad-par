@@ -394,6 +394,7 @@ copyOffset from to iFrom iTo len =
 ----------------------------------------------------------------------------------------------------
 
 isMode "cpu"     = True
+isMode "gpu"     = True
 isMode "dynamic" = True
 isMode "static"  = True
 isMode "static_blocking" = True
@@ -424,7 +425,7 @@ main = do args <- getArgs
                            -> ("dynamic", (read lo), (read hi), (read n), (read t))
                     [mode, n]    | isMode mode -> (mode, 16, 22, read n, 8192)
                     [mode, n, t] | isMode mode -> (mode, 16, 22, read n, read t)
-
+                    xs -> error $ "invalid argument list " ++ unwords xs
               gpuThi = 2 ^ (min 22 hi)
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
@@ -439,11 +440,13 @@ main = do args <- getArgs
               parComp 
                       | mode == "cpu"     = cpuMergeSort t cpuMS
 #ifdef GPU_ENABLED
+                      | mode == "gpu"     = \v -> get =<< spawnGPUMergeSort v
                       | mode == "dynamic" = dynamicMergeSort t gpuT cpuMS
                       | mode == "static"  = staticMergeSort t gpuThi cpuMS False
                       | mode == "static_blocking"  = staticMergeSort t gpuThi cpuMS True
 
           initialise [] -- CUDA initialize.
+          reset
 #endif
 --          g <- getStdGen
 

@@ -50,8 +50,7 @@ for threads in $THREADCOUNTS; do
           CURCONFIG=$(($CURCONFIG+1))
 
           # CILK_SEQ with GPU bounds
-          echo -n "16777216 $gpumode cilk_seq $threads 1 $cputhresh $gpulower
-          $GPUUPPER" >> $RESULTS
+          echo -n "16777216 $gpumode cilk_seq $threads 1 $cputhresh $gpulower $GPUUPPER" >> $RESULTS
           cmd="$ntimes $TRIALS ./mergesort.cilk_seq.exe $gpumode \
                 $NUMTOSORT $cputhresh $gpulower $GPUUPPER $RTS$threads"
           $cmd | tail -n2 | sed 's/REALTIME//' | sed 's/PRODUCTIVITY//' \
