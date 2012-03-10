@@ -1,9 +1,7 @@
 import System.Random.MWC
 import System.Environment
 import qualified Data.Vector as V
-import Data.Vector.Binary
 import qualified Data.Vector.Storable as SV
-import Data.Vector.Storable.Serialize
 import qualified Data.Vector.Unboxed as U
 import Data.Serialize
 import Data.ByteString
