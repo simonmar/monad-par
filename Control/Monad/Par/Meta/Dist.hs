@@ -22,6 +22,7 @@ import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
 import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 
 #ifdef DIST_SMP
+#warning "Activating DistSMP via SharedMemory Resource."
 import qualified Control.Monad.Par.Meta.Resources.SharedMemory   as Local
 #else
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Local
