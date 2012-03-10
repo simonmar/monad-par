@@ -30,6 +30,7 @@ import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Local
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
 import Data.Char (ord)
+import Data.Word
 import Data.List (lookup)
 import Data.Monoid (mconcat, (<>))
 import Control.Monad (liftM)
@@ -42,6 +43,7 @@ import qualified Network.Transport.Pipes as PT
 
 import System.Random (randomIO)
 import System.IO (stderr)
+import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
 import Remote2.Reg (registerCalls)
 import GHC.Conc
@@ -69,6 +71,25 @@ readTransport "TCP"   = TCP
 readTransport "Pipes" = Pipes
 
 --------------------------------------------------------------------------------
+-- Read Backoff configuration from environment variables:
+
+backoff_min :: Word64
+backoff_min = unsafePerformIO$ do
+	      env <- getEnvironment
+              case lookup "BACKOFF_MIN" env of
+                    Just s  -> do putStrLn$ "(!) Responding to BACKOFF_MIN="++s++" environment variable!"
+                                  return (read s)
+    	  	    Nothing -> return 1000
+
+backoff_max :: Word64
+backoff_max = unsafePerformIO$ do
+	      env <- getEnvironment
+              case lookup "BACKOFF_MAX" env of
+                    Just s  -> do putStrLn$ "(!) Responding to BACKOFF_MAX="++s++" environment variable!"
+                                  return (read s)
+    	  	    Nothing -> return (100 * 1000)
+
+--------------------------------------------------------------------------------
 -- Init and Steal actions:
 
 masterResource metadata trans = 
@@ -77,8 +98,7 @@ masterResource metadata trans =
               20
 #endif
           , Rem.mkMasterResource metadata trans
-          , Bkoff.mkResource 1 1
---          , Bkoff.mkResource 1000 (100*1000)
+          , Bkoff.mkResource backoff_min backoff_max
           ]
 
 slaveResource metadata trans =
@@ -87,8 +107,7 @@ slaveResource metadata trans =
               20
 #endif
           , Rem.mkSlaveResource metadata trans
-          , Bkoff.mkResource 1 1
---          , Bkoff.mkResource 1000 (100*1000)
+          , Bkoff.mkResource backoff_min backoff_max
           ]
 
 --------------------------------------------------------------------------------

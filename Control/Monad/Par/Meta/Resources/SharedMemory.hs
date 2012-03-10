@@ -28,6 +28,7 @@ import Text.Printf
 
 import Control.Monad.Par.Meta hiding (dbg, stealAction)
 import Control.Monad.Par.Meta.HotVar.IORef
+import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 
 dbg :: Bool
 #ifdef DEBUG

@@ -40,6 +40,8 @@ defaultInit = IA (\ sa _ -> return () )
 -- amount that doubles each time until it surpasses the maximum, at
 -- which point each sleep will be for the maximum: 100ms.
 mkStealAction :: Word64 -> Word64 -> StealAction
+-- Sleeping ZERO time means not sleeping at all:
+mkStealAction shortest 0 = SA$ \ _ _ -> return Nothing
 mkStealAction shortest longest = SA sa 
   where 
     sa Sched{consecutiveFailures} _ = do
@@ -47,7 +49,7 @@ mkStealAction shortest longest = SA sa
       let nanos  = if failCount >= 64
                    then longest 
                    else 2 ^ failCount
-      if nanos > shortest then do 
+      if nanos >= shortest then do 
          let capped = min longest nanos
          dbgTaggedMsg 3 $ "Backoff: Sleeping, nanoseconds = " `BS.append` BS.pack (show capped)
          threadDelay (fromIntegral capped)
