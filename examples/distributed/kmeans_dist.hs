@@ -190,6 +190,7 @@ main = do
      writeIORef pointData (Just pts)
      runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
    ["test", filename] -> do
+     printf "Compiled with support for %d-dim points\n" vectorSize
      pts <- loadPoints filename
      printf "%d chunks of %d points each loaded\n" (V.length pts) (V.length (pts V.! 0))
    otherwise -> error "Usage: kmeans_dist.exe (master|slave) (tcp|pipes) datafile"

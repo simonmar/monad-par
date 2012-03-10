@@ -27,7 +27,7 @@ import System.Random.MWC
 -- change vectorSize to control how many dimensions Point has and then
 -- recompile
 vectorSize :: Int
-vectorSize = 50
+vectorSize = 100
 
 type Point = SV.Vector Double
 
