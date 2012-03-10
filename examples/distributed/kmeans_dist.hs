@@ -26,8 +26,9 @@ import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.Serialize
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, spawn, runParDistWithTransport,
-  runParSlaveWithTransport, WhichTransport(Pipes, TCP), shutdownDist, readTransport)
+import Control.Monad.Par.Meta.DistSMP 
+        (longSpawn, Par, get, spawn, runParDistWithTransport,
+	 runParSlaveWithTransport, WhichTransport(Pipes, TCP), shutdownDist, readTransport)
 import Control.DeepSeq
 import System.Environment
 import System.Random.MWC

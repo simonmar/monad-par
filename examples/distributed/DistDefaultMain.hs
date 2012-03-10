@@ -3,8 +3,9 @@
 module DistDefaultMain (defaultMain) where
 
 
-import Control.Monad.Par.Meta.Dist (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
-				    runParDistWithTransport, runParSlaveWithTransport)
+import Control.Monad.Par.Meta.DistSMP
+       (shutdownDist, WhichTransport(Pipes,TCP),
+	runParDistWithTransport, runParSlaveWithTransport)
 import Data.Time.Clock
 import System.Environment
 import GHC.Conc

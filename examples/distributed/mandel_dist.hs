@@ -13,7 +13,8 @@ import qualified Control.Monad.Par.Combinator as C
 import PARSCHED
 #else
 -- import Control.Monad.Par
-import Control.Monad.Par.Meta.Dist
+-- import Control.Monad.Par.Meta.Dist
+import Control.Monad.Par.Meta.DistSMP
 #endif
 
 
