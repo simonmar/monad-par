@@ -29,7 +29,7 @@ endif
 all: mergesort cilkWrap
 
 mergesort: mergesort.hs cilksort-nomain.o
-	$(GHC) --make -O2 -rtsopts -threaded $^ $(LDFLAGS) -D$(CPU_SORT) -o $@
+	$(GHC) /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o -i../.. --make -O2 -rtsopts -threaded $^ $(LDFLAGS) -D$(CPU_SORT) -o $@
 
 cilksort: cilksort.o
 	$(CC) $(CFLAGS) $^ -o $@

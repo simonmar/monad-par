@@ -7,6 +7,7 @@ module Data.Vector.Algorithms.CUDA.Merge ( mergeSort, unsafeMergeSort ) where
 #endif
 
 import Control.Applicative
+import Control.Concurrent
 import Control.Monad
 
 import qualified Data.Vector.Storable as V
@@ -18,9 +19,16 @@ import Foreign.C
 import Foreign.CUDA
 import qualified Foreign.Marshal as Marsh
 
+import System.IO.Unsafe
+
 #ifdef TEST
 import System.Random.MWC
 #endif
+
+-- mutex for all GPU calls
+{-# NOINLINE gpuLock #-}
+gpuLock :: MVar ()
+gpuLock = unsafePerformIO $ newMVar ()
 
 foreign import ccall "initMergeSort" cu_initMergeSort :: IO () 
 foreign import ccall "closeMergeSort" cu_closeMergeSort :: IO ()
@@ -102,14 +110,14 @@ unsafeMergeSort v = do
   let n = V.length v
   mv <- M.unsafeCast <$> V.unsafeThaw v
   mv2 <- M.new n
-  (mv', _) <- unsafeMergeSortKeysVals mv mv2 n 1
+  (mv', _) <- withMVar gpuLock $ \_ -> unsafeMergeSortKeysVals mv mv2 n 1
   V.unsafeFreeze $ M.unsafeCast mv'
 
 -- | Imposes a bit of allocation overhead, but maintains referential
 -- transparency.
 mergeSort :: V.Vector Word32 -> IO (V.Vector Word32)
 mergeSort v =
-  V.unsafeCast <$> mergeSortKeys (V.unsafeCast v) (V.length v) 1
+  V.unsafeCast <$> (withMVar gpuLock $ \_ -> mergeSortKeys (V.unsafeCast v) (V.length v) 1)
              
 #ifdef TEST
 test :: IO (V.Vector Word32)
