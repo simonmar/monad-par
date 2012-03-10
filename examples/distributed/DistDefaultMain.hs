@@ -55,7 +55,7 @@ defaultMain metadat parcomp numargs parseargs = do
                        start' <- takeMVar start
 
 		       putStrLn $ "Final answer: " ++ show ans
-                       putStrLn $ "SelfTimed: "++ show ((fromRational $ toRational $ diffUTCTime end start') :: Double)
+                       putStrLn $ "SELFTIMED: "++ show ((fromRational $ toRational $ diffUTCTime end start') :: Double)
 		       putStrLn $ "Calling SHUTDOWN..."
                        shutdownDist
 		       putStrLn $ "... returned from shutdown, apparently successful."
