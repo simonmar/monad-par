@@ -187,7 +187,7 @@ main = do
    ["slave", trans, filename] -> do
      pts <- loadPoints filename
      writeIORef pointData (Just pts)
-     return $ runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
+     runParSlaveWithTransport [__remoteCallMetaData] (parse_trans trans)
    ["test", filename] -> do
      pts <- loadPoints filename
      printf "%d chunks of %d points each loaded\n" (V.length pts) (V.length (pts V.! 0))
