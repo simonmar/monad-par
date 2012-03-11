@@ -29,8 +29,18 @@ main = do args <- getArgs
                   [n] -> (read n)
           
           let rands = genRandoms size
+	  evaluate (deepseq rands ())
+
           putStrLn "Pseq based version:"
-          print$ head $ quicksortS rands
+
+          start <- getCurrentTime
+          let sorted = quicksortS rands
+          putStr "Prefix of sorted list:\n  "
+          print$ take 8 $ sorted
+          end   <- getCurrentTime
+
+          let runningTime = ((fromRational $ toRational $ diffUTCTime end start) :: Double)
+          printf "Sorting AList took %0.3f sec.\n" runningTime
+          putStrLn $ "SELFTIMED " ++ show runningTime
   
-  
-    
+ 
