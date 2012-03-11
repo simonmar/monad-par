@@ -328,7 +328,9 @@ main = do
           case opts_args of 
 --	    [] -> ("master","tcp",2, 1, 10, 2)
 	    [] -> ("master","tcp",2, 1, 65536, 128)
-	    [role,ver,trans_,lw,up,gran] -> (role,trans_, read ver, read lw, read up, read gran)
+	    [r] -> (r,"tcp",2, 1, 65536, 128)
+	    [r,t] -> (r,t,2, 1, 65536, 128)
+	    [role,trans_,ver,lw,up,gran] -> (role,trans_, read ver, read lw, read up, read gran)
 	    ls -> error$ "Unexpected number of arguments: "++ show ls
         seed = 3856
         trans = parse trans_

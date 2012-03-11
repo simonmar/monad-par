@@ -32,6 +32,7 @@ fi
 ARGS=$*
 
 export MACHINE_LIST=`./cluster-machinelist`
+export VERBOSITY=$VERBOSITY
 
 time ./$APP.exe $ROLE tcp $ARGS &
 PID=$!

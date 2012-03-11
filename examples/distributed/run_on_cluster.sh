@@ -34,8 +34,8 @@ fi
 rm -f *.addr
 
 # Launch master remotely asynchronously:
-srun -N1 -o master-%N.log ./run_single.sh -v $VERBOSITY $APP $ARGS &
+srun -N1 -o master-$SLURM_NNODES-%N.log ./run_single.sh -v $VERBOSITY $APP $ARGS &
 sleep $SLEEP
 
 # Launch workers remotely (asynchronously):
-srun -N$((SLURM_NNODES - 1)) -o worker-%N.log ./run_single.sh -v $VERBOSITY -r slave $APP $ARGS
+srun -N$((SLURM_NNODES - 1)) -o worker-$SLURM_NNODES-%N.log ./run_single.sh -v $VERBOSITY -r slave $APP $ARGS
