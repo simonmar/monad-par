@@ -1,0 +1,9 @@
+Running parfib with settings: ("master","tcp",30,1)
+Using non-thresholded version:
+Final answer: 1346269
+Calling SHUTDOWN...
+... returned from shutdown, apparently successful.
+
+real	0m7.640s
+user	0m18.841s
+sys	0m4.176s

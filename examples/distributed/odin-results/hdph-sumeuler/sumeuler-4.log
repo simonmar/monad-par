@@ -1,0 +1,1 @@
+{v2, chunksize=128} sum $ map totient [1..65536] = 1305514926 {runtime=100.159294s}

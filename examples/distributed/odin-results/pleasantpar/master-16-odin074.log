@@ -1,0 +1,12 @@
+Running embarassingly parallel benchmark.
+Running 10000000000 total iterations
+Spawning 64 tasks...
+Done initializing.
+Final answer: 23.60306659489133
+SELFTIMED: 6.697139
+Calling SHUTDOWN...
+... returned from shutdown, apparently successful.
+
+real	0m8.857s
+user	0m18.774s
+sys	0m2.475s
