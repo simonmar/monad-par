@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.2.2
+Version:             0.3
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -13,6 +13,8 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2.1    : Bumped for change AList
 --  0.2.2    : incorporation of real deque package
 --  0.2.3    : Restricted module export for 0.2 release.
+
+--  0.3      : Refactored modules.  This module is the original/core.
 
 
 Description:         This library offers an alternative parallel programming
@@ -142,6 +144,9 @@ Library
   }
 
   Build-depends: base >= 4 && < 5
+               -- This provides the interface which monad-par implements:
+               , abstract-par 
+
 -- The parallel package currently requires deepseq 1.1:
 --               , deepseq >= 1.1 && < 1.2
                , deepseq >= 1.2
