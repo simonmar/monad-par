@@ -1,0 +1,86 @@
+
+                 -- Meta scheduler and friends
+                 , Control.Monad.Par.Meta
+                 , Control.Monad.Par.Meta.SharedMemoryOnly
+                 , Control.Monad.Par.Meta.Resources.SharedMemory
+                 , Control.Monad.Par.Meta.Resources.Backoff
+                 , Data.Vector.Serialize 
+                 , Data.Vector.Storable.Serialize
+
+
+OTHER MODS
+
+
+               -- HotVar implementations
+               , Control.Monad.Par.Meta.HotVar.IORef
+
+               , Control.Monad.Par.Meta.Resources.Debugging
+
+
+
+  if !flag(NoDist) {
+    Build-depends: network
+--                 , cereal-derive
+                 , directory >= 1.1
+                 , ghc-prim
+                 , network-transport
+                 , network-transport-pipes
+                 , process >= 1.1
+                 , syb >= 0.3
+                 , unix >= 2.5
+
+    Exposed-modules: Control.Monad.Par.Meta.Dist,
+                     Control.Monad.Par.Meta.Resources.Remote
+  }
+
+
+
+  if !flag(NoGPU) {
+    Build-depends:
+                 --  accelerate >= 0.9.0.1
+                   cuda >= 0.4.1
+                 , vector-algorithms >= 0.5
+    ld-options: /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o
+  }
+
+
+
+  if !flag(NoGPU) {
+     Exposed-modules: 
+--                   Control.Monad.Par.Meta.SharedMemoryAccelerate
+--                 , Control.Monad.Par.Meta.Resources.Accelerate
+                   Data.Vector.Algorithms.CUDA.Merge
+                 , Control.Monad.Par.Meta.Resources.CUDAMergeSort
+                 , Control.Monad.Par.Meta.SMPMergeSort
+  }
+
+
+  if flag(affinity) {
+      CPP-options: -DAFFINITY
+  }
+
+  if flag(affinity) {
+    Other-modules: System.Posix.Affinity
+  }
+
+  if flag(affinity) {   
+    c-sources:       cbits/pin.c
+    include-dirs:    include
+    includes:        pin.h
+  }
+
+
+
+
+
+Flag NoGPU
+  Description: Turn of GPU support and therefore accelerate dependencies.
+  Default:     True
+
+Flag NoDist
+  Description: Turn of Distributed support and therefore certain dependencies.
+  Default:     False
+
+Flag affinity
+  Description: Turn on pinning to CPUs via pthread/linux scheduler calls.
+  Default:     False

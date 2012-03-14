@@ -109,12 +109,6 @@ Library
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
 
-                 -- A class generalizing different levels of monad-par functionality:
-                 , Control.Monad.Par.Class
-
-                 -- A class providing unsafe functionality:
-                 , Control.Monad.Par.Unsafe
-
                  -- A collection of combinators for common parallel
                  -- patterns and data structure traversals:
                  , Control.Monad.Par.Combinator
@@ -127,21 +121,6 @@ Library
                  -- It only supports Futures, not full IVars:
                  , Control.Monad.Par.Scheds.Sparks
 
-                 -- Meta scheduler and friends
-                 , Control.Monad.Par.Meta
-                 , Control.Monad.Par.Meta.SharedMemoryOnly
-                 , Control.Monad.Par.Meta.Resources.SharedMemory
-                 , Control.Monad.Par.Meta.Resources.Backoff
-                 , Data.Vector.Serialize 
-                 , Data.Vector.Storable.Serialize
-  if !flag(NoGPU) {
-     Exposed-modules: 
---                   Control.Monad.Par.Meta.SharedMemoryAccelerate
---                 , Control.Monad.Par.Meta.Resources.Accelerate
-                   Data.Vector.Algorithms.CUDA.Merge
-                 , Control.Monad.Par.Meta.Resources.CUDAMergeSort
-                 , Control.Monad.Par.Meta.SMPMergeSort
-  }
 
   Build-depends: base >= 4 && < 5
                -- This provides the interface which monad-par implements:
@@ -173,27 +152,7 @@ Library
     Build-depends: lockfree-queue
   }
                 -- AList now depends on binary/cereal.
-  if !flag(NoGPU) {
-    Build-depends:
-                 --  accelerate >= 0.9.0.1
-                   cuda >= 0.4.1
-                 , vector-algorithms >= 0.5
-    ld-options: /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o
-  }
-  if !flag(NoDist) {
-    Build-depends: network
---                 , cereal-derive
-                 , directory >= 1.1
-                 , ghc-prim
-                 , network-transport
-                 , network-transport-pipes
-                 , process >= 1.1
-                 , syb >= 0.3
-                 , unix >= 2.5
 
-    Exposed-modules: Control.Monad.Par.Meta.Dist,
-                     Control.Monad.Par.Meta.Resources.Remote
-  }
 --               , chaselev-deque
 --               , hashtables >= 1.0.0.0
   -- NOTE!  These dependencies DO NOT include all dependencies required
@@ -217,9 +176,6 @@ Library
                -- Serial Elision is currently experimental:
                , Control.Monad.Par.Scheds.SerialElision
 
-               -- HotVar implementations
-               , Control.Monad.Par.Meta.HotVar.IORef
-
 
                ------------------------------------------------------------
                --                   Data Structures                      -- 
@@ -236,10 +192,10 @@ Library
 --               , Control.Monad.Par.IMap
 
                 -- Channels: Also not ready for primetime quite yet:
-               , Control.Monad.Par.Chan
+--               , Control.Monad.Par.Chan
 
                -- More compact representation for [Bool]:
-               , Data.BitList
+--               , Data.BitList
 
                -- AList should probably be internal.  Needs more testing and tuning:
                , Control.Monad.Par.AList 
@@ -259,21 +215,6 @@ Library
                -- Deterministic RNG should be released as soon as its tested more.
                , Control.Monad.Par.RNG
 
-               , Control.Monad.Par.Meta.Resources.Debugging
-
-  if flag(affinity) {
-      CPP-options: -DAFFINITY
-  }
-
-  if flag(affinity) {
-    Other-modules: System.Posix.Affinity
-  }
-
-  if flag(affinity) {   
-    c-sources:       cbits/pin.c
-    include-dirs:    include
-    includes:        pin.h
-  }
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
@@ -287,18 +228,6 @@ Test-Suite test-monad-par
                  , test-framework, test-framework-th
                  , test-framework-hunit, test-framework-quickcheck2
 
-
-Flag NoGPU
-  Description: Turn of GPU support and therefore accelerate dependencies.
-  Default:     True
-
-Flag NoDist
-  Description: Turn of Distributed support and therefore certain dependencies.
-  Default:     False
-
-Flag affinity
-  Description: Turn on pinning to CPUs via pthread/linux scheduler calls.
-  Default:     False
 
 Flag MichaelScott
   Description: Temporary flag.  Turn on MichaelScott lockfree queues for Remote.hs
