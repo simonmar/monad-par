@@ -1,0 +1,53 @@
+Name:                meta-par-cuda
+Version:             0.3
+Synopsis:            monad-par aware package for calling directly to CUDA
+
+-- Version history:
+-- 
+-- 0.3: Initial release.
+
+Description:        
+
+Homepage:            https://github.com/simonmar/monad-par
+License:             BSD3
+License-file:        LICENSE
+Author:              Adam Foltzer
+Maintainer:          Adam Foltzer <acfoltzer@gmail.com>
+Copyright:           (c) Adam Foltzer 2011-2012
+Stability:           Experimental
+Category:            Parallelism, GPU
+Build-type:          Simple
+Cabal-version:       >=1.8
+
+Library
+  Exposed-modules: 
+                   Control.Monad.Par.Meta.Resources.CUDAMergeSort
+                 , Data.Vector.Algorithms.CUDA.Merge
+  Build-depends:
+                  base >= 4 && < 5
+                , cuda >= 0.4.1
+                , vector-algorithms >= 0.5
+                , meta-par
+                , abstract-deque
+--                 , bytestring >= 0.9
+--                 , network
+--                 , directory >= 1.1
+--                 , ghc-prim
+--                 , containers
+                , transformers
+--                 , deepseq >= 1.2
+--                 , mtl
+--                 , network-transport
+--                 , network-transport-pipes
+--                 , process >= 1.1
+--                 , syb >= 0.3
+--                 , unix >= 2.5
+--                 , RPC
+--                 , random 
+--                 , cereal
+                , vector
+--                 , split
+
+
+  -- TEMP!  Fixme.
+  ld-options: /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o
