@@ -97,6 +97,15 @@ class Monad m => ParChan m snd rcv | m -> snd, m -> rcv where
    recv    :: rcv a -> m a
    send    :: snd a -> a -> m ()
 
+
+--------------------------------------------------------------------------------
+-- Foreign Computations
+--------------------------------------------------------------------------------
+
+-- | These are computations outside the normal 
+
+class Monad m => ParDist m var | m -> var where
+
 --------------------------------------------------------------------------------
 -- Distributed operation:
 --------------------------------------------------------------------------------

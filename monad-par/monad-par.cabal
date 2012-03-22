@@ -14,7 +14,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2.2    : incorporation of real deque package
 --  0.2.3    : Restricted module export for 0.2 release.
 
---  0.3      : Refactored modules.  This module is the original/core.
+--  0.3      : Factored/reorganized modules.  This module is the original, core monad-par.
 
 
 Description:         This library offers an alternative parallel programming
