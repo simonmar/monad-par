@@ -22,6 +22,8 @@ function doall () {
 
   (cd meta-par;          $CMD)
 #  (cd meta-par-dist-tcp; $CMD)
+
+  (cd RPC; $CMD)
 }
 
 # Pass through extra command line arguments to cabal:

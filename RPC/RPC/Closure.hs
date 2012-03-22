@@ -5,14 +5,14 @@
 -- functions as strings, but this could be theoretically
 -- swapped out for the \"static\" mechanism described in the
 -- paper.
-module Remote2.Closure (
+module RPC.Closure (
                        Closure(..),
 		       BiClosure(..),
                        ) where
 
 import Data.Serialize as Ser 
 import Data.Typeable (Typeable)
-import Remote2.Encoding (Payload)
+import RPC.Encoding (Payload)
 
 import qualified Data.Binary as Bin -- (Binary,get,put)
 import qualified Data.Serialize as Ser

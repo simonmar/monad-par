@@ -3,8 +3,8 @@
 -- | This module provides the 'Serializable' type class and
 -- functions to convert to and from 'Payload's. It's implemented
 -- in terms of Haskell's "Data.Binary". The message sending
--- and receiving functionality in "Remote.Process" depends on this.
-module Remote2.Encoding (
+-- and receiving functionality in "RPC.Process" depends on this.
+module RPC.Encoding (
           Serializable,
           serialEncode,
           serialEncodePure,

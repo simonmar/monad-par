@@ -2,23 +2,23 @@
 
 -- | Provides Template Haskell-based tools
 -- and syntactic sugar for dealing with closures
-module Remote2.Call (
+module RPC.Call (
          remotable,
          mkClosure,
          mkClosureRec,
         ) where
 
 import Language.Haskell.TH
-import Remote2.Encoding (Payload,serialDecode,serialEncode,serialEncodePure)
 import Control.Monad.Trans (liftIO)
 import Control.Monad (liftM)
-import Data.Maybe (isJust)
-import Remote2.Closure (Closure(..))
--- import Remote.Process (ProcessM)
-import Remote2.Reg (putReg,RemoteCallMetaData)
--- import Remote.Task (TaskM,serialEncodeA,serialDecodeA)
 
-import Control.Monad.Par.Meta
+-- Need to handle Par types... but which one!?
+import qualified Control.Monad.Par.Meta as MetaPar (Par)
+import Data.Maybe (isJust)
+
+import RPC.Encoding (Payload,serialDecode,serialEncode,serialEncodePure)
+import RPC.Closure  (Closure(..))
+import RPC.Reg      (putReg,RemoteCallMetaData)
 
 import Debug.Trace
 
@@ -159,7 +159,7 @@ makeEnv =
 --     eProcessM <- [t| ProcessM |]
      eIO <- [t| IO |]
 --     eTaskM <- [t| TaskM |]
-     ePar <- [t| Par |]
+     ePar <- [t| MetaPar.Par |]
      eLoc <- location
      ePayload <- [t| Payload |]
      eLiftIO <- [e|liftIO|]

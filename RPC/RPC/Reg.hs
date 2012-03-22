@@ -1,6 +1,6 @@
 -- | Runtime metadata functions, part of the 
 -- RPC mechanism
-module Remote2.Reg (
+module RPC.Reg (
          registerCalls,
          Lookup,
          Identifier,
