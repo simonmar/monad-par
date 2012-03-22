@@ -35,7 +35,7 @@ import Data.Word
 import Data.List (lookup)
 import Data.Monoid (mconcat, (<>))
 import Control.Monad (liftM)
-import Control.Monad.Par.Meta.HotVar.IORef
+-- import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
 
 import qualified Network.Transport     as T
@@ -46,7 +46,7 @@ import System.Random (randomIO)
 import System.IO (stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import Remote2.Reg (registerCalls)
+import RPC.Reg (registerCalls)
 import GHC.Conc
 
 --------------------------------------------------------------------------------

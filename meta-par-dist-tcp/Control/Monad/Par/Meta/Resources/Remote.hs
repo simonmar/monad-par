@@ -68,9 +68,9 @@ import Control.Monad.Par.Meta.Resources.Debugging
 import Control.Monad.Par.Meta (forkWithExceptions, new, put_, Sched(Sched,no,ivarUID),
 			       IVar, Par, InitAction(..), StealAction(SA), Resource(..))
 import qualified Network.Transport     as T
-import Remote2.Closure  (Closure(Closure))
-import Remote2.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
-import qualified Remote2.Reg as Reg
+import RPC.Closure  (Closure(Closure))
+import RPC.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
+import qualified RPC.Reg as Reg
 import GHC.Conc (numCapabilities)
 
 ----------------------------------------------------------------------------------------------------

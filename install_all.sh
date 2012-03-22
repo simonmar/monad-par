@@ -14,16 +14,13 @@ if [ "$GHC" == "" ];
 then GHC=`which ghc`
 fi
 
-
 function doall () {
   CMD=$1
-  (cd abstract-par;  $CMD)
-  (cd monad-par;     $CMD)
-
+  (cd abstract-par;      $CMD)
+  (cd monad-par;         $CMD)
   (cd meta-par;          $CMD)
-#  (cd meta-par-dist-tcp; $CMD)
-
-  (cd RPC; $CMD)
+  (cd RPC;               $CMD)
+  (cd meta-par-dist-tcp; $CMD)
 }
 
 # Pass through extra command line arguments to cabal:

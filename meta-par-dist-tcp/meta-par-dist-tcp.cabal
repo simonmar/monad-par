@@ -33,38 +33,26 @@ Library
 
   Build-depends:  
                   base >= 4 && < 5
-                  -- This provides the interface for monad-par:
+                , bytestring >= 0.9
                 , network
                 , directory >= 1.1
                 , ghc-prim
+                , containers
+                , transformers
+                , deepseq >= 1.2
+                , mtl
                 , network-transport
                 , network-transport-pipes
                 , process >= 1.1
                 , syb >= 0.3
                 , unix >= 2.5
-
---                  -- HotVar implementations:
---                  Control.Monad.Par.Meta.HotVar.IORef
---                , Control.Monad.Par.Meta.Resources.Debugging
-
-
---   Build-depends: base >= 4 && < 5
---                -- This provides the interface for monad-par:
---                , abstract-par 
---                , mwc-random >= 0.11
---                , containers
---                , bytestring >= 0.9
---                , abstract-deque >= 0.1.4
---                , transformers >= 0.2.2.0
---                , deepseq >= 1.2
---                , vector
---                , QuickCheck 
---                , cereal >= 0.3
---                , mtl >= 2.0.1.0
-
-
-
-
+                , RPC
+                , random 
+                , meta-par
+                , cereal
+                , vector
+                , split
+                , abstract-deque
 
 
 --   if !flag(NoGPU) {

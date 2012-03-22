@@ -23,16 +23,18 @@ Library
   Exposed-modules: 
                  -- Meta scheduler and friends
                    Control.Monad.Par.Meta
+                 -- A complete scheduler:
                  , Control.Monad.Par.Meta.SharedMemoryOnly
+
+                 -- Mostly internal modules for use to build other schedulers:
+                 , Control.Monad.Par.Meta.Resources.SingleThreaded 
                  , Control.Monad.Par.Meta.Resources.SharedMemory
                  , Control.Monad.Par.Meta.Resources.Backoff
+                 , Control.Monad.Par.Meta.Resources.Debugging
+                 , Control.Monad.Par.Meta.HotVar.IORef
                  , Data.Vector.Serialize 
                  , Data.Vector.Storable.Serialize
 
-  Other-modules:
-                 -- HotVar implementations:
-                 Control.Monad.Par.Meta.HotVar.IORef
-               , Control.Monad.Par.Meta.Resources.Debugging
 
   Build-depends: base >= 4 && < 5
                -- This provides the interface for monad-par:
