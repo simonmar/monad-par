@@ -52,22 +52,23 @@ oracleFork = undefined
 --------------------------------------------------------------------------------
 
 cpuVer = RI {
-    name = "cpuVer" :: Name a b,
+    name = "foo_cpuVer" :: Name a b,
     resourceType = CPU :: Resource,
     run = \a -> mycode a 
---        :: a -> Par b,
     cost = \n -> (length n)^2
---    kappa = ???? :: KappaRange
 }
 
 gpuVer = RI {
-    name = "gpuVer" :: Name a b,
+    name = "foo_gpuVer" :: Name a b,
     resourceType = GPU :: Resource,
 --    run = mycode ... :: a -> Par (Acc b),
     run = (\a -> gpuSpawn (mycode a)) :: a -> Par b,   
     cost = (\n -> length n) :: a -> AbstCost,
 --    kappa = ???? :: KappaRange
 }
+
+
+
 
 
 --------------------------------------------------------------------------------
@@ -93,6 +94,20 @@ gpuVer = RI {
 -- through with a StateT, perhaps.
 
   myRIs = (RISet [cpuVer,gpuVer])
+
+-- If we explicitly initialized the state and associated it with a
+-- function maybe that would look something like this:
+  do myfoo <- makeEstimatorMagic (RISet [cpuVer,gpuVer,distVer])
+     ...
+     oracleFork myfoo 39  
+     oracleFork myfoo 40 
+
+     -- Remove distributed:
+     myfoo2 <- makeEstimatorMagic (RISet [cpuVer,gpuVer])
+     oracleFork myfoo2 41
+
+
+
 
 
 
