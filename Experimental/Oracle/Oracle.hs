@@ -106,8 +106,7 @@ gpuVer = RI {
      myfoo2 <- makeEstimatorMagic (RISet [cpuVer,gpuVer])
      oracleFork myfoo2 41
 
-
-
-
+--------------------------------------------------------------------------------
+-- More REAL examples: write out a mergesort:
 
 
