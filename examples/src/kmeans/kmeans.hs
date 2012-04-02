@@ -1,53 +1,40 @@
 -- K-Means sample from "Parallel and Concurrent Programming in Haskell"
 -- Simon Marlow
--- with minor modifications for benchmarking: erjiang
+-- with modifications for benchmarking: erjiang
 --
--- With three versions:
---   [ kmeans_seq   ]  a sequential version
---   [ kmeans_strat ]  a parallel version using Control.Parallel.Strategies
---   [ kmeans_par   ]  a parallel version using Control.Monad.Par
---
--- Usage (sequential):
---   $ ./kmeans-par
---
--- Usage (Strategies):
---   $ ./kmeans-par strat 600 +RTS -N4
 
--- Usage (Par monad):
---   $ ./kmeans-par par 600 +RTS -N4
-
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# OPTIONS_GHC -O2 -ddump-splices #-}
 import System.IO
 import System.IO.Unsafe
+import Data.IORef
 import KMeansCommon
+import Control.Applicative
+import Control.Monad.IO.Class (liftIO)
 import Data.Array
 import Text.Printf
+import Data.Data
 import Data.List
 import Data.Function
+import qualified Data.Serialize as Ser
+import Data.Typeable
 import qualified Data.Vector as V
+import qualified Data.Vector.Storable as SV
+import Data.Vector.Storable.Serialize
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
 import Control.Monad.Par as Par
+import System.Random.MWC
 import Control.DeepSeq
 import System.Environment
 import Data.Time.Clock
 import Control.Exception
-import System.Random.Mersenne
 import Control.Monad
+import Data.ByteString (readFile)
 
 nClusters = 4
-
-main = do
-  args <- getArgs
-  t0 <- getCurrentTime
-  final_clusters <- case args of
--- ["strat",nChunks, chunkSize] -> kmeans_strat (read npts) nClusters clusters
-   [nChunks, chunkSize] ->
-     kmeans_par (read nChunks) (read chunkSize)
-   _other -> kmeans_par 2 14
-  t1 <- getCurrentTime
-  print final_clusters
-  printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0) :: Double)
-
 
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (sequential)
@@ -71,41 +58,59 @@ main = do
 
 tooMany = 50
 
+{-# NOINLINE pointData #-}
+pointData :: IORef (Maybe (V.Vector (V.Vector Point)))
+pointData = unsafePerformIO $ newIORef Nothing
+
+loadPoints :: String -> IO (V.Vector (V.Vector Point))
+loadPoints filename = do
+  bin <- Data.ByteString.readFile filename
+  return $ case Ser.decode bin of
+              Left err -> error $ "Could not deserialize data: "++err
+              Right d -> V.fromList d :: V.Vector (V.Vector Point)
+
+getChunk id = do
+  dat <- readIORef pointData
+  return $ case dat of
+    Just chunks -> chunks V.! id
+    Nothing -> error "Point data not loaded!"
+
 -- -----------------------------------------------------------------------------
 -- K-Means: repeatedly step until convergence (Par monad)
 
-kmeans_par :: Int -> Int -> IO [Cluster]
-kmeans_par nChunks chunkSize = do
-  clusters <- mapM genCluster [0..nClusters-1]
-  printf "%d clusters generated\n" (length clusters)
-  let
-      loop :: Int -> [Cluster] -> IO [Cluster]
-      loop n clusters | n > tooMany = do printf "giving up."; return clusters
-      loop n clusters = do
-        hPrintf stderr "iteration %d\n" n
-     -- hPutStr stderr (unlines (map show clusters))
-        let
-             new_clusterss = runPar $ doChunks nChunks chunkSize clusters
+splitChunks :: (Int, Int, [Cluster]) -> Par [Cluster]
+splitChunks (n0, nn, clusters) =
+  case nn - n0 of
+    0 -> kmeans_chunk clusters nn
+    1 -> do
+--           liftIO $ printf "local branch\n"
+           lx <- spawn $ kmeans_chunk clusters n0
+           rx <- spawn $ kmeans_chunk clusters nn
+           l <- get lx
+           r <- get rx
+           return $ reduce nClusters [l, r]
+    otherwise -> do
+--           liftIO $ printf "longSpawn branch\n"
+           lx <- spawn $ splitChunks (n0, (halve n0 nn), clusters)
+           rx <- spawn $ splitChunks ((halve n0 nn), nn, clusters)
+           l <- get lx
+           r <- get rx
+           return $ reduce nClusters [l, r]
 
-             clusters' = reduce nClusters new_clusterss
+{-# INLINE halve #-}
+halve :: Int -> Int -> Int
+halve n0 nn = n0 + (div (nn - n0) 2)
 
-        if clusters' == clusters
-           then return clusters
-           else loop (n+1) clusters'
-  --
-  final <- loop 0 clusters
-  return final
-
-doChunks :: Int -> Int -> [Cluster] -> Par [[Cluster]]
--- parMap f xs = mapM (spawnP . f) xs >>= mapM get
-doChunks n chunkSize clusters = mapM (spawn . return . (kmeans_chunk chunkSize clusters)) [0..(n-1)]
-  >>= mapM get
+-- doChunks :: Int -> Int -> [Cluster] -> Par [[Cluster]]
+-- -- parMap f xs = mapM (spawnP . f) xs >>= mapM get
+-- doChunks n chunkSize clusters = mapM (spawn . return . (kmeans_chunk chunkSize clusters)) [0..(n-1)]
+--   >>= mapM get
 
 
-kmeans_chunk :: Int -> [Cluster] -> Int -> [Cluster]
-kmeans_chunk chunkSize clusters id =
-  let points = unsafePerformIO $ genChunk id chunkSize in
-    step clusters points
+kmeans_chunk :: [Cluster] -> Int -> Par [Cluster]
+kmeans_chunk clusters id = do
+  let points = unsafePerformIO (getChunk id)
+  return $ step clusters points
 
 -- -----------------------------------------------------------------------------
 -- Perform one step of the K-Means algorithm
@@ -141,3 +146,37 @@ makeNewClusters arr =
                         -- no points.  This can happen when a cluster is not
                         -- close to any points.  If we leave these in, then
                         -- the NaNs mess up all the future calculations.
+
+kmeans_par :: [Cluster] -> Int -> Par [Cluster]
+kmeans_par clusters nChunks = do
+  let
+      loop :: Int -> [Cluster] -> Par [Cluster]
+      loop n clusters | n > tooMany = do unsafePerformIO (printf "giving up."); return clusters
+      loop n clusters = do
+        unsafePerformIO $ hPrintf stderr "iteration %d\n" n
+     -- hPutStr stderr (unlines (map show clusters))
+        clusters' <- splitChunks (0, nChunks-1, clusters)
+
+        if clusters' == clusters
+           then return clusters
+           else loop (n+1) clusters'
+  --
+  loop 0 clusters  
+
+main = do
+  args <- getArgs
+  t0 <- getCurrentTime >>= newIORef
+  final_clusters <- case args of
+   [filename] -> do
+     pts <- loadPoints filename
+     writeIORef pointData (Just pts)
+     clusters <- mapM genCluster [0..nClusters-1]
+     printf "%d clusters generated\n" (length clusters)
+     getCurrentTime >>= writeIORef t0
+     return $ runPar $ kmeans_par clusters (V.length pts)
+  t1 <- getCurrentTime
+  t0t <- readIORef t0
+  print final_clusters
+  printf "SELFTIMED %.2f\n" (realToFrac (diffUTCTime t1 t0t) :: Double)
+
+
