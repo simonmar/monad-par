@@ -1,4 +1,4 @@
-import Control.Monad.Par
+;import Control.Monad.Par
 import System.Mem.StableName
 
 data AbstCost = AC Float
@@ -108,5 +108,115 @@ gpuVer = RI {
 
 --------------------------------------------------------------------------------
 -- More REAL examples: write out a mergesort:
+--------------------------------------------------------------------------------
 
+-- Here's ONE way it could work, with OracleFun's passed by value, including
+-- subfunction tables (i.e. not represented at the type level).
+
+cost = O_NlogN
+
+-- OracleFun would have IMPLICIT state, which is mutated, perhaps with
+-- unsafePerformIO, to keep track of estimators.
+superMergeSort :: OracleFun (V.Vector ElmT) (V.Vector ElmT)
+superMergeSort = mkOracleFun [(GPU,  gpuMergeSort,  cost),
+			      (Dist, distMergeSort, cost)
+                              (Par,  parMergeSort,  cost)
+                              (Ser,  serQuicksort,  cost)
+			     ]
+
+-- Merge sort for a Vector using the Par monad
+-- t is the threshold for using sequential merge (see merge)
+oracleMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+oracleMergeSort vec | singleton? vec = ...
+oracleMergeSort vec = 
+   do let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- oracleSpawn$ superMergeSort lhalf
+      right <-              oracleMergeSort rhalf
+      left  <- get ileft
+      merge left right
+
+parMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+parMergeSort vec | singleton? vec = ...
+parMergeSort vec = 
+   do let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- spawn$ parMergeSort    lhalf
+      right <-        oracleMergeSort rhalf
+--      right <-        parMergeSort rhalf
+      left  <- get ileft
+      merge left right
+
+distMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
+distMergeSort vec | singleton? vec = ...
+distMergeSort vec = 
+   do let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- longSpawn$ $(mkClosure distMergeSort) lhalf
+      right <-            oracleMergeSort rhalf
+      left  <- get ileft
+      merge left right
+
+$[remotable 'distMergeSort]
+
+-- QUESTION -- can the above three versions be FACTORED into one
+-- recursive function that is parameterized by the left-spawn.
+
+-- No recursion through the oracle
+gpuMergeSort vec = runAcc (...)
+
+-- These are BOTH effectively LEAVES:
+serMergeSort = ...
+
+------------------------------------------------------------
+-- Then.... in the real program:
+
+main = ....
+       oracleMergeSort myVec
+       -- OR
+       oracleSpawn superMergeSort myVec
+       ....
+
+
+--------------------------------------------------------------------------------
+
+-- recursiveMergSort mySpawn
+
+recursiveMergeSort :: ??? -> V.Vector ElmT -> Par (V.Vector ElmT)
+recursiveMergeSort mySpawn vec | singleton? vec = ...
+recursiveMergeSort mySpawn vec = 
+   do let n = (V.length vec) `div` 2
+      let (lhalf, rhalf) = V.splitAt n vec
+      ileft <- mySpawn            lhalf
+      right <- recrusiveMergeSort rhalf
+      left  <- get ileft
+      oracleSpawn superMerge (left,right) 
+
+superMergeSort = mkOracleFun [
+			      (Dist, recursiveMergeSort (longSpawn$ $(mkClosure ...)) , cost),
+                              (Par,  recursiveMergeSort (spawn . recursiveMergeSort) ,  cost),
+                              -- Will this MULTIWAY mergesort look ANY DIFFERENT to the oracle?
+                              (Par,  recursiveMULTIWAYAMergeSort (spawn . recursiveMULTIWAYAMergeSort) ,  cost),
+                              -- (Ser,  recursiveMergeSort recursiveMergeSort,  cost),
+			      -- Leaves:
+			      (GPU,  gpuMergeSort,  cost),
+                              (Ser,  serQuicksort,  cost)
+			      -- Do I trust the system enough to give it both Ser's 
+			      -- and let the oracle sort it out.
+			     ]
+
+superMerge = mkOracleFun [(Par, ...),
+			  (Ser, ...)]
+
+----------------------------------------------------------------------------------------------------
+-- Alternative Vision - introduce a unique function for each type:
+
+data MyMergeSort = MyMergeSort
+
+instance OracleFun MyMergeSort (V.Vector ElmT) (V.Vector ElmT) where 
+  implList MyMergeSort = [(Dist,...), (Par,...)]
+
+main = ...
+       oracleSpawn MyMergeSort myVec
+       ...
 
