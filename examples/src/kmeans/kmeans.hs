@@ -153,9 +153,10 @@ kmeans_par clusters nChunks = do
       loop :: Int -> [Cluster] -> Par [Cluster]
       loop n clusters | n > tooMany = do unsafePerformIO (printf "giving up."); return clusters
       loop n clusters = do
-        unsafePerformIO $ hPrintf stderr "iteration %d\n" n
+        
      -- hPutStr stderr (unlines (map show clusters))
-        clusters' <- splitChunks (0, nChunks-1, clusters)
+        clusters' <- trace ("iteration "++(show n)) $
+          splitChunks (0, nChunks-1, clusters)
 
         if clusters' == clusters
            then return clusters
@@ -167,13 +168,19 @@ main = do
   args <- getArgs
   t0 <- getCurrentTime >>= newIORef
   final_clusters <- case args of
-   [filename] -> do
-     pts <- loadPoints filename
-     writeIORef pointData (Just pts)
-     clusters <- mapM genCluster [0..nClusters-1]
-     printf "%d clusters generated\n" (length clusters)
-     getCurrentTime >>= writeIORef t0
-     return $ runPar $ kmeans_par clusters (V.length pts)
+    [filename] -> do
+      pts <- loadPoints filename
+      writeIORef pointData (Just pts)
+      clusters <- mapM genCluster [0..nClusters-1]
+      printf "%d clusters generated\n" (length clusters)
+      getCurrentTime >>= writeIORef t0
+      return $ runPar $ kmeans_par clusters (V.length pts)
+    other -> do
+      pts <- loadPoints "tinykmeansdata.bin"
+      writeIORef pointData (Just pts)
+      clusters <- mapM genCluster [0..3]
+      printf "%d clusters generated\n" (length clusters)
+      return $ runPar $ kmeans_par clusters (V.length pts)
   t1 <- getCurrentTime
   t0t <- readIORef t0
   print final_clusters
