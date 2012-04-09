@@ -13,6 +13,20 @@ data Resource = Seq | CPU | GPU | Dist
 type AbstCost = Float
 type FunImpl a b = (Resource, a -> Par b, a -> AbstCost)
 type Name a = IO (StableName a)
+type ImplTable a b = [FunImpl a b]
+
+data Estimator = Est {
+   -- A bunch of mutable state... IOrefs or whatever. (Sometimes more efficient.)
+   -- (Or this thing can be immutable and you can have a single IOref pointing to it.)
+}
+
+-- Don't export the type constructor for OracleFun!  This is private data!
+type OracleFun a b = OracleFun {
+  estimator :: IORef Estimator,
+  table     :: ImplTable
+}
+
+
 
 {-
  - 1. Create Estimator for a
@@ -21,7 +35,10 @@ type Name a = IO (StableName a)
  -
  - TODO: What if Name a is already in the table?
  -}
-mkOracleFun :: Name a -> [FunImpl a b] -> Par ()
+-- mkOracleFun :: Name a b -> [FunImpl a b] -> Par ()
+
+-- mkOracleFun :: ImplTable a b -> IO (OracleFun a b)
+mkOracleFun :: ImplTable a b -> OracleFun a b
 mkOracleFun = undefined
     {-
      - do
@@ -44,9 +61,9 @@ mkOracleFun = undefined
  -  make a call based on the resource selected? E.g., adding the mkClosure 
  -  for distributed (is that even possible for the oracle to do?).
  -}
-oracleSpawn :: Name a -> b -> Par (IVar c)
+-- oracleSpawn :: Name a b -> b -> Par (IVar c)
+oracleSpawn :: OracleFun a b -> a -> Par (IVar b)
 oracleSpawn = undefined
-
 
 ------------------------------------------------------------------------------
 -- User input
