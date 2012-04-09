@@ -1,222 +1,128 @@
-;import Control.Monad.Par
+{-# LANGUAGE MultiParamTypeClasses, CPP #-}
+
+module Oracle where
+
+import Control.Monad.Par
 import System.Mem.StableName
 
-data AbstCost = AC Float
-data TimeCost = TC Float
+import qualified Data.Vector.Storable as V
+import Data.Vector.Algorithms.Intro (sort)
+import Data.Word (Word32)
+
 data Resource = Seq | CPU | GPU | Dist
-data KappaRange = KLo TimeCost | KUp TimeCost | KRange TimeCost TimeCost
+type AbstCost = Float
+type FunImpl a b = (Resource, a -> Par b, a -> AbstCost)
+type Name a = IO (StableName a)
+
+{-
+ - 1. Create Estimator for a
+ - 2. Insert function implementations and estimator into Map at index generated 
+ -      from Name a (hashStableName a)
+ -
+ - TODO: What if Name a is already in the table?
+ -}
+mkOracleFun :: Name a -> [FunImpl a b] -> Par ()
+mkOracleFun = undefined
+    {-
+     - do
+     -   est <- mkEstimator name funs
+     -   table <- getTable
+     -   insert table name (est, funs)
+     -   ...
+     -}
 
 
-data Name a b = IO (StableName (a -> Par b))
-
-data Estimator = Est {
-    init :: IO (),
-    reportTime  :: AbstCost -> TimeCost -> IO (),
-    predictTime :: AbstCost -> IO TimeCost
-  -- There is implicitly state for this "object" that tracks the
-  -- current prodediction in terms of scheduler overhead.  
-
-  -- In the paper kappa is set as a constant.  The oracleFork will
-  -- compare the predicted cost against kappa to determine if it
-  -- should go ahead.
-}
-
-data ResourceImpl a b = RI {
-    name :: Name a b,
-    resourceType :: Resource,
-    run :: a -> Par b,
-    cost :: a -> AbstCost,
-    kappa :: KappaRange
-}
-
-data ResourceImplSet a b = RISet {
-    impls :: [ResourceImpl a b],
-    estimator :: Estimator
-}
-
--- I don't know what type this should actually be (probably not String...). 
---   (RRN:  See stringtable-atom...)
--- I want a table that has each stable name associated with a ResourceImplSet
-data LookupTable = Map Name RISet
-data StateInfo = SI {
-    funTable :: LookupTable
-     -- do we need a KappaRange here?
-}
-
--- Should just take a name and arguments, ideally
--- For now, I guess I'll assume there's a ResourceImplSet passed in until I
--- understand where to put and how to get this from a stored state
-oracleFork :: ResourceImplSet a b -> Name a b -> a -> Par b
-oracleFork = undefined 
-
---------------------------------------------------------------------------------
-
-cpuVer = RI {
-    name = "foo_cpuVer" :: Name a b,
-    resourceType = CPU :: Resource,
-    run = \a -> mycode a 
-    cost = \n -> (length n)^2
-}
-
-gpuVer = RI {
-    name = "foo_gpuVer" :: Name a b,
-    resourceType = GPU :: Resource,
---    run = mycode ... :: a -> Par (Acc b),
-    run = (\a -> gpuSpawn (mycode a)) :: a -> Par b,   
-    cost = (\n -> length n) :: a -> AbstCost,
---    kappa = ???? :: KappaRange
-}
+-- Really want a dependent type here, such that when Name is looked up in the 
+-- Map we get functions of type b -> Par c
+{-
+ - 1. Look up name in map: (estimator, funImpls)
+ - 2. Apply cost functions
+ - 3. Use estimator to predict costs (in funImpls)
+ - 4. Compare to kappas, choose funImpl
+ -
+ - TODO: Does the oracle just apply function provided by user, or does it 
+ -  make a call based on the resource selected? E.g., adding the mkClosure 
+ -  for distributed (is that even possible for the oracle to do?).
+ -}
+oracleSpawn :: Name a -> b -> Par (IVar c)
+oracleSpawn = undefined
 
 
+------------------------------------------------------------------------------
+-- User input
+------------------------------------------------------------------------------
+
+type ElmT = Word32
+
+#ifndef SAFE
+thawit x = V.unsafeThaw x
+#else
+thawit x = V.thaw x
+#endif
+
+-- Sequential mergesort
+seqMergesort :: V.Vector ElmT -> Par (V.Vector ElmT)
+seqMergesort vec = return $ V.create $ do
+                    mut <- thawit vec
+                    sort mut
+                    return mut
+
+-- Mergesort cost: n lg n (where n = length vec)
+mergesortCost :: V.Vector ElmT -> AbstCost
+mergesortCost vec = let len = V.length vec in
+                    len * (logBase 2 len)
 
 
+parMergesort :: V.Vector ElmT -> Par (V.Vector ElmT)
+parMergesort vec = if V.length vec < 2
+                   then return vec
+                   else do
+                    let n = (V.length vec) `div` 2
+                    let (lhalf, rhalf) = V.splitAt n vec
+                    ileft  <- oracleSpawn (makeStableName "mergesort") lhalf
+                    iright <- oracleSpawn (makeStableName "mergesort") rhalf
+                    left   <- get ileft
+                    right  <- get iright
+                    oracleSpawn (makeStableName "merge") left right
 
---------------------------------------------------------------------------------
--- How would we actually write the final function?
---------------------------------------------------------------------------------
+-- Just a sample. Could change to do in-place merge.
+seqMerge :: V.Vector ElmT -> V.Vector ElmT -> Par (V.Vector ElmT)
+seqMerge left right = if V.null left then return right
+                      else if V.null right then return left
+                      else if (V.head left) < (V.head right)
+                      then return (V.head left)  V.cons (seqMerge (V.tail left) right)
+                      else return (V.head right) V.cons (seqMerge left (V.tail right))
 
--- This is the global registry (*explicit* naming) approach:
-
-  do ... 
-     result <- oracleFork (Name "foo") 39
-     ... 
-
--- Or oracleFork could use the stableName itself to look up the entry
--- for that function:
-     result <- oracleFork foo 39
-
--- But if you did that then somewhere else you would have to do something like this:
-    register foo GPU  foo_gpu
-    register foo Dist foo_dist
-
-
--- The abov do NOT include the ResourceImplSet.  It could be threaded
--- through with a StateT, perhaps.
-
-  myRIs = (RISet [cpuVer,gpuVer])
-
--- If we explicitly initialized the state and associated it with a
--- function maybe that would look something like this:
-  do myfoo <- makeEstimatorMagic (RISet [cpuVer,gpuVer,distVer])
-     ...
-     oracleFork myfoo 39  
-     oracleFork myfoo 40 
-
-     -- Remove distributed:
-     myfoo2 <- makeEstimatorMagic (RISet [cpuVer,gpuVer])
-     oracleFork myfoo2 41
-
---------------------------------------------------------------------------------
--- More REAL examples: write out a mergesort:
---------------------------------------------------------------------------------
-
--- Here's ONE way it could work, with OracleFun's passed by value, including
--- subfunction tables (i.e. not represented at the type level).
-
-cost = O_NlogN
-
--- OracleFun would have IMPLICIT state, which is mutated, perhaps with
--- unsafePerformIO, to keep track of estimators.
-superMergeSort :: OracleFun (V.Vector ElmT) (V.Vector ElmT)
-superMergeSort = mkOracleFun [(GPU,  gpuMergeSort,  cost),
-			      (Dist, distMergeSort, cost)
-                              (Par,  parMergeSort,  cost)
-                              (Ser,  serQuicksort,  cost)
-			     ]
-
--- Merge sort for a Vector using the Par monad
--- t is the threshold for using sequential merge (see merge)
-oracleMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-oracleMergeSort vec | singleton? vec = ...
-oracleMergeSort vec = 
-   do let n = (V.length vec) `div` 2
-      let (lhalf, rhalf) = V.splitAt n vec
-      ileft <- oracleSpawn$ superMergeSort lhalf
-      right <-              oracleMergeSort rhalf
-      left  <- get ileft
-      merge left right
-
-parMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-parMergeSort vec | singleton? vec = ...
-parMergeSort vec = 
-   do let n = (V.length vec) `div` 2
-      let (lhalf, rhalf) = V.splitAt n vec
-      ileft <- spawn$ parMergeSort    lhalf
-      right <-        oracleMergeSort rhalf
---      right <-        parMergeSort rhalf
-      left  <- get ileft
-      merge left right
-
-distMergeSort :: V.Vector ElmT -> Par (V.Vector ElmT)
-distMergeSort vec | singleton? vec = ...
-distMergeSort vec = 
-   do let n = (V.length vec) `div` 2
-      let (lhalf, rhalf) = V.splitAt n vec
-      ileft <- longSpawn$ $(mkClosure distMergeSort) lhalf
-      right <-            oracleMergeSort rhalf
-      left  <- get ileft
-      merge left right
-
-$[remotable 'distMergeSort]
-
--- QUESTION -- can the above three versions be FACTORED into one
--- recursive function that is parameterized by the left-spawn.
-
--- No recursion through the oracle
-gpuMergeSort vec = runAcc (...)
-
--- These are BOTH effectively LEAVES:
-serMergeSort = ...
-
-------------------------------------------------------------
--- Then.... in the real program:
-
-main = ....
-       oracleMergeSort myVec
-       -- OR
-       oracleSpawn superMergeSort myVec
-       ....
+seqMergeCost :: V.Vector ElmT -> V.Vector ElmT -> AbstCost
+seqMergeCost left right = (V.length left) + (V.length right)
 
 
---------------------------------------------------------------------------------
+parMerge :: V.Vector ElmT -> V.Vector ElmT -> Par (V.Vector ElmT)
+parMerge left right = undefined
+        {-
+         - Do the binary splitting thing. Interesting lines:
+         -
+         - ileft  <- oracleSpawn (makeStableName "merge") lleft lright
+         - iright <- oracleSpawn (makeStableName "merge") rleft rright
+         - left   <- get ileft
+         - right  <- get iright
+         - return $ left ++ right
+         -}
 
--- recursiveMergSort mySpawn
+parMergeCost :: V.Vector ElmT -> V.Vector ElmT -> AbstCost
+parMergeCost left right = undefined
 
-recursiveMergeSort :: ??? -> V.Vector ElmT -> Par (V.Vector ElmT)
-recursiveMergeSort mySpawn vec | singleton? vec = ...
-recursiveMergeSort mySpawn vec = 
-   do let n = (V.length vec) `div` 2
-      let (lhalf, rhalf) = V.splitAt n vec
-      ileft <- mySpawn            lhalf
-      right <- recrusiveMergeSort rhalf
-      left  <- get ileft
-      oracleSpawn superMerge (left,right) 
 
-superMergeSort = mkOracleFun [
-			      (Dist, recursiveMergeSort (longSpawn$ $(mkClosure ...)) , cost),
-                              (Par,  recursiveMergeSort (spawn . recursiveMergeSort) ,  cost),
-                              -- Will this MULTIWAY mergesort look ANY DIFFERENT to the oracle?
-                              (Par,  recursiveMULTIWAYAMergeSort (spawn . recursiveMULTIWAYAMergeSort) ,  cost),
-                              -- (Ser,  recursiveMergeSort recursiveMergeSort,  cost),
-			      -- Leaves:
-			      (GPU,  gpuMergeSort,  cost),
-                              (Ser,  serQuicksort,  cost)
-			      -- Do I trust the system enough to give it both Ser's 
-			      -- and let the oracle sort it out.
-			     ]
-
-superMerge = mkOracleFun [(Par, ...),
-			  (Ser, ...)]
-
-----------------------------------------------------------------------------------------------------
--- Alternative Vision - introduce a unique function for each type:
-
-data MyMergeSort = MyMergeSort
-
-instance OracleFun MyMergeSort (V.Vector ElmT) (V.Vector ElmT) where 
-  implList MyMergeSort = [(Dist,...), (Par,...)]
-
-main = ...
-       oracleSpawn MyMergeSort myVec
-       ...
-
+{- User will have to have an initialization function to register their
+ - sub-implementations. For each "super function" (i.e., mergesort, merge, 
+ - etc.), need to make an implList containing info on the possible sub-impls 
+ - (resource to use, function definition, cost). Could optionally separate 
+ - into separate initialization functions if desired.
+ -} 
+init :: Par ()
+init = let msImplList = [(Seq, seqMergesort, mergesortCost),
+                         (CPU, parMergesort, mergesortCost)]
+           mergeImplList = [(Seq, seqMerge, seqMergeCost),
+                            (CPU, parMerge, parMergeCost)] in
+        do  mkOracleFun (makeStableName "mergesort") msImplList
+            mkOracleFun (makeStableName "merge")     mergeImplList
