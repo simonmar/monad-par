@@ -1,19 +1,19 @@
 {-# OPTIONS_GHC -Wall #-}
 
-module Control.Monad.Par.Meta.SharedMemoryOnly (
+module Control.Monad.Par.Meta.SMP (
     runPar
   , runParIO
   , module Control.Monad.Par.Meta
 ) where
 
 import Control.Monad.Par.Meta
-import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
+import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 
 tries :: Int
 tries = 20
 
 resource :: Resource
-resource = SharedMemory.mkResource tries
+resource = SMP.mkResource tries
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a

@@ -93,23 +93,23 @@ newtype IVar a = IVar (HotVar (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
-newtype InitAction = IA { runIA ::
-    -- Combined 'StealAction' for the current scheduler.
-     StealAction           
-    -- The global structure of schedulers.
+newtype Startup = St { runSt ::
+     -- Combined 'StealAction' for the current scheduler.
+     WorkSearch
+     -- The global structure of schedulers.
   -> HotVar (IntMap Sched) 
   -> IO ()
   }
 
-instance Show InitAction where
-  show _ = "<InitAction>"
+instance Show Startup where
+  show _ = "<Startup>"
 
-instance Monoid InitAction where
-  mempty = IA $ \_ _ -> return ()
-  (IA ia1) `mappend` (IA ia2) = IA ia'
-    where ia' sa schedMap = ia1 sa schedMap >> ia2 sa schedMap            
+instance Monoid Startup where
+  mempty = St $ \_ _ -> return ()
+  (St st1) `mappend` (St st2) = St st'
+    where st' ws schedMap = st1 ws schedMap >> st2 ws schedMap            
                              
-newtype StealAction = SA { runSA ::
+newtype WorkSearch = WS { runWS ::
      -- 'Sched' for the current thread
      Sched
      -- Map of all 'Sched's
@@ -117,27 +117,27 @@ newtype StealAction = SA { runSA ::
   -> IO (Maybe (Par ()))
   }
 
-instance Show StealAction where
-  show _ = "<StealAction>"
+instance Show WorkSearch where
+  show _ = "<WorkSearch>"
 
-instance Monoid StealAction where
-  mempty = SA $ \_ _ -> return Nothing
-  (SA sa1) `mappend` (SA sa2) = SA sa'
-    where sa' sched schedMap = do
-            mwork <- sa1 sched schedMap
+instance Monoid WorkSearch where
+  mempty = WS $ \_ _ -> return Nothing
+  (WS ws1) `mappend` (WS ws2) = WS ws'
+    where ws' sched schedMap = do
+            mwork <- ws1 sched schedMap
             case mwork of
-              Nothing -> sa2 sched schedMap
+              Nothing -> ws2 sched schedMap
               _ -> return mwork                
 
 data Resource = Resource {
-    initAction  :: InitAction
-  , stealAction :: StealAction
+    startup  :: Startup
+  , workSearch :: WorkSearch
   } deriving (Show)
 
 instance Monoid Resource where
   mempty = Resource mempty mempty
-  Resource ia1 sa1 `mappend` Resource ia2 sa2 =
-    Resource (ia1 `mappend` ia2) (sa1 `mappend` sa2)
+  Resource st1 ws1 `mappend` Resource st2 ws2 =
+    Resource (st1 `mappend` st2) (ws1 `mappend` ws2)
 
 data Sched = Sched 
     { 
@@ -157,7 +157,7 @@ data Sched = Sched
       ivarUID :: HotVar Int,
 
       ---- Meta addition ----
-      schedSa :: StealAction
+      schedWs :: WorkSearch
     }
 
 instance Show Sched where
@@ -248,15 +248,15 @@ getSchedForCap cap = do
       printf "tried to get a Sched for capability %d before initializing" cap
 
 
-makeOrGetSched :: StealAction -> Int -> IO Sched
-makeOrGetSched sa cap = do
+makeOrGetSched :: WorkSearch -> Int -> IO Sched
+makeOrGetSched ws cap = do
   sched <- Sched cap <$> newHotVar (Set.empty)  -- tids
                      <*> R.newQ                 -- workpool
                      <*> (newHotVar =<< create) -- rng
                      <*> newHotVar 0            -- mortals
                      <*> newIORef  0            -- consecutiveFailures
                      <*> newHotVar 0            -- ivarUID
-                     <*> pure sa                -- stealAction
+                     <*> pure ws                -- workSearch
   modifyHotVar globalScheds $ \scheds ->
     case IntMap.lookup cap scheds of
       Just sched -> (scheds, sched)
@@ -279,11 +279,11 @@ forkOn' = forkOn
 -- Note: this does not check for nesting, and should be called
 -- appropriately. It is the caller's responsibility to manage things
 -- like mortal counts.
-spawnWorkerOnCap :: StealAction -> Int -> IO ThreadId
-spawnWorkerOnCap sa cap = 
+spawnWorkerOnCap :: WorkSearch -> Int -> IO ThreadId
+spawnWorkerOnCap ws cap = 
   forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
-    sched@Sched{ tids } <- makeOrGetSched sa cap
+    sched@Sched{ tids } <- makeOrGetSched ws cap
     modifyHotVar_ tids (Set.insert me)
     when dbg$ dbgTaggedMsg 2 $ BS.pack $
       printf "[meta: cap %d] spawning new worker" cap
@@ -295,11 +295,11 @@ spawnWorkerOnCap sa cap =
 
 -- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
 -- just before the new worker enters the 'workerLoop'.
-spawnWorkerOnCap' :: QSem -> StealAction -> Int -> IO ThreadId
-spawnWorkerOnCap' qsem sa cap = 
+spawnWorkerOnCap' :: QSem -> WorkSearch -> Int -> IO ThreadId
+spawnWorkerOnCap' qsem ws cap = 
   forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
-    sched@Sched{ tids } <- makeOrGetSched sa cap
+    sched@Sched{ tids } <- makeOrGetSched ws cap
     modifyHotVar_ tids (Set.insert me)
     when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
     signalQSem qsem
@@ -316,7 +316,7 @@ reschedule = Par $ ContT (workerLoop 0)
 
 workerLoop :: Int -> ignoredCont -> ROnly ()
 workerLoop failCount _k = do
-  mysched@Sched{ no, mortals, schedSa=sa, consecutiveFailures } <- ask
+  mysched@Sched{ no, mortals, schedWs=ws, consecutiveFailures } <- ask
   mwork <- liftIO $ popWork mysched
   case mwork of
     Just work -> do
@@ -336,7 +336,7 @@ workerLoop failCount _k = do
         -- passing an extra argument to the steal action, and if we
         -- could tolerate it, it should perhaps become an additional argument:
         liftIO$ writeIORef consecutiveFailures failCount
-        mwork <- liftIO (runSA sa mysched globalScheds)
+        mwork <- liftIO (runWS ws mysched globalScheds)
         case mwork of
           Just work -> runContT (unPar work) $ const (workerLoop 0 _k)
           Nothing -> do 
@@ -398,12 +398,12 @@ spawn_ p = do r <- new; fork (p >>= put_ r); return r
 -- Entrypoint
 
 runMetaParIO :: Resource -> Par a -> IO a
-runMetaParIO Resource{ initAction=ia, stealAction=sa } work = ensurePinned $ 
+runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $ 
   do
   -- gather information
   tid <- myThreadId
   (cap, _) <- threadCapability tid
-  sched@Sched{ tids, mortals } <- makeOrGetSched sa cap
+  sched@Sched{ tids, mortals } <- makeOrGetSched ws cap
 
   -- make the MVar for this answer, and wrap the incoming work, and
   -- push it on the current scheduler
@@ -423,9 +423,9 @@ runMetaParIO Resource{ initAction=ia, stealAction=sa } work = ensurePinned $
   isNested <- Set.member tid <$> readHotVar tids
   if isNested then
         -- if it is, we need to spawn a replacement worker while we wait on ansMVar
-        void $ spawnWorkerOnCap sa cap
+        void $ spawnWorkerOnCap ws cap
         -- if it's not, we need to run the init action 
-   else runIA ia sa globalScheds
+   else runSt st ws globalScheds
 
   -- push the work, and then wait for the answer
   msucc <- pushWorkEnsuringWorker sched wrappedComp
