@@ -19,7 +19,7 @@ import Control.Monad.Par.Meta.DistSMP
 
 
 -- For Dist version:
-import Remote2.Closure  (Closure(Closure))
+import RPC.Closure  (Closure(Closure))
 import Remote2.Encoding (Payload, Serializable, serialDecodePure, serialEncodePure,
 			 getPayloadContent, getPayloadType)
 import qualified Remote2.Reg as Reg
