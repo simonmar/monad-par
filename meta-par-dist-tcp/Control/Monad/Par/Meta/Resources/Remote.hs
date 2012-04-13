@@ -66,7 +66,7 @@ import System.Random      (randomIO)
 import Control.Monad.Par.Meta.Resources.Debugging
    (dbg, dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
 import Control.Monad.Par.Meta (forkWithExceptions, new, put_, Sched(Sched,no,ivarUID),
-			       IVar, Par, InitAction(..), StealAction(SA), Resource(..))
+			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..))
 import qualified Network.Transport     as T
 import RPC.Closure  (Closure(Closure))
 import RPC.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
@@ -463,9 +463,9 @@ mkSlaveResource :: [Reg.RemoteCallMetaData]
 mkSlaveResource metadata trans =
   Resource (sharedInit metadata trans Slave) defaultSteal
 
-masterInit metadata trans = IA ia
+masterInit metadata trans = St st
   where
-    ia sa scheds = do
+    st ws scheds = do
         env <- getEnvironment
         host <- hostName 
 	ml <- case lookup "MACHINE_LIST" env of 
@@ -476,15 +476,15 @@ masterInit metadata trans = IA ia
   	  	   Nothing -> do BS.putStrLn$BS.pack$ "WARNING: Remote resource: Expected to find machine list in "++
 			                              "env var MACHINE_LIST or file name in MACHINE_LIST_FILE."
                                  return [host]
-        runIA (sharedInit metadata trans (Master$ map BS.pack ml)) sa scheds
+        runSt (sharedInit metadata trans (Master$ map BS.pack ml)) ws scheds
 
 
-sharedInit :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> InitAction
+sharedInit :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMode -> Startup
   -- For now we bake in assumptions about being able to SSH to the machine_list:
 
-sharedInit metadata initTransport (Master machineList) = IA ia
+sharedInit metadata initTransport (Master machineList) = St st
   where
-    ia topStealAction schedMap = do 
+    st topWorkSearch schedMap = do 
      dbgTaggedMsg 2 "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
@@ -619,9 +619,9 @@ sharedInit metadata initTransport (Master machineList) = IA ia
     basename bs = BS.pack$ head$ splitOn "." (BS.unpack bs)
 
 ------------------------------------------------------------------------------------------
-sharedInit metadata initTransport Slave = IA ia
+sharedInit metadata initTransport Slave = St st
   where
-    ia topStealAction schedMap = do 
+    st topWorkSearch schedMap = do 
      dbgTaggedMsg 2 "Init slave: creating connection... " 
      host <- BS.pack <$> commonInit metadata initTransport
      writeIORef taggedmsg_global_mode "_S"
@@ -783,10 +783,10 @@ workerShutdown schedMap = do
 
 --------------------------------------------------------------------------------
 
-defaultSteal :: StealAction
-defaultSteal = SA sa
+defaultSteal :: WorkSearch
+defaultSteal = WS ws
   where 
-    sa Sched{no} _ = do
+    ws Sched{no} _ = do
       dbgDelay "stealAction"
       -- First try to pop local work:
       x <- R.tryPopR longQueue
