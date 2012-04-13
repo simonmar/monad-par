@@ -5,8 +5,8 @@
 -- | A simple single-threaded resource that is a useful accompaniment
 -- for testing non-CPU resources such as GPU or distributed.
 module Control.Monad.Par.Meta.Resources.SingleThreaded (
-    defaultInit
-  , defaultSteal
+    defaultStartup
+  , defaultWorkSearch
   , mkResource
   ) where
 
@@ -16,7 +16,7 @@ import Control.Monad
 
 import Text.Printf
 
-import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import Control.Monad.Par.Meta hiding (dbg)
 
 dbg :: Bool
 #ifdef DEBUG
@@ -26,17 +26,17 @@ dbg = True
 #endif
 
 mkResource :: Resource
-mkResource = Resource defaultInit defaultSteal
+mkResource = Resource defaultStartup defaultWorkSearch
 
-defaultInit :: InitAction
-defaultInit = IA ia 
-  where ia sa _ = do
+defaultStartup :: Startup
+defaultStartup = St st 
+  where st ws _ = do
           qsem <- newQSem 0
           (cap, _) <- threadCapability =<< myThreadId
           when dbg $ printf " [%d] spawning single worker\n" cap
-          -- This initAction is called from the "main" thread, we need
+          -- This startup is called from the "main" thread, we need
           -- to spawn a worker to do the actual work:
-          void $ spawnWorkerOnCap' qsem sa cap
+          void $ spawnWorkerOnCap' qsem ws cap
           -- We wait on the qsem for the worker to come online and
           -- initialize itself before we return to the main thread and
           -- begin scheduling.
@@ -44,6 +44,6 @@ defaultInit = IA ia
 
 -- | In the singlethreaded scenario there are NO other workers from
 --   which to steal.
-defaultSteal :: StealAction
-defaultSteal = SA sa 
-  where sa _ _ = return Nothing
+defaultWorkSearch :: WorkSearch
+defaultWorkSearch = WS ws 
+  where ws _ _ = return Nothing

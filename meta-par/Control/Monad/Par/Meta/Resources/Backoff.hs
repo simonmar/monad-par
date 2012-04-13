@@ -11,13 +11,13 @@
 --   should include this at tho bottom of their stack.
 
 module Control.Monad.Par.Meta.Resources.Backoff
-  ( defaultInit, mkStealAction, mkResource )
+  ( defaultStartup, mkWorkSearch, mkResource )
 where 
 
 import Data.IORef (readIORef)
 import Data.Word (Word64)
 import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import Control.Monad.Par.Meta hiding (dbg)
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Concurrent     (myThreadId, threadDelay)
 import qualified Data.Vector.Unboxed as V
@@ -25,26 +25,26 @@ import qualified Data.ByteString.Char8 as BS
 
 mkResource :: Word64 -> Word64 -> Resource
 mkResource shortest longest =
-  Resource defaultInit (mkStealAction shortest longest)
+  Resource defaultStartup (mkWorkSearch shortest longest)
 
-defaultInit :: InitAction
-defaultInit = IA (\ sa _ -> return () )
+defaultStartup :: Startup
+defaultStartup = St (\ ws _ -> return () )
 
--- | To construct a StealAction we need to know the minimum and
+-- | To construct a WorkSearch we need to know the minimum and
 -- maximum amount of time (nanoseconds) to sleep.  The exponential
 -- backoff policy is always the same: it starts at 1ns and doubles.
 -- 
 -- The thing that changes over time is whether sleeping actually
--- *occurs*.  For example, `mkStealAction 1000 100000` will not sleep
+-- *occurs*.  For example, `mkWorkSearch 1000 100000` will not sleep
 -- for the first ten invocations (until 1024), and then will sleep an
 -- amount that doubles each time until it surpasses the maximum, at
 -- which point each sleep will be for the maximum: 100ms.
-mkStealAction :: Word64 -> Word64 -> StealAction
+mkWorkSearch :: Word64 -> Word64 -> WorkSearch
 -- Sleeping ZERO time means not sleeping at all:
-mkStealAction shortest 0 = SA$ \ _ _ -> return Nothing
-mkStealAction shortest longest = SA sa 
+mkWorkSearch shortest 0 = WS$ \ _ _ -> return Nothing
+mkWorkSearch shortest longest = WS ws 
   where 
-    sa Sched{consecutiveFailures} _ = do
+    ws Sched{consecutiveFailures} _ = do
       failCount <- readIORef consecutiveFailures
       let nanos  = if failCount >= 64
                    then longest 

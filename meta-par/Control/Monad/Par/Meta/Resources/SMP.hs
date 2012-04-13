@@ -3,11 +3,11 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 
-module Control.Monad.Par.Meta.Resources.SharedMemory (
-    defaultInit
-  , defaultSteal
-  , initForCaps
-  , stealForCaps
+module Control.Monad.Par.Meta.Resources.SMP (
+    defaultStartup
+  , defaultWorkSearch
+  , startupForCaps
+  , wsForCaps
   , mkResource
   , mkResourceOn
 ) where
@@ -27,19 +27,19 @@ import System.Random.MWC
 
 import Text.Printf
 
-import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import Control.Monad.Par.Meta hiding (dbg, workSearch)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 
 -- | Produce an SMP resource on all capabilities. The second
 -- argument is the number of steal attempts per steal request.
 mkResource :: Int -> Resource
-mkResource tries = Resource defaultInit (defaultSteal tries)
+mkResource tries = Resource defaultStartup (defaultWorkSearch tries)
 
 -- | Produce an SMP resource on the given capabilities. The second
 -- argument is the number of steal attempts per steal request.
 mkResourceOn :: [Int] -> Int -> Resource
-mkResourceOn caps tries = Resource (initForCaps caps) (stealForCaps caps tries)
+mkResourceOn caps tries = Resource (startupForCaps caps) (wsForCaps caps tries)
 
 {-# NOINLINE getCaps #-}
 getCaps :: [Int]
@@ -56,17 +56,17 @@ getCaps = unsafePerformIO $ do
                    (show ([0..n-1] :: [Int])) 
       return [0..n-1]
 
--- | 'InitAction' for spawning threads on all capabilities, or from a
+-- | 'Startup' for spawning threads on all capabilities, or from a
 -- 'read'-able list of capability numbers in the environment variable
 -- @SMP_CAPS@.
-defaultInit :: InitAction
-defaultInit = initForCaps getCaps
+defaultStartup :: Startup
+defaultStartup = startupForCaps getCaps
   
--- | 'InitAction' for spawning threads only on a particular set of
+-- | 'Startup' for spawning threads only on a particular set of
 -- capabilities.
-initForCaps :: [Int] -> InitAction
-initForCaps caps = IA ia
-  where ia sa _ = do
+startupForCaps :: [Int] -> Startup
+startupForCaps caps = St st
+  where st ws _ = do
 --          setAffinityRange caps
           dbgTaggedMsg 2 $ BS.pack $ printf "spawning worker threads for shared memory on caps:\n"
           dbgTaggedMsg 2 $ BS.pack $ printf "\t%s\n" (show caps)
@@ -75,7 +75,7 @@ initForCaps caps = IA ia
           qsem <- newQSem 0
           let caps' = nub caps
           forM_ caps' $ \n ->
-            void $ spawnWorkerOnCap' qsem sa n
+            void $ spawnWorkerOnCap' qsem ws n
           forM_ caps' $ const (waitQSem qsem)
   
 
@@ -83,19 +83,19 @@ initForCaps caps = IA ia
 randModN :: Int -> HotVar GenIO -> IO Int
 randModN caps rngRef = uniformR (0, caps-1) =<< readHotVar rngRef
 
--- | 'StealAction' for all capabilities.
-defaultSteal :: Int -> StealAction
-defaultSteal = stealForCaps getCaps                
+-- | 'WorkSearch' for all capabilities.
+defaultWorkSearch :: Int -> WorkSearch
+defaultWorkSearch = wsForCaps getCaps                
 
 -- | Given a set of capabilities and a number of steals to attempt per
--- capability, return a 'StealAction'.
-stealForCaps :: [Int] -> Int -> StealAction
-stealForCaps caps triesPerCap = SA sa
+-- capability, return a 'WorkSearch'.
+wsForCaps :: [Int] -> Int -> WorkSearch
+wsForCaps caps triesPerCap = WS ws
   where 
     numCaps = length caps
     numTries = numCaps * triesPerCap
     capVec = Vector.fromList caps
-    sa Sched { no, rng } schedsRef = do
+    ws Sched { no, rng } schedsRef = do
       scheds <- readHotVar schedsRef
       let {-# INLINE getNext #-}
           getNext :: IO Int
