@@ -37,3 +37,4 @@ Library
                , meta-par
 
 
+  ghc-options:   -Wall

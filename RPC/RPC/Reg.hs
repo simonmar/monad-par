@@ -1,3 +1,5 @@
+{-# OPTIONS_GHC -Wall #-}
+
 -- | Runtime metadata functions, part of the 
 -- RPC mechanism
 module RPC.Reg (

@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# OPTIONS_GHC -Wall #-}
 
 -- | A simple type to represent a closure, that is, a function
 -- and its environment. The current implementation represents
@@ -7,14 +8,13 @@
 -- paper.
 module RPC.Closure (
                        Closure(..),
-		       BiClosure(..),
+		       BiClosure,
                        ) where
 
-import Data.Serialize as Ser 
 import Data.Typeable (Typeable)
 import RPC.Encoding (Payload)
 
-import qualified Data.Binary as Bin -- (Binary,get,put)
+-- import qualified Data.Binary as Bin -- (Binary,get,put)
 import qualified Data.Serialize as Ser
 
 -- | A data type representing a closure, that is, a function with its environment.

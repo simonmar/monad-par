@@ -1,9 +1,10 @@
 {-# LANGUAGE DeriveDataTypeable,CPP,FlexibleInstances,UndecidableInstances,ScopedTypeVariables #-}
+{-# OPTIONS_GHC -Wall #-}
 
--- | This module provides the 'Serializable' type class and
--- functions to convert to and from 'Payload's. It's implemented
--- in terms of Haskell's "Data.Binary". The message sending
--- and receiving functionality in "RPC.Process" depends on this.
+-- | This module provides the 'Serializable' type class and functions
+-- to convert to and from 'Payload's. It's implemented in terms of the
+-- @cereal@ package's "Data.Serialize". The message sending and
+-- receiving functionality in "RPC.Process" depends on this.
 module RPC.Encoding (
           Serializable,
           serialEncode,
@@ -24,8 +25,6 @@ module RPC.Encoding (
           genericPut,
           genericGet) where
 
-import Prelude hiding (id)
-import qualified Prelude as Prelude
 -- import Data.Binary (Binary,encode,decode,Put,Get,put,get,putWord8,getWord8)
 -- import qualified Data.Serialize as Ser
 import Data.Serialize (Serialize,encode,decode,Put,Get,put,get,putWord8,getWord8)
@@ -33,12 +32,13 @@ import Data.Serialize (Serialize,encode,decode,Put,Get,put,get,putWord8,getWord8
 import Control.Monad (liftM)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as B (hPut,hGet,length)
-import Control.Exception (try,evaluate,ErrorCall)
-import Data.Int (Int64)
+import Control.Exception (evaluate)
 import System.IO (Handle)
 import Data.Typeable (typeOf,typeOf,Typeable)
 import Data.Dynamic (Dynamic,toDyn,fromDynamic,dynTypeRep)
 import Data.Generics (Data,gfoldl,gunfold, toConstr,constrRep,ConstrRep(..),repConstr,extQ,extR,dataTypeOf)
+
+import Text.Printf
 
 -- | Data that can be sent as a message must implement
 -- this class. The class has no functions of its own,
@@ -117,28 +117,24 @@ serialEncode a = do encoded <- evaluate $ encode a -- this evaluate is actually 
 
 
 serialDecodePure :: forall a. (Serializable a) => Payload -> Maybe a
-serialDecodePure p = (\id -> 
-                      let pc = payloadContent p
-                      in
-                        pc `seq`
-                        if (decode $! payloadType p) == 
-                              Right (show (typeOf $ (undefined :: a)))
-                          then Just (either (error "serialDecodePure")
-                                            Prelude.id
-                                            $! decode pc)
-                          else Nothing ) Prelude.id
+serialDecodePure p = 
+  let pc = payloadContent p      
+  in pc `seq`
+       case decode $! payloadType p of
+         Right str | str == show (typeOf $ (undefined :: a)) ->
+           either (const Nothing) Just $! decode pc
+         _ -> Nothing
 
 
-serialDecode :: (Serializable a) => Payload -> IO (Maybe a)
-serialDecode a = (\id ->
-                      if (decode $ payloadType a) == 
-                            Right (show (typeOf $ id undefined))
-                         then do
-                                 res <- evaluate $ decode (payloadContent a)
-                                 case res of
-                                  Left _ -> return $ Nothing
-                                  Right v -> return $ Just $ id v
-                         else return Nothing ) Prelude.id
+serialDecode :: forall a. (Serializable a) => Payload -> IO (Maybe a)
+serialDecode a = 
+  case decode $ payloadType a of
+    Right str | str == show (typeOf $ (undefined :: a)) -> do
+      res <- evaluate $ decode (payloadContent a)
+      case res of
+        Left _  -> return $ Nothing
+        Right v -> return . Just $ v
+    _ -> return Nothing
 
 
 -- | Data types that can be used in messaging must
@@ -167,14 +163,14 @@ genericPut = generic `extQ` genericString
          genericString = put.encode
 
 -- | This is the counterpart 'genericPut'
-genericGet :: Data a => Get a
+genericGet :: forall a. Data a => Get a
 genericGet = generic `extR` genericString
-   where generic = (\id -> liftM id $ deserializeConstr $ \constr_rep ->
-                   gunfold (\n -> do n' <- n
-                                     g' <- genericGet
-                                     return $ n' g')
-                           (return)
-                           (repConstr (dataTypeOf (id undefined)) constr_rep)) Prelude.id
+   where generic = liftM id $ deserializeConstr $ \constr_rep ->
+                     gunfold (\n -> do n' <- n
+                                       g' <- genericGet
+                                       return $ n' g')
+                             return
+                             (repConstr (dataTypeOf (undefined :: a)) constr_rep)
          genericString :: Get String
          genericString = do q <- get
                             either (error "genericString")
@@ -203,3 +199,4 @@ deserializeConstr k =
 #else
           4 -> get >>= \c -> k (StringConstr (c:[]))
 #endif
+          _ -> fail (printf "RPC.Encoding: invalid constr_ix %d" constr_ix)
