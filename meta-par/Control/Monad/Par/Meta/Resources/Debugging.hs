@@ -132,7 +132,7 @@ dbgCharMsg lvl tag fullmsg =
 
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
-dbgDelay :: a -> IO ()
+dbgDelay :: BS.ByteString -> IO ()
 dbgDelay _ = 
   if   dbg
   then threadDelay (200*1000)

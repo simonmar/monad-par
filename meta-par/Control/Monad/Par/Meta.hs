@@ -15,7 +15,9 @@
 --   * Remote Machine "accelerators" (i.e. distributed)
 
 
-module Control.Monad.Par.Meta ( Par
+module Control.Monad.Par.Meta ( forkWithExceptions
+                              , IVar
+                              , Par
                               , Resource(..)
                               , runMetaPar
                               , runMetaParIO

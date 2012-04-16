@@ -31,7 +31,7 @@ import Data.Serialize (Serialize,encode,decode,Put,Get,put,get,putWord8,getWord8
 
 import Control.Monad (liftM)
 import Data.ByteString (ByteString)
-import qualified Data.ByteString as B (hPut,hGet,length)
+import qualified Data.ByteString.Char8 as B (hPut,hGet,length,take)
 import Control.Exception (evaluate)
 import System.IO (Handle)
 import Data.Typeable (typeOf,typeOf,Typeable)
@@ -57,6 +57,11 @@ data Payload = Payload
                   payloadType :: !ByteString,
                   payloadContent :: !ByteString
                 } deriving (Typeable)
+
+instance Show Payload where
+  show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "
+		 ++ show (B.take 100$ getPayloadContent payload) ++ ">"
+
 data DynamicPayload = DynamicPayload
                 {
                   dynamicPayloadContent :: Dynamic

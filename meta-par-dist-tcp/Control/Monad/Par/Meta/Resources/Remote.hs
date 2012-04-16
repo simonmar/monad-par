@@ -2,7 +2,7 @@
 {-# LANGUAGE NamedFieldPuns, DeriveGeneric, ScopedTypeVariables, DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
+{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
 -- Turn this on to do extra invariant checking
 #define AUDIT_WORK
@@ -28,7 +28,7 @@ import Control.Concurrent     (myThreadId, threadDelay, writeChan, readChan, new
 			       forkOS, threadCapability, ThreadId)
 import Control.DeepSeq        (NFData)
 import Control.Exception      (catch, SomeException)
-import Control.Monad          (forM, forM_, liftM, when, unless)
+import Control.Monad          (forM, forM_, liftM, unless, void, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.Par.Meta.HotVar.IORef
 import Data.Typeable          (Typeable)
@@ -49,6 +49,7 @@ import Data.Concurrent.Deque.Reference as R
 import Data.Concurrent.Deque.Class     as DQ
 import Data.List as L
 import Data.List.Split    (splitOn)
+import Data.Monoid
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 
@@ -63,13 +64,14 @@ import System.Process     (readProcess)
 import System.Directory   (removeFile, doesFileExist, renameFile)
 import System.Random      (randomIO)
 
+import Control.Monad.Par.Class (new, put_)
 import Control.Monad.Par.Meta.Resources.Debugging
-   (dbg, dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
-import Control.Monad.Par.Meta (forkWithExceptions, new, put_, Sched(Sched,no,ivarUID),
+   (dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
+import Control.Monad.Par.Meta (forkWithExceptions, Sched(Sched,no,ivarUID),
 			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..))
 import qualified Network.Transport     as T
 import RPC.Closure  (Closure(Closure))
-import RPC.Encoding (Payload, Serializable, serialDecodePure, getPayloadContent, getPayloadType)
+import RPC.Encoding (Payload, Serializable, serialDecodePure)
 import qualified RPC.Reg as Reg
 import GHC.Conc (numCapabilities)
 
@@ -93,8 +95,10 @@ type MachineList = [PeerName]
 type NodeID = Int
 
 -- Format a nodeID:
+showNodeID :: Int -> BS.ByteString
 showNodeID n = "<Node"+++ sho n+++">"
-a +++ b = BS.append a b
+(+++) :: Monoid a => a -> a -> a
+(+++) = mappend
 
 sho :: Show a => a -> BS.ByteString
 sho = BS.pack . show
@@ -155,9 +159,11 @@ type ParClosure a = (Par a, Closure (Par a))
 master_addr_file :: String
 master_addr_file = "master_control.addr"
 
+mkAddrFile :: Show a => BS.ByteString -> a -> String
 mkAddrFile machine n = "./"++show n++"_"++ BS.unpack machine  ++ "_source.addr" 
 
 -- | Flag: establish all-to-all connections BEFORE beginning any real computation.
+eager_connections :: Bool
 eager_connections = False
 -- Other temporary toggles:
 -- define SHUTDOWNACK
@@ -249,12 +255,14 @@ measureIVarTable = do
 -- Misc Helpers:
 -----------------------------------------------------------------------------------
 
+decodeMsg :: Serialize a => BS.ByteString -> a
 decodeMsg str = 
   case decode str of
-    Left err -> errorExitPure$ "ERROR: decoding message from: " ++ show str
-    Right x  -> x
+    Left _  -> errorExitPure$ "ERROR: decoding message from: " ++ show str
+    Right x -> x
 
 -- forkDaemon = forkIO
+forkDaemon :: String -> IO () -> IO ThreadId
 forkDaemon name action = 
    forkWithExceptions forkOS ("Daemon thread ("++name++")") action
 --   forkOS $ catch action
@@ -262,6 +270,7 @@ forkDaemon name action =
 -- 		  hPutStrLn stderr $ "Caught Error in Daemon thread ("++name++"): " ++ show e
 -- 		 )
 
+hostName :: IO String
 hostName = trim <$>
 --    readProcess "uname" ["-n"] ""
     readProcess "hostname" [] ""
@@ -280,6 +289,7 @@ sendTo ndid msg = do
 
 -- | We don't want anyone to try to use a file that isn't completely written.
 --   Note, this needs further thought for use with NFS...
+atomicWriteFile :: FilePath -> BS.ByteString -> IO ()
 atomicWriteFile file contents = do 
    rand :: Int64 <- randomIO
    let tmpfile = "./tmpfile_"++show rand
@@ -290,7 +300,7 @@ atomicWriteFile file contents = do
 -- | This assumes a "Payload closure" as produced by makePayloadClosure below.
 deClosure :: Closure Payload -> IO (Par Payload)
 -- deClosure :: (Typeable a) => Closure a -> IO (Maybe a)
-deClosure pclo@(Closure ident payload) = do 
+deClosure (Closure ident payload) = do 
   dbgTaggedMsg 5$ "Declosuring : "+++ sho ident +++ " type "+++ sho payload
   lkp <- readIORef globalRPCMetadata
   case Reg.getEntryByIdent lkp ident of 
@@ -320,6 +330,7 @@ errorExit str = do
    printErr$ "Connections closed, now exiting process."
    exitProcess 1
 
+printErr :: String -> IO ()
 printErr = BS.putStrLn . BS.pack 
 
 foreign import ccall "exit" c_exit :: Int -> IO ()
@@ -336,7 +347,9 @@ exitSuccess = do
    dbgTaggedMsg 1 "   (Connections closed, now exiting for real)"
    exitProcess 0
 
+-- TODO: remove before release
 --diverge = do putStr "!?"; threadDelay 100; diverge
+diverge :: IO a
 diverge = do dbgCharMsg 0 "!?" "Purposefully diverging instead of exiting for this experiment..."
 	     threadDelay 200
 	     diverge
@@ -367,6 +380,7 @@ exitProcess code = do
 errorExitPure :: String -> a
 errorExitPure str = unsafePerformIO$ errorExit str
 
+closeAllConnections :: IO ()
 closeAllConnections = do
   pt <- readHotVar peerTable
   V.forM_ pt $ \ entry -> 
@@ -375,10 +389,6 @@ closeAllConnections = do
       Just (_,targ) -> T.closeSourceEnd targ
   trans <- readIORef myTransport
   T.closeTransport trans
-
-instance Show Payload where
-  show payload = "<type: "++ show (getPayloadType payload) ++", bytes: "
-		 ++ show (BS.take 100$ getPayloadContent payload) ++ ">"
     
 -----------------------------------------------------------------------------------
 -- Initialize & Establish workers.
@@ -393,9 +403,10 @@ instance Show Payload where
 -- Lazy connection is permissable.)
 
 -- | Initialize one part of the global state.
+initPeerTable :: [PeerName] -> IO ()
 initPeerTable ms = do
      writeIORef  machineList ms
-     lines <- forM (zip [0..] ms) $ \ (i,m) -> 
+     lines <- forM (zip [0::Int ..] ms) $ \ (i,m) -> 
 	        return ("  "++show i++": "++ BS.unpack m)
      dbgTaggedMsg 1 $ BS.pack $ "PeerTable:\n" ++ unlines lines
      writeHotVar peerTable (V.replicate (length ms) Nothing)
@@ -420,7 +431,8 @@ connectNode ind = do
       return entry
 
 -- | Wait until a file appears, read an addr from it, and connect.
-waitReadAndConnect ind file = do 
+waitReadAndConnect :: Int -> FilePath -> IO T.SourceEnd
+waitReadAndConnect _ file = do 
       dbgTaggedMsg 2$ BS.pack $ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
       let 
@@ -463,6 +475,9 @@ mkSlaveResource :: [Reg.RemoteCallMetaData]
 mkSlaveResource metadata trans =
   Resource (sharedInit metadata trans Slave) defaultSteal
 
+masterInit :: [Reg.RemoteCallMetaData]
+           -> (InitMode -> IO T.Transport)
+           -> Startup
 masterInit metadata trans = St st
   where
     st ws scheds = do
@@ -484,7 +499,7 @@ sharedInit :: [Reg.RemoteCallMetaData] -> (InitMode -> IO T.Transport) -> InitMo
 
 sharedInit metadata initTransport (Master machineList) = St st
   where
-    st topWorkSearch schedMap = do 
+    st _ schedMap = do 
      dbgTaggedMsg 2 "Initializing master..."
 
      -- Initialize the peerTable now that we know how many nodes there are:
@@ -510,7 +525,7 @@ sharedInit metadata initTransport (Master machineList) = St st
 
      (sourceAddr, targetEnd) <- T.newConnection transport
      -- Hygiene: Clear files storing slave addresses:
-     forM_ (zip [0..] machineList) $ \ (ind,machine) -> do
+     forM_ (zip [0::Int ..] machineList) $ \ (ind,machine) -> do
         let file = mkAddrFile machine ind
         b <- doesFileExist file
         when b $ removeFile file
@@ -529,7 +544,7 @@ sharedInit metadata initTransport (Master machineList) = St st
      -- it indicates a new slave starting up.
      -- As the master we eagerly set up connections with everyone:
      let
-         slaveConnectLoop 0    alreadyConnected = return ()
+         slaveConnectLoop 0    _                = return ()
 	 slaveConnectLoop iter alreadyConnected = do
           strs <- T.receive targetEnd 
           let str = BS.concat strs
@@ -563,7 +578,7 @@ sharedInit metadata initTransport (Master machineList) = St st
 
 		  slaveConnectLoop (iter-1) alreadyConnected' 
 
---            Right othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
+            othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
      ----------------------------------------
      dbgTaggedMsg 3 "  ... waiting for slaves to connect."
      let allButMe = if (elem host machineList) 
@@ -586,11 +601,11 @@ sharedInit metadata initTransport (Master machineList) = St st
 	     msg -> errorExit$ "Expected message when expecting ConnectAllPeers:"++ show msg
 
      dbgTaggedMsg 2 "  All slaves ready!  Launching receiveDaemon..."
-     forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
+     void $ forkDaemon "ReceiveDaemon"$ receiveDaemon targetEnd schedMap
        
      ----------------------------------------
      -- Allow slaves to proceed past the barrier:     
-     forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
+     forM_ (zip [0..] machineList) $ \ (ndid,_) -> 
        unless (ndid == myid) $ 
 	 sendTo ndid (encode StartStealing)
 
@@ -621,7 +636,7 @@ sharedInit metadata initTransport (Master machineList) = St st
 ------------------------------------------------------------------------------------------
 sharedInit metadata initTransport Slave = St st
   where
-    st topWorkSearch schedMap = do 
+    st _ schedMap = do 
      dbgTaggedMsg 2 "Init slave: creating connection... " 
      host <- BS.pack <$> commonInit metadata initTransport
      writeIORef taggedmsg_global_mode "_S"
@@ -668,9 +683,9 @@ sharedInit metadata initTransport Slave = St st
          establishALLConections (masterId, machines) = do
 	     dbgTaggedMsg 2 "  Proactively connecting to all peers..."
 	     myid <- readIORef myNodeID 
-	     forM_ (zip [0..] machines) $ \ (ndid,name) -> 
+	     forM_ (zip [0..] machines) $ \ (ndid,_) -> 
 		unless (ndid == myid) $ do 
-		  connectNode ndid
+		  void $ connectNode ndid
  --			dbgTaggedMsg$ "    "++show ndid++": "++BS.unpack name ++" connected."
 		  return ()
 	     dbgTaggedMsg 2 "  Fully connected, notifying master."
@@ -689,7 +704,7 @@ sharedInit metadata initTransport Slave = St st
      when eager_connections (establishALLConections pr)
      waitBarrier
 
-     forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound schedMap
+     void $ forkDaemon "ReceiveDaemon"$ receiveDaemon myInbound schedMap
      dbgTaggedMsg 3$ "Slave initAction returning control to scheduler..."
 
      return ()
@@ -697,6 +712,9 @@ sharedInit metadata initTransport Slave = St st
 
 -- TODO - FACTOR OUT OF MASTER CASE AS WELL:
 -- | Common pieces factored out from the master and slave initializations.
+commonInit :: [Reg.RemoteCallMetaData]
+           -> (InitMode -> IO T.Transport)
+           -> IO String
 commonInit metadata initTransport = do 
   
      writeIORef globalRPCMetadata (Reg.registerCalls metadata)
@@ -734,11 +752,15 @@ waitForShutdown token = do
 
 -- The master tells all workers to quit.
 masterShutdown :: Token -> T.TargetEnd -> IO ()
+#ifdef SHUTDOWNACK
 masterShutdown token targetEnd = do
+#else
+masterShutdown token _ = do
+#endif
    mLs  <- readIORef machineList
    myid <- readIORef myNodeID
    ----------------------------------------  
-   forM_ (zip [0..] mLs) $ \ (ndid,name) -> 
+   forM_ (zip [0..] mLs) $ \ (ndid,_) -> 
      unless (ndid == myid) $ do 
       sendTo ndid (encode$ ShutDown token)
    ----------------------------------------  
@@ -760,7 +782,7 @@ masterShutdown token targetEnd = do
 
 
 workerShutdown :: (IntMap.IntMap Sched) -> IO ()
-workerShutdown schedMap = do
+workerShutdown _ = do
    dbgTaggedMsg 1$ "Shutdown initiated for worker."
 #ifdef SHUTDOWNACK
    mid <- readIORef masterID
@@ -823,7 +845,7 @@ defaultSteal = WS ws
 --------------------------------------------------------------------------------
 
 -- | Spawn a parallel subcomputation that can happen either locally or remotely.
-longSpawn (local, clo@(Closure n pld)) = do
+longSpawn (local, clo) = do
   let pclo = fromMaybe (errorExitPure "Could not find Payload closure")
                      $ makePayloadClosure clo
   Sched{no, ivarUID} <- ask
@@ -886,7 +908,7 @@ receiveDaemon targetEnd schedMap =
    bss  <- if False
 	   then Control.Exception.catch 
                       (T.receive targetEnd)
-		      (\ (e::SomeException) -> do
+		      (\ (_::SomeException) -> do
 		       printErr$ "Exception while attempting to receive message in receive loop."
 		       exitSuccess
 		      )
