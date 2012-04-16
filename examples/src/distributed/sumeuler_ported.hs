@@ -44,7 +44,7 @@ import Control.Monad.Par.Meta.DistSMP
 	 runParDistWithTransport, runParSlaveWithTransport, 
 	 spawn_, put, IVar, new, fork)
 -- Tweaked version of CloudHaskell's closures:
-import Remote2.Call (mkClosureRec, remotable)
+import RPC.Call (mkClosureRec, remotable)
 import DistDefaultMain
 
 -----------------------------------------------------------------------------

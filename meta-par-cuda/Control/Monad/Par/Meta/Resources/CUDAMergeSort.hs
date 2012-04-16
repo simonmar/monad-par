@@ -2,8 +2,8 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Control.Monad.Par.Meta.Resources.CUDAMergeSort (
-    defaultInit
-  , defaultSteal
+    defaultStartup
+  , defaultWorkSearch
   , blockingGPUMergeSort
   , spawnCPUGPUMergeSort
   , spawnGPUMergeSort
@@ -31,7 +31,7 @@ import Text.Printf
 
 import Foreign.CUDA.Driver (initialise)
 
-import Control.Monad.Par.Meta hiding (dbg, stealAction)
+import Control.Monad.Par.Meta hiding (dbg)
 import Control.Monad.Par.Meta.HotVar.IORef
 
 dbg :: Bool
@@ -43,7 +43,7 @@ dbg = False
 #endif
 
 mkResource :: Resource
-mkResource = Resource defaultInit defaultSteal
+mkResource = Resource defaultStartup defaultWorkSearch
 
 --------------------------------------------------------------------------------
 -- Global structures for communicating between Par threads and GPU
@@ -133,9 +133,9 @@ gpuDaemon = do
         Nothing -> return ()
   gpuDaemon
 
-defaultInit :: InitAction
-defaultInit = IA ia
-  where ia _ _ = do
+defaultStartup :: Startup
+defaultStartup = St st
+  where st _ _ = do
           initialise []
           mtid <- readHotVar daemonTid
           when (mtid == Nothing)
@@ -143,15 +143,15 @@ defaultInit = IA ia
 
 #define GPU_BACKSTEALING
 #ifdef GPU_BACKSTEALING
-defaultSteal :: StealAction
-defaultSteal = SA sa 
-  where sa _ _ = do
+defaultWorkSearch :: WorkSearch
+defaultWorkSearch = WS ws 
+  where ws _ _ = do
           mfinished <- R.tryPopR resultQueue
           case mfinished of
             finished@(Just _) -> return finished
             Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue        
 #else
-defaultSteal :: StealAction
-defaultSteal = SA sa 
-  where sa _ _ = R.tryPopR resultQueue
+defaultWorkSearch :: WorkSearch
+defaultWorkSearch = WS ws 
+  where ws _ _ = R.tryPopR resultQueue
 #endif

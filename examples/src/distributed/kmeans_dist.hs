@@ -35,7 +35,7 @@ import System.Random.MWC
 import Data.Time.Clock
 import Control.Exception
 import Control.Monad
-import Remote2.Call (mkClosure, mkClosureRec, remotable)
+import RPC.Call (mkClosure, mkClosureRec, remotable)
 import Data.ByteString (readFile)
 
 nClusters = 4

@@ -22,8 +22,8 @@ import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
 import qualified Control.Monad.Par.Meta.Resources.Backoff as Bkoff
 
 #ifdef DIST_SMP
-#warning "Activating DistSMP via SharedMemory Resource."
-import qualified Control.Monad.Par.Meta.Resources.SharedMemory   as Local
+#warning "Activating DistSMP via SMP Resource."
+import qualified Control.Monad.Par.Meta.Resources.SMP   as Local
 #else
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Local
 #endif
@@ -91,7 +91,7 @@ backoff_max = unsafePerformIO$ do
     	  	    Nothing -> return (100 * 1000)
 
 --------------------------------------------------------------------------------
--- Init and Steal actions:
+-- Startup and WorkSearches:
 
 masterResource metadata trans = 
   mconcat [ Local.mkResource

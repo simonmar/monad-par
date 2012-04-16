@@ -19,11 +19,11 @@ import Control.Monad.Par.Meta.DistSMP
 
 
 -- For Dist version:
-import Remote2.Closure  (Closure(Closure))
-import Remote2.Encoding (Payload, Serializable, serialDecodePure, serialEncodePure,
+import RPC.Closure  (Closure(Closure))
+import RPC.Encoding (Payload, Serializable, serialDecodePure, serialEncodePure,
 			 getPayloadContent, getPayloadType)
-import qualified Remote2.Reg as Reg
-import Remote2.Call (mkClosureRec, remotable)
+import qualified RPC.Reg as Reg
+import RPC.Call (mkClosureRec, remotable)
 -- import Control.Monad.Par.Meta.Dist.Combinator (InclusiveRange(InclusiveRange), parMapReduceRange)
 import Data.IORef (readIORef)
 import Data.Maybe (fromJust)

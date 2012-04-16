@@ -14,7 +14,7 @@ import Control.Monad.Par.Meta.DistSMP
         (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP),
 	 runParDistWithTransport, runParSlaveWithTransport, spawn_)
 -- Tweaked version of CloudHaskell's closures:
-import Remote2.Call (mkClosureRec, remotable)
+import RPC.Call (mkClosureRec, remotable)
 -- import DistDefaultMain
 
 import Data.Time.Clock

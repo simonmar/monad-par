@@ -19,7 +19,7 @@ import qualified Data.ByteString.Char8 as BS
 import Control.Monad.Par.Meta.DistSMP
         (longSpawn, Par, get, shutdownDist, WhichTransport(Pipes,TCP))
 import Control.Monad.Par.Unsafe
-import Remote2.Call (mkClosureRec, remotable)
+import RPC.Call (mkClosureRec, remotable)
 import System.Process       (readProcess)
 import System.Posix.Process (getProcessID)
 import DistDefaultMain (defaultMain)
