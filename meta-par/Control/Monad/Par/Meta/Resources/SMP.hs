@@ -27,7 +27,8 @@ import System.Random.MWC
 
 import Text.Printf
 
-import Control.Monad.Par.Meta hiding (dbg, workSearch)
+import Control.Monad.Par.Meta
+
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 
@@ -67,17 +68,11 @@ defaultStartup = startupForCaps getCaps
 startupForCaps :: [Int] -> Startup
 startupForCaps caps = St st
   where st ws _ = do
---          setAffinityRange caps
           dbgTaggedMsg 2 $ BS.pack $ printf "spawning worker threads for shared memory on caps:\n"
           dbgTaggedMsg 2 $ BS.pack $ printf "\t%s\n" (show caps)
-          -- create a semaphore so that we only return once all the workers
-          -- have been spawned
-          qsem <- newQSem 0
           let caps' = nub caps
           forM_ caps' $ \n ->
-            void $ spawnWorkerOnCap' qsem ws n
-          forM_ caps' $ const (waitQSem qsem)
-  
+            void $ spawnWorkerOnCPU ws n
 
 {-# INLINE randModN #-}
 randModN :: Int -> HotVar GenIO -> IO Int

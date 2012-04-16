@@ -63,6 +63,8 @@ Library
     include-dirs:    include
     includes:        pin.h
   }
+  
+  ghc-options: -Wall
 
 Flag affinity
   Description: Turn on pinning to CPUs via pthread/linux scheduler calls.

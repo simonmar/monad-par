@@ -1,14 +1,14 @@
-module Control.Monad.Par.Meta.HotVar.IORef (
-    HotVar
-  , newHotVar
-  , modifyHotVar
-  , modifyHotVar_
-  , writeHotVar
-  , readHotVar
-  , hotVarTransaction
-  , readHotVarRaw
-  , writeHotVarRaw
-  ) where
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+module Control.Monad.Par.Meta.HotVar.IORef ( HotVar
+                                           , modifyHotVar
+                                           , modifyHotVar_
+                                           , newHotVar
+                                           , readHotVar
+                                           , readHotVarRaw
+                                           , writeHotVar
+                                           , writeHotVarRaw
+                                           ) where
 
 import Data.IORef
 
@@ -24,10 +24,10 @@ modifyHotVar  = atomicModifyIORef
 modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
 readHotVar    = readIORef
 writeHotVar   = writeIORef
-instance Show (IORef a) where 
-  show ref = "<ioref>"
+instance Show (HotVar a) where 
+  show _ = "<ioref>"
 
--- hotVarTransaction = id
-hotVarTransaction = error "Transactions not currently possible for IO refs"
+readHotVarRaw  :: HotVar a -> IO a
+writeHotVarRaw :: HotVar a -> a -> IO ()
 readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar

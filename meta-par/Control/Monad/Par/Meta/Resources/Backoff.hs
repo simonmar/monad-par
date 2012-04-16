@@ -4,23 +4,22 @@
 --   spamming of steal actions.  This is always a good idea, and
 --   especially so in the distributed case where steal attempts send
 --   actual messages.
-
+--
 --   Normally backoff functionality is baked into the scheduler loop.
 --   One nice aspect of the Meta scheduler design is that backoff can
 --   become "just another resource".  Most schedulers (compositions)
 --   should include this at tho bottom of their stack.
 
-module Control.Monad.Par.Meta.Resources.Backoff
-  ( defaultStartup, mkWorkSearch, mkResource )
-where 
+module Control.Monad.Par.Meta.Resources.Backoff ( defaultStartup
+                                                , mkWorkSearch
+                                                , mkResource
+                                                ) where 
 
 import Data.IORef (readIORef)
 import Data.Word (Word64)
-import Control.Monad.IO.Class (liftIO)
-import Control.Monad.Par.Meta hiding (dbg)
+import Control.Monad.Par.Meta
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
-import Control.Concurrent     (myThreadId, threadDelay)
-import qualified Data.Vector.Unboxed as V
+import Control.Concurrent     (threadDelay)
 import qualified Data.ByteString.Char8 as BS
 
 mkResource :: Word64 -> Word64 -> Resource
@@ -28,7 +27,7 @@ mkResource shortest longest =
   Resource defaultStartup (mkWorkSearch shortest longest)
 
 defaultStartup :: Startup
-defaultStartup = St (\ ws _ -> return () )
+defaultStartup = St (\ _ _ -> return () )
 
 -- | To construct a WorkSearch we need to know the minimum and
 -- maximum amount of time (nanoseconds) to sleep.  The exponential
@@ -41,7 +40,7 @@ defaultStartup = St (\ ws _ -> return () )
 -- which point each sleep will be for the maximum: 100ms.
 mkWorkSearch :: Word64 -> Word64 -> WorkSearch
 -- Sleeping ZERO time means not sleeping at all:
-mkWorkSearch shortest 0 = WS$ \ _ _ -> return Nothing
+mkWorkSearch _        0       = WS$ \ _ _ -> return Nothing
 mkWorkSearch shortest longest = WS ws 
   where 
     ws Sched{consecutiveFailures} _ = do
