@@ -32,9 +32,7 @@ Library
                  , Control.Monad.Par.Meta.Resources.SMP
                  , Control.Monad.Par.Meta.Resources.Backoff
                  , Control.Monad.Par.Meta.Resources.Debugging
-                 , Control.Monad.Par.Meta.HotVar.IORef
-                 , Data.Vector.Serialize 
-                 , Data.Vector.Storable.Serialize
+                 , Control.Monad.Par.Meta.HotVar.IORef                 
 
 
   Build-depends: base >= 4 && < 5
