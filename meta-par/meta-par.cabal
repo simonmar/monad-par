@@ -25,6 +25,7 @@ Library
                    Control.Monad.Par.Meta
                  -- A complete scheduler:
                  , Control.Monad.Par.Meta.SMP
+                 , Control.Monad.Par.Meta.Serial
 
                  -- Mostly internal modules for use to build other schedulers:
                  , Control.Monad.Par.Meta.Resources.SingleThreaded 

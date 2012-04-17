@@ -34,6 +34,7 @@ import Control.Concurrent ( MVar
                           , readMVar
                           , takeMVar
                           , tryPutMVar
+                          , tryTakeMVar
                           )
 import Control.DeepSeq
 import Control.Monad
@@ -214,6 +215,20 @@ pushWork Sched{ workpool } work = R.pushL workpool work
 
 {-# INLINE pushWorkEnsuringWorker #-}
 pushWorkEnsuringWorker :: Sched -> Par () -> IO (Maybe ())
+pushWorkEnsuringWorker _ work = do
+  no <- takeMVar workerPresentBarrier
+  sched@Sched { tids } <- getSchedForCap no
+  set <- readHotVar tids
+  case Set.null set of
+    False -> do
+      when dbg $ printf "[meta] pushing ensured work onto cap %d\n" no
+      Just <$> pushWork sched work
+    True -> error $ printf "[meta] worker barrier filled by non-worker %d\n" no
+  
+
+{-
+{-# INLINE pushWorkEnsuringWorker #-}
+pushWorkEnsuringWorker :: Sched -> Par () -> IO (Maybe ())
 pushWorkEnsuringWorker Sched { no } work = do
   let attempt n = do
         sched@Sched { no, tids } <- getSchedForCap n
@@ -234,12 +249,21 @@ pushWorkEnsuringWorker Sched { no } work = do
   case msucc of
     Just () -> return $ Just ()
     Nothing -> loop schedNos
+-}
+
 --------------------------------------------------------------------------------
 -- Global structures and helpers for proper nesting behavior
 
 {-# NOINLINE globalScheds #-}
 globalScheds :: HotVar (IntMap Sched)
 globalScheds = unsafePerformIO . newHotVar $ IntMap.empty
+
+{-# NOINLINE workerPresentBarrier #-}
+-- | Starts empty. Each new worker spawned tries to put its CPU
+-- number. 'pushWorkEnsuringWorker' waits on this to ensure it pushes
+-- the initial computation on a CPU with a worker.
+workerPresentBarrier :: MVar Int
+workerPresentBarrier = unsafePerformIO newEmptyMVar
 
 {-# NOINLINE startBarrier #-}
 startBarrier :: MVar ()
@@ -295,6 +319,8 @@ spawnWorkerOnCPU ws cap =
     modifyHotVar_ tids (Set.insert me)
     when dbg$ dbgTaggedMsg 2 $ BS.pack $
       printf "[meta: cap %d] spawning new worker" cap
+    -- at least this worker is ready, so try filling the MVar
+    _ <- tryPutMVar workerPresentBarrier cap
     -- wait on the barrier to start
     readMVar startBarrier
     when dbg$ dbgTaggedMsg 2 $ BS.pack $ 
@@ -431,6 +457,8 @@ runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $
     "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
   -- trigger the barrier so that workers start
   _ <- tryPutMVar startBarrier ()
+  -- make sure the worker barrier is clear for subsequent runPars
+  _ <- tryTakeMVar workerPresentBarrier
   ans <- takeMVar ansMVar
 
   -- TODO: Invariant checking -- make sure there is no work left:
