@@ -1,0 +1,171 @@
+Oracle Scheduling
+
+Goal: controlling granularity in a heterogeneous computing environment
+Focus: divide and conquer
+Secret weapons: 
+    - estimating task cost in constant time
+    - estimates of task creation overhead on each resource/device
+
+Idea: appropriate level of granularity will vary by device.
+If a specific device is chosen, different levels of granularity will be
+appropriate.
+
+So, at one level of granularity, distributed may be appropriate, but if the
+network is busy, maybe some other device can steal the task.
+
+
+Estimators are like a go-between for the oracle decision-maker and the
+scheduler: 
+    - the oracle requests a conversion from cost to run-time
+    - the scheduler reports task run-times to the estimator 
+(This latter part has to be from the scheduler because only it will know which 
+device actually performed the task.)
+
+
+-----------------------------------------------------------------------
+Work-stealing model
+
+When a task comes in:
+1) Oracle requests estimate of the run-time
+2) Compare to cut-offs for each device
+3a) If only one device is acceptable, enqueue there
+3b) If multiple devices are acceptable, choose the one with lowest time
+estimate and enqueue there. Mark as stealable for other devices.
+
+When a task is performed:
+1) Dequeue. If task was stealable, mark it so that other devices don't try to 
+do it later
+2) Record start time, run it, record end time
+3) Report device used, start time, and end time to estimator
+4) Estimator records run-time
+
+When queue is empty:
+1) Attempt to steal from same-device "neighbors" (e.g., if on GPU, try
+stealing from other GPUs)
+2) Check stealable queue
+3a) If it's empty, repeat task checks (own queue, neighbor queues, steal
+queue)
+3b) If there's something to steal, follow the pointer, and mark the task
+stolen.
+4) Record start time, run it, record end time
+5) Report device used, start time, and end time to estimator. May also want to
+report that the task was stolen.
+6) Estimator records run-time
+
+
+- Need queues for each device type (i.e., GPU, Distributed, etc.)
+- If there are multiple devices of a type (e.g., 4 GPUs), they do whatever's 
+"normal": single shared queue; individual queues with ability to steal from 
+each other, etc.
+- For stealable tasks, either enqueue a pointer to the real task or keep a
+  steal queue so that if more work is requested the tasks are easy to get to.
+
+-----------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------
+Work-sharing model
+
+Similar to work-stealing model, but keep track of time spent waiting in queue,
+and add this to estimated run-time to get a better idea of which device will
+be better. The idea is that if a device is busier, wait times will be longer,
+so tasks will be more likely to be sent to a less busy device. Could add
+work-stealing on top of this, but theoretically it would happen rarely, if
+ever.
+
+When a task comes in:
+1) Oracle requests estimate of the run-time and wait-time
+2) Compare run-time (+ wait-time?) to cut-offs for each device
+3a) If only one device is acceptable, enqueue there
+3b) If multiple devices are acceptable, choose the one with lowest time
+estimate and enqueue there. 
+4) Record enqueue time
+5) Optionally, mark as stealable for other devices.
+
+When a task is performed:
+1) Dequeue. 
+1b) If work-stealing is used and task was stealable, mark it so that other 
+devices don't try to do it later
+2) Record start time, run it, record end time
+3) Report device used, start time, and end time to estimator
+4) Estimator records run-time and wait-time
+
+When queue is empty:
+1a) If work-stealing is not used, just hang out until given something to do
+(ideally, it's either the case that this will happen soon or there is no work
+suitable for this device at the moment, so even if work-stealing were in use 
+there wouldn't be anything to steal)
+1b) If work-stealing is used, go find something to steal
+-----------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------
+Subdivision with Work-stealing
+
+The idea here is to think of this more in terms of whether or not a task 
+subdivides into smaller tasks on a particular device. (It may require the user 
+to provide a function that indicates whether a task will (likely?) subdivide 
+for particular input.) The theory here is that if you know a task will 
+subdivide later, it's okay to run it on a "sub-optimal" device, particularly if 
+the "optimal" device is currently busy.
+
+So, we enqueue tasks on the device with the lowest run-time cost estimate, and
+mark them as stealable by any device which will subdivide the task.
+
+When a task comes in:
+1) Oracle requests estimate of run-time and information about whether the task
+subdivides for each device
+2) Compare run-time to cut-offs for each device
+3) Of the devices for which the run-time is within the cut-off range, enqueue
+the task on the one with the fastest run-time estimate, and mark as stealable
+by all other devices for which the task is known to subdivide (regardless of
+whether they are within the cut-off range). (Question: what to do about other
+devices that have run-time within acceptable cut-off range that are known not
+to subdivide? If one is idle, and the run-time isn't that much longer, maybe
+it's okay to run there.)
+
+When a task is performed:
+1) Dequeue. Mark it so that other devices don't attempt to steal it.
+2) Record start time, run, record end time
+3) Report device used and run-time to estimator
+4) Estimator records run-time
+
+When queue is empty, do work stealing!
+-----------------------------------------------------------------------
+
+
+
+-----------------------------------------------------------------------
+Subdivision with Work-sharing
+
+As a preface, I'm not convinced that this is that great an idea, but maybe
+it's worth trying for comparison.
+
+With work-sharing, we want to try to assign a task to the right device in the
+first place. So, when choosing a device, we ideally want the one with the
+fastest run-time, but if it's busy, and we know the task is going to subdivide
+anyway, then it's okay to settle for a device with a shorter wait-time and a
+longer run-time. The big question is how to put this into numbers...
+
+When a task comes in:
+1) Estimate the run-time and wait time for each device, and indicate whether or
+not the task will subdivide on that device
+2) Compare run-times to cut-off ranges for each device
+3) Strike some balance between choosing device with lowest run-time (that may
+or may not subdivide) and choosing a device with low wait-time that will
+subdivide. Maybe have some kind of constant weights or something?
+4) Record enqueue time
+
+Note: do we care about how much work must be done before subdivision, or is
+this just a risk we take with this approach? (I.e., the risk that most of the 
+work is done before the subdivision happens.)
+
+When a task is performed:
+1) Dequeue
+2) Record start time, run task, record end time (do we distinguish between
+ending with completion versus endind in a subdivision?)
+3) Report device used, run-time, and wait-time to scheduler
+4) Estimator records run-time and wait-time
+-----------------------------------------------------------------------
