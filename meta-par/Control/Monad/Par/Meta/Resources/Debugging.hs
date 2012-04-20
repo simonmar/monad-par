@@ -1,16 +1,15 @@
 {-# LANGUAGE MagicHash, UnboxedTuples, CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# OPTIONS_GHC -fwarn-unused-imports #-}
+{-# OPTIONS_GHC -Wall #-}
 
-module Control.Monad.Par.Meta.Resources.Debugging
-  ( dbg
-  , verbosity
-  , dbgTaggedMsg
-  , dbgDelay
-  , dbgCharMsg
-  , taggedmsg_global_mode
-  )
- where
+module Control.Monad.Par.Meta.Resources.Debugging ( dbg
+                                                  , dbgTaggedMsg
+                                                  , dbgDelay
+                                                  , dbgCharMsg
+                                                  , meaningless_alloc
+                                                  , taggedmsg_global_mode
+                                                  , verbosity
+                                                  ) where
 
 ----------------------------------------
 -- For tracing events:
@@ -22,7 +21,8 @@ import GHC.IO (IO(IO))
 ----------------------------------------
 
 import qualified Data.ByteString.Char8 as BS
-import Data.IORef             (readIORef, newIORef)
+import Data.IORef             (IORef, newIORef, readIORef)
+import Data.Monoid            (mappend, Monoid)
 import Control.Monad          (when)
 import Control.Concurrent     (myThreadId, threadDelay)
 import System.IO              (hFlush, stderr)
@@ -75,7 +75,7 @@ binaryEventLog = unsafePerformIO$ do
                     Nothing  -> return False
                     Just ""  -> return False                    
                     Just "0" -> return False                    
-                    Just s   -> return True
+                    Just _   -> return True
 
 -- When debugging is turned on we will do extra invariant checking:
 dbg :: Bool
@@ -85,6 +85,7 @@ dbg = True
 dbg = False
 #endif
 
+whenVerbosity :: Monad m => Int -> m () -> m ()
 whenVerbosity n action = when (verbosity >= n) action
 
 -- | dbgTaggedMsg is our routine for logging debugging output:
@@ -99,7 +100,10 @@ textLogMsg lvl s =
          tid <- myThreadId
 	 BS.putStrLn$ " [distmeta" +++ m +++" "+++ sho tid +++"] "+++s
 
-a +++ b = BS.append a b
+(+++) :: Monoid a => a -> a -> a
+(+++) = mappend
+
+sho :: Show a => a -> BS.ByteString
 sho = BS.pack . show
 
 
@@ -128,26 +132,24 @@ dbgCharMsg lvl tag fullmsg =
 
 
 -- When debugging it is helpful to slow down certain fast paths to a human scale:
+dbgDelay :: BS.ByteString -> IO ()
 dbgDelay _ = 
   if   dbg
   then threadDelay (200*1000)
   else return ()
 
--- printErr = hPutStrLn stderr
--- printErr = putStrLn
-printErr = BS.putStrLn . BS.pack 
-
-
 meaningless_alloc :: IO ()
 meaningless_alloc = 
    case length (fibls 5) of 
      0 -> return (error "Never happen!")
-     n -> return ()
+     _ -> return ()
  where 
+  fibls :: Int -> [Int]
   fibls n | n <= 1 = [1::Int] 
   fibls n = fibls (n-1) ++ fibls (n-2)
 
 
 {-# NOINLINE taggedmsg_global_mode #-}
 -- Just for debugging, tracking global node as M (master) or S (slave):
+taggedmsg_global_mode :: IORef BS.ByteString
 taggedmsg_global_mode = unsafePerformIO$ newIORef "_M"

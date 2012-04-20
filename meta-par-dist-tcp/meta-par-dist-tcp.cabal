@@ -48,6 +48,7 @@ Library
                 , unix >= 2.5
                 , RPC
                 , random 
+                , abstract-par
                 , meta-par
                 , cereal
                 , vector
@@ -88,3 +89,4 @@ Library
 --   Description: Turn of Distributed support and therefore certain dependencies.
 --   Default:     False
 
+  ghc-options:    -Wall

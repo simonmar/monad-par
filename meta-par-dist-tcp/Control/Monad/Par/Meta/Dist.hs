@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP #-}
-
+{-# OPTIONS_GHC -Wall #-}
 #ifndef DIST_SMP
 module Control.Monad.Par.Meta.Dist 
 #endif
@@ -16,6 +16,7 @@ module Control.Monad.Par.Meta.Dist
   , module Control.Monad.Par.Meta
 ) where
 
+import Control.Monad.Par.Class (get, new)
 import Control.Monad.Par.Meta
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import qualified Control.Monad.Par.Meta.Resources.Remote as Rem
@@ -30,11 +31,9 @@ import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Local
 
 import qualified Data.ByteString.Char8 as BS
 import System.Environment (getEnvironment)
-import Data.Char (ord)
 import Data.Word
-import Data.List (lookup)
-import Data.Monoid (mconcat, (<>))
-import Control.Monad (liftM)
+import Data.Monoid (mconcat)
+import Control.Monad (void)
 -- import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Exception (catch, throw, SomeException)
 
@@ -46,8 +45,8 @@ import System.Random (randomIO)
 import System.IO (stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import RPC.Reg (registerCalls)
-import GHC.Conc
+import RPC.Reg (RemoteCallMetaData)
+import Text.Printf
 
 --------------------------------------------------------------------------------
 
@@ -70,6 +69,7 @@ instance Show WhichTransport where
 readTransport :: String -> WhichTransport
 readTransport "TCP"   = TCP
 readTransport "Pipes" = Pipes
+readTransport x       = error $ printf "Meta.Dist: unknown transport %s" x
 
 --------------------------------------------------------------------------------
 -- Read Backoff configuration from environment variables:
@@ -93,6 +93,9 @@ backoff_max = unsafePerformIO$ do
 --------------------------------------------------------------------------------
 -- Startup and WorkSearches:
 
+masterResource :: [RemoteCallMetaData]
+               -> (Rem.InitMode -> IO T.Transport)
+               -> Resource
 masterResource metadata trans = 
   mconcat [ Local.mkResource
 #ifdef DIST_SMP
@@ -102,6 +105,9 @@ masterResource metadata trans =
           , Bkoff.mkResource backoff_min backoff_max
           ]
 
+slaveResource :: [RemoteCallMetaData]
+              -> (Rem.InitMode -> IO T.Transport)
+              -> Resource
 slaveResource metadata trans =
   mconcat [ Local.mkResource
 #ifdef DIST_SMP
@@ -115,8 +121,13 @@ slaveResource metadata trans =
 -- Running and shutting down the distributed Par monad:
 
 -- The default Transport is TCP:
+runParDist :: [RemoteCallMetaData] -> Par a -> IO a
 runParDist mt = runParDistWithTransport mt TCP
 
+runParDistWithTransport :: [RemoteCallMetaData]
+                        -> WhichTransport
+                        -> Par a
+                        -> IO a
 runParDistWithTransport metadata trans comp = 
    do dbgTaggedMsg 1$ BS.pack$ "Initializing distributed Par monad with transport: "++ show trans
       Control.Exception.catch main hndlr 
@@ -129,15 +140,19 @@ runParDistWithTransport metadata trans comp =
 -- Could have this for when global initialization has already happened:
 -- runParDistNested = runMetaParIO (ia Nothing) sa
 
+runParSlave :: [RemoteCallMetaData] -> IO ()
 runParSlave meta = runParSlaveWithTransport meta TCP
 
+runParSlaveWithTransport :: [RemoteCallMetaData] 
+                         -> WhichTransport
+                         -> IO ()
 runParSlaveWithTransport metadata trans = do
   dbgTaggedMsg 2 (BS.pack "runParSlave invoked.")
 
   -- We run a par computation that will not terminate to get the
   -- system up, running, and work-stealing:
-  runMetaParIO (slaveResource metadata (pickTrans trans))
-	       (new >>= get)
+  void $ runMetaParIO (slaveResource metadata (pickTrans trans))
+	              (new >>= get)
 
   fail "RETURNED FROM runMetaParIO - THIS SHOULD NOT HAPPEN"
 
@@ -152,6 +167,7 @@ shutdownDist = do
 -- Transport-related inititialization:
 --------------------------------------------------------------------------------
 
+pickTrans :: WhichTransport -> Rem.InitMode -> IO T.Transport
 pickTrans trans = 
      case trans of 
        TCP   -> initTCP
@@ -179,6 +195,7 @@ control_port = min_port
 work_base_port :: Int
 work_base_port = min_port + 1 
 
+min_port, max_port :: Int
 min_port = 11000
 max_port = 65535
 

@@ -1,5 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
-
+{-# OPTIONS_GHC -Wall #-}
 -- | Provides Template Haskell-based tools
 -- and syntactic sugar for dealing with closures
 module RPC.Call (
@@ -7,6 +7,8 @@ module RPC.Call (
          mkClosure,
          mkClosureRec,
         ) where
+
+import Control.Applicative
 
 import Language.Haskell.TH
 import Control.Monad.Trans (liftIO)
@@ -16,11 +18,11 @@ import Control.Monad (liftM)
 import qualified Control.Monad.Par.Meta as MetaPar (Par)
 import Data.Maybe (isJust)
 
+import Prelude hiding (lookup)
+
 import RPC.Encoding (Payload,serialDecode,serialEncode,serialEncodePure)
 import RPC.Closure  (Closure(..))
 import RPC.Reg      (putReg,RemoteCallMetaData)
-
-import Debug.Trace
 
 ----------------------------------------------
 -- * Compile-time metadata
@@ -77,7 +79,7 @@ mkClosureRec name =
 mkClosure :: Name -> Q Exp
 mkClosure n = do info <- reify n
                  case info of
-                    orig@(VarI iname _ _ _) -> 
+                    (VarI iname _ _ _) -> 
                         do let newn = mkName $ show iname ++ "__closure"
 			       arg  = mkName "x"
                            newinfo <- reify newn
@@ -153,8 +155,18 @@ data Env = Env
   }
 
 makeEnv :: Q Env
-makeEnv = 
-  do 
+makeEnv = Env <$> [t| IO |]
+              <*> [t| MetaPar.Par |]
+              <*> [t| Payload |]
+              <*> location
+              <*> [e| liftIO |]
+              <*> [e| return |]
+              <*> [e| Closure |]
+              <*> [t| Closure |]
+
+{- ACF: building it the above way is more brittle wrt changes to Env,
+but is much better for warnings and (IMO) readability
+
      -- RRN: This is a pattern match, right?
 --     eProcessM <- [t| ProcessM |]
      eIO <- [t| IO |]
@@ -180,6 +192,7 @@ makeEnv =
                   eClosure=eClosure,
                   eClosureT=eClosureT
                 }
+-}
 
 -------------------------------
 -- RRN: Hackish business of matching against special supported monads.
@@ -196,12 +209,12 @@ isMonad e t =
 -- Is it (IO a) or (Par a) ??
 monadOf :: Env -> Type -> Maybe Type
 monadOf e (AppT m _) |  isMonad e m = Just m
-monadOf e _ = Nothing
+monadOf _ _ = Nothing
 
 -- Go UNDER Par or IO type constructors:
 restOf :: Env -> Type -> Type
 restOf e (AppT m r ) | isMonad e m = r
-restOf e r = r
+restOf _ r = r
 
 -- Strip off applications of monads which we recognize (and convert to IO):
 wrapMonad :: Env -> Type -> Type -> Type
@@ -215,7 +228,7 @@ wrapMonad e monad val =
 --	  Just t | t == monad -> val
           -- RRN: Convert Par to IO here:
 	  Just t | t == monad -> AppT outputM (restOf e val)
-	  Just n  -> AppT outputM (restOf e val)
+	  Just _  -> AppT outputM (restOf e val)
 	  Nothing -> AppT outputM val
 
 getReturns :: Type -> Int -> ([Type],[Type])
@@ -249,10 +262,9 @@ generateDecl e name t shift =
      topmonad = ePar e 
      lifter :: Exp -> ExpQ
      lifter x = case monadOf e $ putParams returns of
-                 Just p | p == topmonad -> 
-                      do op <- varE$ mkName "runParDist" -- [e|\x->x|]
---			 return $ AppE op x
-			 return $ x
+                 Just p | p == topmonad -> return x
+                      -- do op <- varE$ mkName "runParDist" -- [e|\x->x|]
+		      --    return $ AppE op x
                  Just p | p == eIO e -> return $ AppE (eLiftIO e) x
                  _ -> return $ AppE (eReturn e) x
      serialEncoder x = case topmonad of
@@ -367,6 +379,7 @@ remotable names =
       lookup <- generateMetaData env newDecls
       return $ newDecls ++ lookup
 
+getType :: Name -> Q (Maybe (Name, Type))
 getType name = 
   do info <- reify name
      case info of 

@@ -25,15 +25,14 @@ Library
                    Control.Monad.Par.Meta
                  -- A complete scheduler:
                  , Control.Monad.Par.Meta.SMP
+                 , Control.Monad.Par.Meta.Serial
 
                  -- Mostly internal modules for use to build other schedulers:
                  , Control.Monad.Par.Meta.Resources.SingleThreaded 
                  , Control.Monad.Par.Meta.Resources.SMP
                  , Control.Monad.Par.Meta.Resources.Backoff
                  , Control.Monad.Par.Meta.Resources.Debugging
-                 , Control.Monad.Par.Meta.HotVar.IORef
-                 , Data.Vector.Serialize 
-                 , Data.Vector.Storable.Serialize
+                 , Control.Monad.Par.Meta.HotVar.IORef                 
 
 
   Build-depends: base >= 4 && < 5
@@ -63,6 +62,8 @@ Library
     include-dirs:    include
     includes:        pin.h
   }
+  
+  ghc-options: -Wall
 
 Flag affinity
   Description: Turn on pinning to CPUs via pthread/linux scheduler calls.

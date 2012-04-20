@@ -5,7 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PackageImports #-}
-
+{-# OPTIONS_GHC -Wall -fno-warn-name-shadowing #-}
 
 -- The Meta scheduler which can be parameterized over various
 -- "Resources", including:
@@ -15,18 +15,26 @@
 --   * Remote Machine "accelerators" (i.e. distributed)
 
 
-module Control.Monad.Par.Meta where
+module Control.Monad.Par.Meta ( forkWithExceptions
+                              , IVar
+                              , Par
+                              , Resource(..)
+                              , runMetaPar
+                              , runMetaParIO
+                              , Sched(..)
+                              , spawnWorkerOnCPU
+                              , Startup(..)
+                              , WorkSearch(..)
+                              ) where
 
 import Control.Applicative
-import Control.Concurrent ( 
-                            MVar
+import Control.Concurrent ( MVar
                           , newEmptyMVar
                           , putMVar
                           , readMVar
                           , takeMVar
                           , tryPutMVar
-                          , QSem
-                          , signalQSem
+                          , tryTakeMVar
                           )
 import Control.DeepSeq
 import Control.Monad
@@ -36,7 +44,7 @@ import Control.Monad.IO.Class
 import Control.Exception (catch, throwTo, SomeException)
 
 import Data.Concurrent.Deque.Class (WSDeque)
-import Data.Concurrent.Deque.Reference.DequeInstance
+import Data.Concurrent.Deque.Reference.DequeInstance ()
 import Data.Concurrent.Deque.Reference as R
 import Data.IntMap (IntMap)
 -- import Data.Word   (Word64)
@@ -186,7 +194,7 @@ ensurePinned action = do
   if pinned 
    then action 
    else do mv <- newEmptyMVar 
-	   forkOn cap (action >>= putMVar mv)
+	   void $ forkOn cap (action >>= putMVar mv)
 	   takeMVar mv
 
 
@@ -205,6 +213,20 @@ popWork Sched{ workpool, no } = do
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched{ workpool } work = R.pushL workpool work
 
+{-# INLINE pushWorkEnsuringWorker #-}
+pushWorkEnsuringWorker :: Sched -> Par () -> IO (Maybe ())
+pushWorkEnsuringWorker _ work = do
+  no <- takeMVar workerPresentBarrier
+  sched@Sched { tids } <- getSchedForCap no
+  set <- readHotVar tids
+  case Set.null set of
+    False -> do
+      when dbg $ printf "[meta] pushing ensured work onto cap %d\n" no
+      Just <$> pushWork sched work
+    True -> error $ printf "[meta] worker barrier filled by non-worker %d\n" no
+  
+
+{-
 {-# INLINE pushWorkEnsuringWorker #-}
 pushWorkEnsuringWorker :: Sched -> Par () -> IO (Maybe ())
 pushWorkEnsuringWorker Sched { no } work = do
@@ -227,12 +249,21 @@ pushWorkEnsuringWorker Sched { no } work = do
   case msucc of
     Just () -> return $ Just ()
     Nothing -> loop schedNos
+-}
+
 --------------------------------------------------------------------------------
 -- Global structures and helpers for proper nesting behavior
 
 {-# NOINLINE globalScheds #-}
 globalScheds :: HotVar (IntMap Sched)
 globalScheds = unsafePerformIO . newHotVar $ IntMap.empty
+
+{-# NOINLINE workerPresentBarrier #-}
+-- | Starts empty. Each new worker spawned tries to put its CPU
+-- number. 'pushWorkEnsuringWorker' waits on this to ensure it pushes
+-- the initial computation on a CPU with a worker.
+workerPresentBarrier :: MVar Int
+workerPresentBarrier = unsafePerformIO newEmptyMVar
 
 {-# NOINLINE startBarrier #-}
 startBarrier :: MVar ()
@@ -268,6 +299,7 @@ makeOrGetSched ws cap = do
 --------------------------------------------------------------------------------
 -- Worker routines
 
+forkOn' :: Int -> IO () -> IO ThreadId
 #ifdef AFFINITY
 forkOn' cap k = forkOn cap $ setAffinityOS cap >> k
 #else
@@ -279,36 +311,23 @@ forkOn' = forkOn
 -- Note: this does not check for nesting, and should be called
 -- appropriately. It is the caller's responsibility to manage things
 -- like mortal counts.
-spawnWorkerOnCap :: WorkSearch -> Int -> IO ThreadId
-spawnWorkerOnCap ws cap = 
+spawnWorkerOnCPU :: WorkSearch -> Int -> IO ThreadId
+spawnWorkerOnCPU ws cap = 
   forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
     sched@Sched{ tids } <- makeOrGetSched ws cap
     modifyHotVar_ tids (Set.insert me)
     when dbg$ dbgTaggedMsg 2 $ BS.pack $
       printf "[meta: cap %d] spawning new worker" cap
+    -- at least this worker is ready, so try filling the MVar
+    _ <- tryPutMVar workerPresentBarrier cap
     -- wait on the barrier to start
     readMVar startBarrier
     when dbg$ dbgTaggedMsg 2 $ BS.pack $ 
       printf "[meta: cap %d] new working entering loop" cap
     runReaderT (workerLoop 0 errK) sched
 
--- | Like 'spawnWorkerOnCap', but takes a 'QSem' which is signalled
--- just before the new worker enters the 'workerLoop'.
-spawnWorkerOnCap' :: QSem -> WorkSearch -> Int -> IO ThreadId
-spawnWorkerOnCap' qsem ws cap = 
-  forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
-    me <- myThreadId
-    sched@Sched{ tids } <- makeOrGetSched ws cap
-    modifyHotVar_ tids (Set.insert me)
-    when dbg$ dbgTaggedMsg 2 $ BS.pack $ "[meta: cap "++show cap++"] spawning new worker" 
-    signalQSem qsem
-    -- wait on the barrier to start
-    readMVar startBarrier
-    when dbg$ dbgTaggedMsg 2 $ BS.pack $ 
-      printf "[meta: cap %d] new working entering loop" cap
-    runReaderT (workerLoop 0 errK) sched
-
+errK :: a
 errK = error "this closure shouldn't be used"
 
 reschedule :: Par a
@@ -361,7 +380,7 @@ new = liftIO $ IVar <$> newHotVar Empty
 
 {-# INLINE get #-}
 get :: IVar a -> Par a
-get iv@(IVar hv) = callCC $ \cont -> do
+get (IVar hv) = callCC $ \cont -> do
   contents <- liftIO $ readHotVar hv
   case contents of
     Full a -> return a
@@ -375,8 +394,7 @@ get iv@(IVar hv) = callCC $ \cont -> do
 
 {-# INLINE put_ #-}
 put_ :: IVar a -> a -> Par ()
-put_ iv@(IVar hv) !content = do
-  sch <- ask
+put_ (IVar hv) !content = do
   liftIO $ do
     ks <- modifyHotVar hv $ \contents ->
       case contents of
@@ -386,11 +404,15 @@ put_ iv@(IVar hv) !content = do
     mapM_ ($content) ks
 
 {-# INLINE put #-}
+put :: NFData a => IVar a -> a -> Par ()
 put iv a = deepseq a (put_ iv a)
 
 {-# INLINE spawn #-}
-spawn  p = do r <- new; fork (p >>= put  r); return r
+spawn :: NFData a => Par a -> Par (IVar a)
+spawn p = do r <- new; fork (p >>= put  r); return r
+
 {-# INLINE spawn_ #-}
+spawn_ :: Par a -> Par (IVar a)
 spawn_ p = do r <- new; fork (p >>= put_ r); return r
 
 
@@ -423,7 +445,7 @@ runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $
   isNested <- Set.member tid <$> readHotVar tids
   if isNested then
         -- if it is, we need to spawn a replacement worker while we wait on ansMVar
-        void $ spawnWorkerOnCap ws cap
+        void $ spawnWorkerOnCPU ws cap
         -- if it's not, we need to run the init action 
    else runSt st ws globalScheds
 
@@ -435,6 +457,8 @@ runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $
     "[meta] runMetaParIO: Work pushed onto queue, now waiting on final MVar..."
   -- trigger the barrier so that workers start
   _ <- tryPutMVar startBarrier ()
+  -- make sure the worker barrier is clear for subsequent runPars
+  _ <- tryTakeMVar workerPresentBarrier
   ans <- takeMVar ansMVar
 
   -- TODO: Invariant checking -- make sure there is no work left:
