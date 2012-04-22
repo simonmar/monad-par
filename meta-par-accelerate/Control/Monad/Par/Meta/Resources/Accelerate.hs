@@ -25,8 +25,8 @@ import qualified Data.Array.Accelerate.CUDA as Acc
 #else
 import qualified Data.Array.Accelerate.Interpreter as Acc
 #endif
-import Data.Array.Accelerate.IO
-import Data.Array.Accelerate.IO.Vector
+import Data.Array.Accelerate.IO (BlockPtrs) -- Now has toVector...
+import Data.Array.Accelerate.IO.Vector (toVector)
 
 import Data.Array.IArray (IArray)
 import qualified Data.Array.IArray as IArray    

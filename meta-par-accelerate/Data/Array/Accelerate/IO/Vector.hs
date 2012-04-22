@@ -12,7 +12,8 @@ import Data.Array.Accelerate ( arrayShape
                              , Z(..)
                              , (:.)(..))
 import Data.Array.Accelerate.Array.Sugar (EltRepr)
-import Data.Array.Accelerate.IO
+--import qualified Data.Array.Accelerate.IO as IO
+import Data.Array.Accelerate.IO (BlockPtrs, fromPtr, toPtr)
 import Data.Vector.Storable ( fromList, unsafeFromForeignPtr0
                             , unsafeToForeignPtr0
                             , Vector)
@@ -23,8 +24,8 @@ import System.IO.Unsafe
 
 #define TEST
 #ifdef TEST
-import Data.Int
-import Control.Applicative
+-- import Data.Int
+-- import Control.Applicative
 import Test.QuickCheck
 import Test.QuickCheck.Monadic
 #endif

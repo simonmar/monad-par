@@ -1,6 +1,6 @@
 {-# OPTIONS_GHC -Wall #-}
 
-module Control.Monad.Par.Meta.SharedMemoryAccelerate (
+module Control.Monad.Par.Meta.AccSMP (
     runPar
   , runParIO
   , Accelerate.spawnAcc
