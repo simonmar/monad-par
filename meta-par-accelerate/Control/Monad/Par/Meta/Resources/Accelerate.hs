@@ -4,13 +4,24 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
+-- | Do not use his module directly.  Use a /SCHEDULER/ module.  This
+-- only provides a component (Resource) for assembling schedulers.
+
 module Control.Monad.Par.Meta.Resources.Accelerate (
-    defaultInit
-  , defaultSteal
+  -- * The `Resource` itself:
+      mkResource
+--  , defaultInit
+--  , defaultSteal
+    
+  -- * Accelerate-specific `Par` operations:
+  , runAcc
   , spawnAcc
-  , spawnAccIArray
-  , spawnAccVector
-  , mkResource
+  , unsafeHybrid    
+  
+  -- * Example applications of `unsafeHybrid`
+  , unsafeHybridIArray
+  , unsafeHybridVector
+
   ) where
 
 import Control.Concurrent
@@ -25,7 +36,7 @@ import qualified Data.Array.Accelerate.CUDA as Acc
 #else
 import qualified Data.Array.Accelerate.Interpreter as Acc
 #endif
-import Data.Array.Accelerate.IO (BlockPtrs) -- Now has toVector...
+import qualified Data.Array.Accelerate.IO as IO -- Now has toVector...
 import Data.Array.Accelerate.IO.Vector (toVector)
 
 import Data.Array.IArray (IArray)
@@ -75,8 +86,21 @@ resultQueue :: WSDeque (Par ())
 resultQueue = unsafePerformIO R.newQ
 
 --------------------------------------------------------------------------------
--- spawnAcc operator and init/steal definitions to export
 
+-- | Run an Accelerate computation and wait for its result.  In the
+-- context of a `Par` computation this can result in better
+-- performance than using an Accelerate-provided `run` function
+-- directly, because this version enables the CPU work scheduler to do
+-- other work while waiting for the GPU computation to complete.
+-- 
+-- Moreover, when configured with a high-performance /CPU/ Accelerate backend
+-- in the future this routine can enable automatic CPU/GPU work partitioning.
+runAcc :: (Arrays a) => Acc a -> Par a
+runAcc comp = spawnAcc comp >>= get
+
+----------------------------------------
+
+-- | Like `runAcc` but runs the Accelerate computation asynchronously.
 spawnAcc :: (Arrays a) => Acc a -> Par (IVar a)
 spawnAcc comp = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
@@ -92,6 +116,7 @@ spawnAcc comp = do
 
 -- Backstealing variants
 
+#if 0
 -- | Backstealing spawn where the result is converted to an instance
 -- of 'IArray'. Since the result of either 'Par' or the 'Acc' version
 -- may be put in the resulting 'IVar', it is expected that the result
@@ -123,7 +148,7 @@ spawnAccIArray (parComp, accComp) = do
 -- expected that the result of both computations is an equivalent
 -- 'Vector'. /TODO/: make a variant with unrestricted 'Shape' that,
 -- e.g., yields a vector in row-major order.
-spawnAccVector :: (Storable a, Elt a, BlockPtrs (EltRepr a) ~ ((), Ptr a))
+spawnAccVector :: (Storable a, Elt a, IO.BlockPtrs (EltRepr a) ~ ((), Ptr a))
                => (Par (Vector.Vector a), Acc (Array DIM1 a))
                -> Par (IVar (Vector.Vector a))
 spawnAccVector (parComp, accComp) = do 
@@ -142,9 +167,57 @@ spawnAccVector (parComp, accComp) = do
             put_ iv ans
     liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
     return iv
+#endif
 
--- runAcc :: (Arrays a) => Acc a -> Par a
 
+-- | Spawn an computation which may execute /either/ on the CPU or GPU
+-- based on runtime load.  The CPU and GPU implementations may employ
+-- completely different algorithms; this is an UNSAFE operation which
+-- will not guarantee determinism unless the user ensures that the
+-- result of both computations is always equivalent.
+-- 
+--     
+-- A common application of `unsafeHybrid` is the following:
+--
+-- > unsafeHybrid Data.Array.Accelerate.IO.toVector
+--
+unsafeHybrid :: Arrays b => (b -> a) -> (Par a, Acc b) -> Par (IVar a)
+unsafeHybrid convert (parComp, accComp) = do 
+    when dbg $ liftIO $ printf "spawning Accelerate computation\n"
+    iv <- new
+    let wrappedParComp :: Par ()
+        wrappedParComp = do
+          when dbg $ liftIO $ printf "running backstolen computation\n"
+          put_ iv =<< parComp
+        wrappedAccComp :: IO ()
+        wrappedAccComp = do
+          when dbg $ printf "running Accelerate computation\n"
+--          ans <- convert $ Acc.run accComp
+          let ans = convert $ Acc.run accComp
+          R.pushL resultQueue $ do
+            when dbg $ liftIO $ printf "Accelerate computation finished\n"
+            put_ iv ans
+    liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
+    return iv
+
+-- | An example application of `unsafeHybrid` for vectors.
+unsafeHybridVector :: (Storable a, Elt a, IO.BlockPtrs (EltRepr a) ~ ((), Ptr a))
+                  => (Par (Vector.Vector a), Acc (Array DIM1 a))
+                  -> Par (IVar (Vector.Vector a))
+-- /TODO/: make a variant with unrestricted 'Shape' that, e.g., yields
+-- a vector in row-major order.
+unsafeHybridVector = unsafeHybrid IO.toVector
+
+-- | An example application of `unsafeHybrid` for any IArray type.
+unsafeHybridIArray :: ( EltRepr ix ~ EltRepr sh
+                     , IArray a e, IArray.Ix ix
+                     , Shape sh, Elt ix, Elt e )
+                  => (Par (a ix e), Acc (Array sh e))
+                  -> Par (IVar (a ix e))               
+unsafeHybridIArray = unsafeHybrid toIArray
+
+
+--------------------------------------------------------------------------------
 
 -- | Loop for the GPU daemon; repeatedly takes work off the 'gpuQueue'
 -- and runs it.
@@ -161,6 +234,7 @@ gpuDaemon = do
         Nothing -> return ()
   gpuDaemon
 
+-- | A mix-in component for assembling schedulers
 mkResource :: Resource
 mkResource = Resource defaultInit defaultSteal
 
@@ -176,4 +250,3 @@ defaultSteal = SA sa
           case mfinished of
             finished@(Just _) -> return finished
             Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue
-    

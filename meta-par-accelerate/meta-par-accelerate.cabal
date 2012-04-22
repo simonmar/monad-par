@@ -11,9 +11,9 @@ Description:
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
-Author:              Ryan Newton
+Author:              Adam Foltzer 2011-2012
 Maintainer:          Ryan Newton <rrnewton@gmail.com>
-Copyright:           (c) Ryan Newton 2011-2012
+Copyright:           (c) Adam Foltzer 2011-2012
 Stability:           Experimental
 Category:            Parallelism
 Build-type:          Simple
@@ -24,6 +24,8 @@ Library
                  -- This is a complete scheduler for shared-memory
                  -- (parallel) and GPU computation:
                  Control.Monad.Par.Meta.AccSMP,
+
+                 -- This is a resource used to build schedulers:
                  Control.Monad.Par.Meta.Resources.Accelerate
 
   Build-depends:  
@@ -34,27 +36,9 @@ Library
                 , accelerate >= 0.10 
                 , QuickCheck 
                 , transformers
---                 , bytestring >= 0.9
---                 , network
---                 , directory >= 1.1
---                 , ghc-prim
---                 , containers
-
---                 , deepseq >= 1.2
---                 , mtl
---                 , network-transport
---                 , network-transport-pipes
---                 , process >= 1.1
---                 , syb >= 0.3
---                 , unix >= 2.5
---                 , RPC
---                 , random 
-
---                 , meta-par
---                 , cereal
                 , vector
                 , array
---                 , split
 
   ghc-options:    -Wall
 
+-- ACCELERATE_CUDA_BACKEND

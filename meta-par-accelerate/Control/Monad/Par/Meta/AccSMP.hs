@@ -1,11 +1,24 @@
 {-# OPTIONS_GHC -Wall #-}
 
 module Control.Monad.Par.Meta.AccSMP (
+  -- * Running `Par` computations using Accelerate and SMP parallelism.
     runPar
   , runParIO
+  
+--  , module Accelerate
+  -- * Accelerate-specific `Par` operations:
+  , Accelerate.runAcc
   , Accelerate.spawnAcc
+  , Accelerate.unsafeHybrid    
+  
+  -- * Example applications of `unsafeHybrid`
+  , Accelerate.unsafeHybridIArray
+  , Accelerate.unsafeHybridVector
+  
   , module Control.Monad.Par.Meta
 ) where
+
+-- TODO - NEWTYPE
 
 import Data.Monoid
 
