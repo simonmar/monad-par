@@ -28,6 +28,11 @@ import RPC.Reg      (putReg,RemoteCallMetaData)
 -- * Compile-time metadata
 ----------------------------------------------
 
+----------------------------------------------------------------------------------------------------
+-- RRN: For Meta-par, hacking the below versions to include a tuple of
+-- the original and the serialized closure:
+----------------------------------------------------------------------------------------------------
+
 -- | A compile-time macro to expand a function name to its corresponding
 -- closure name (if such a closure exists), suitable for use with
 -- 'spawn', 'callRemote', etc
@@ -35,47 +40,6 @@ import RPC.Reg      (putReg,RemoteCallMetaData)
 -- as addressing the closure generator by name, that is,
 -- @foo__closure@. In some cases you may need to use
 -- 'mkClosureRec' instead.
-{-
-mkClosure :: Name -> Q Exp
-mkClosure n = do info <- reify n
-                 case info of
-                    VarI iname _ _ _ -> 
-                        do let newn = mkName $ show iname ++ "__closure"
-                           newinfo <- reify newn
-                           case newinfo of
-                              VarI newiname _ _ _ -> varE newiname
-                              _ -> error $ "Unexpected type of closure symbol for "++show n
-                    _ -> error $ "No closure corresponding to "++show n
--}
-
--- | A variant of 'mkClosure' suitable for expanding closures
--- of functions declared in the same module, including that
--- of the function it's used in. The Rec stands for recursive.
--- If you get the @Something is not in scope at a reify@ message
--- when using mkClosure, try using this function instead.
--- Using this function also turns off the static
--- checks used by mkClosure, and therefore you are responsible
--- for making sure that you use 'remotable' with each function
--- that may be an argument of mkClosureRec
-{-
-mkClosureRec :: Name -> Q Exp
-mkClosureRec name =
- do e <- makeEnv
-    inf <- reify name
-    case inf of
-       VarI aname atype _ _ -> 
-          case nameModule aname of
-             Just a -> case a == loc_module (eLoc e) of
-                           False -> error "Can't use mkClosureRec across modules: use mkClosure instead"
-                           True -> do (aat,aae) <- closureInfo e aname atype
-                                      sigE (return aae) (return aat)
-             _ -> error "mkClosureRec can't figure out module of symbol"
-       _ -> error "mkClosureRec applied to something weird"
--}
-
-----------------------------------------------------------------------------------------------------
--- RRN: Hacking the below versions to include a tuple of the original and the serialized closure.
-----------------------------------------------------------------------------------------------------
 mkClosure :: Name -> Q Exp
 mkClosure n = do info <- reify n
                  case info of
@@ -92,6 +56,15 @@ mkClosure n = do info <- reify n
                               _ -> error $ "Unexpected type of closure symbol for "++show n
                     _ -> error $ "No closure corresponding to "++show n
 
+-- | A variant of 'mkClosure' suitable for expanding closures
+-- of functions declared in the same module, including that
+-- of the function it's used in. The Rec stands for recursive.
+-- If you get the @Something is not in scope at a reify@ message
+-- when using mkClosure, try using this function instead.
+-- Using this function also turns off the static
+-- checks used by mkClosure, and therefore you are responsible
+-- for making sure that you use 'remotable' with each function
+-- that may be an argument of mkClosureRec
 mkClosureRec :: Name -> Q Exp
 mkClosureRec name =
  do e <- makeEnv

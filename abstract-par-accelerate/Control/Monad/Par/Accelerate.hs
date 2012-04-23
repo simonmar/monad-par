@@ -7,7 +7,8 @@ module Control.Monad.Par.Accelerate
          ParAccelerate(..),
        
          -- * Example applications of `unsafeHybrid`
-         unsafeHybridVector
+         unsafeHybridVector,
+         unsafeHybridIArray
        ) where 
 
 import Control.Monad.Par.Class

@@ -25,6 +25,7 @@ module Control.Monad.Par.Meta ( forkWithExceptions
                               , spawnWorkerOnCPU
                               , Startup(..)
                               , WorkSearch(..)
+                              , GlobalState
                               ) where
 
 import Control.Applicative

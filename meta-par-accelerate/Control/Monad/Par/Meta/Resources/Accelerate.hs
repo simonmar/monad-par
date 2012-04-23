@@ -1,27 +1,20 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 
 {-# OPTIONS_GHC -Wall #-}
+{-# OPTIONS_HADDOCK ignore-exports, prune #-}
 
--- | Do not use his module directly.  Use a /SCHEDULER/ module.  This
--- only provides a component (Resource) for assembling schedulers.
+-- | Do not use his module directly.  Use a /SCHEDULER/ module.  
+-- 
+-- This provides a component (Resource) for assembling schedulers, as well as 
+-- exporting a `Control.Monad.Par.Accelerate.ParAccelerate` instance.
 
-module Control.Monad.Par.Meta.Resources.Accelerate (
-  -- * The `Resource` itself:
+module Control.Monad.Par.Meta.Resources.Accelerate 
+  (
       mkResource
---  , defaultInit
---  , defaultSteal
-    
-  -- * Accelerate-specific `Par` operations:
-  , runAcc
-  , spawnAcc
-  , unsafeHybrid    
-  
-  -- * Example applications of `unsafeHybrid`
-  , unsafeHybridIArray
-  , unsafeHybridVector
-
+    -- * 
   ) where
 
 import Control.Concurrent
@@ -30,31 +23,22 @@ import Control.Monad
 import Control.Monad.IO.Class
 
 import Data.Array.Accelerate (Acc, Arrays)
-import Data.Array.Accelerate.Array.Sugar
 #ifdef ACCELERATE_CUDA_BACKEND
 import qualified Data.Array.Accelerate.CUDA as Acc
 #else
 import qualified Data.Array.Accelerate.Interpreter as Acc
 #endif
-import qualified Data.Array.Accelerate.IO as IO -- Now has toVector...
-import Data.Array.Accelerate.IO.Vector (toVector)
-
-import Data.Array.IArray (IArray)
-import qualified Data.Array.IArray as IArray    
-
-import qualified Data.Vector.Storable as Vector
 
 import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
 import Data.Concurrent.Deque.Reference as R
-
-import Foreign (Ptr, Storable)
 
 import System.IO.Unsafe
 
 import Text.Printf
 
+import qualified Control.Monad.Par.Accelerate as AC
 import Control.Monad.Par.Meta 
-import Control.Monad.Par.Class (new, put_, get)
+import Control.Monad.Par.Class (new,put_)
 
 dbg :: Bool
 #ifdef DEBUG
@@ -63,6 +47,16 @@ dbg = True
 dbg = False
 #endif
 
+
+--------------------------------------------------------------------------------
+-- * The `Resource` itself:
+
+-- | A mix-in component for assembling schedulers with an Accelerate capability.
+mkResource :: Resource
+mkResource = Resource defaultInit defaultSteal
+
+
+-- * /Internal/ Definitions
 --------------------------------------------------------------------------------
 -- Global structures for communicating between Par threads and GPU
 -- daemon threads
@@ -88,20 +82,7 @@ resultQueue = unsafePerformIO R.newQ
 
 --------------------------------------------------------------------------------
 
--- | Run an Accelerate computation and wait for its result.  In the
--- context of a `Par` computation this can result in better
--- performance than using an Accelerate-provided `run` function
--- directly, because this version enables the CPU work scheduler to do
--- other work while waiting for the GPU computation to complete.
--- 
--- Moreover, when configured with a high-performance /CPU/ Accelerate backend
--- in the future this routine can enable automatic CPU/GPU work partitioning.
-runAcc :: (Arrays a) => Acc a -> Par a
-runAcc comp = spawnAcc comp >>= get
-
-----------------------------------------
-
--- | Like `runAcc` but runs the Accelerate computation asynchronously.
+-- | See documentation for `Control.Monad.Par.Accelerate.spawnAcc`
 spawnAcc :: (Arrays a) => Acc a -> Par (IVar a)
 spawnAcc comp = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
@@ -115,21 +96,8 @@ spawnAcc comp = do
     liftIO $ R.pushR gpuOnlyQueue wrappedComp
     return iv               
 
--- Backstealing variants
 
-
-
--- | Spawn an computation which may execute /either/ on the CPU or GPU
--- based on runtime load.  The CPU and GPU implementations may employ
--- completely different algorithms; this is an UNSAFE operation which
--- will not guarantee determinism unless the user ensures that the
--- result of both computations is always equivalent.
--- 
---     
--- A common application of `unsafeHybrid` is the following:
---
--- > unsafeHybrid Data.Array.Accelerate.IO.toVector
---
+-- | See documentation for `Control.Monad.Par.Accelerate.unsafeHybrid`
 unsafeHybrid :: Arrays b => (b -> a) -> (Par a, Acc b) -> Par (IVar a)
 unsafeHybrid convert (parComp, accComp) = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
@@ -149,22 +117,6 @@ unsafeHybrid convert (parComp, accComp) = do
     liftIO $ R.pushR gpuBackstealQueue (wrappedParComp, wrappedAccComp)
     return iv
 
--- | An example application of `unsafeHybrid` for vectors.
-unsafeHybridVector :: (Storable a, Elt a, IO.BlockPtrs (EltRepr a) ~ ((), Ptr a))
-                  => (Par (Vector.Vector a), Acc (Array DIM1 a))
-                  -> Par (IVar (Vector.Vector a))
--- /TODO/: make a variant with unrestricted 'Shape' that, e.g., yields
--- a vector in row-major order.
-unsafeHybridVector = unsafeHybrid IO.toVector
-
--- | An example application of `unsafeHybrid` for any IArray type.
-unsafeHybridIArray :: ( EltRepr ix ~ EltRepr sh
-                     , IArray a e, IArray.Ix ix
-                     , Shape sh, Elt ix, Elt e )
-                  => (Par (a ix e), Acc (Array sh e))
-                  -> Par (IVar (a ix e))               
-unsafeHybridIArray = unsafeHybrid toIArray
-
 
 --------------------------------------------------------------------------------
 
@@ -183,9 +135,6 @@ gpuDaemon = do
         Nothing -> return ()
   gpuDaemon
 
--- | A mix-in component for assembling schedulers
-mkResource :: Resource
-mkResource = Resource defaultInit defaultSteal
 
 defaultInit :: Startup
 defaultInit = St ia
@@ -199,3 +148,10 @@ defaultSteal = WS sa
           case mfinished of
             finished@(Just _) -> return finished
             Nothing -> fmap fst `fmap` R.tryPopL gpuBackstealQueue
+
+--------------------------------------------------------------------------------
+
+-- Generic instance for Meta.Par, needs to be newtype-derived for specific schedulers.
+instance AC.ParAccelerate IVar Par where 
+  spawnAcc     = spawnAcc
+  unsafeHybrid = unsafeHybrid

@@ -35,6 +35,7 @@ Library
                 , abstract-deque
                 , accelerate >= 0.12
                 , accelerate-io
+                , abstract-par-accelerate 
                 , QuickCheck 
                 , transformers
                 , vector
