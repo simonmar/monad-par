@@ -16,9 +16,8 @@ import Control.Concurrent
 import Control.Monad
 
 import Data.Concurrent.Deque.Reference as R
-import qualified Data.IntMap as IntMap
 import Data.List (nub)
-import qualified Data.Vector as Vector
+import qualified Data.Vector as V
 import qualified Data.ByteString.Char8 as BS
 
 import System.Environment (getEnvironment)
@@ -89,7 +88,7 @@ wsForCaps caps triesPerCap = WS ws
   where 
     numCaps = length caps
     numTries = numCaps * triesPerCap
-    capVec = Vector.fromList caps
+    capVec = V.fromList caps
     ws Sched { no, rng } schedsRef = do
       scheds <- readHotVar schedsRef
       let {-# INLINE getNext #-}
@@ -98,10 +97,10 @@ wsForCaps caps triesPerCap = WS ws
           -- | Main steal loop
           loop :: Int -> Int -> IO (Maybe (Par ()))
           loop 0 _ = return Nothing
-          loop n i | capVec Vector.! i == no = loop (n-1) =<< getNext
+          loop n i | capVec V.! i == no = loop (n-1) =<< getNext
                    | otherwise =
-            let target = capVec Vector.! i in
-            case IntMap.lookup target scheds of
+            let target = capVec V.! i in
+            case scheds V.! target of
               Nothing -> do 
                 dbgTaggedMsg 2 $ BS.pack $  
                   printf "WARNING: no Sched for cap %d during steal\n" target

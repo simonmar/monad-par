@@ -28,7 +28,8 @@ module Control.Monad.Par.Meta ( forkWithExceptions
                               ) where
 
 import Control.Applicative
-import Control.Concurrent ( MVar
+import Control.Concurrent ( getNumCapabilities
+                          , MVar
                           , newEmptyMVar
                           , putMVar
                           , readMVar
@@ -46,15 +47,14 @@ import Control.Exception (catch, throwTo, SomeException)
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance ()
 import Data.Concurrent.Deque.Reference as R
-import Data.IntMap (IntMap)
--- import Data.Word   (Word64)
-import qualified Data.IntMap as IntMap
 import qualified Data.ByteString.Char8 as BS
 import Data.Monoid
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Typeable (Typeable)
 import Data.IORef (IORef, writeIORef, newIORef)
+import Data.Vector (Vector)
+import qualified Data.Vector as V
 
 import System.IO.Unsafe (unsafePerformIO)
 import System.IO (stderr)
@@ -101,11 +101,13 @@ newtype IVar a = IVar (HotVar (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
+type GlobalState = Vector (Maybe Sched)
+
 newtype Startup = St { runSt ::
      -- Combined 'StealAction' for the current scheduler.
      WorkSearch
      -- The global structure of schedulers.
-  -> HotVar (IntMap Sched) 
+  -> HotVar GlobalState 
   -> IO ()
   }
 
@@ -121,7 +123,7 @@ newtype WorkSearch = WS { runWS ::
      -- 'Sched' for the current thread
      Sched
      -- Map of all 'Sched's
-  -> HotVar (IntMap Sched)
+  -> HotVar GlobalState
   -> IO (Maybe (Par ()))
   }
 
@@ -255,8 +257,10 @@ pushWorkEnsuringWorker Sched { no } work = do
 -- Global structures and helpers for proper nesting behavior
 
 {-# NOINLINE globalScheds #-}
-globalScheds :: HotVar (IntMap Sched)
-globalScheds = unsafePerformIO . newHotVar $ IntMap.empty
+globalScheds :: HotVar GlobalState
+globalScheds = unsafePerformIO $ do
+  n <- getNumCapabilities
+  newHotVar $ V.replicate n Nothing
 
 {-# NOINLINE workerPresentBarrier #-}
 -- | Starts empty. Each new worker spawned tries to put its CPU
@@ -272,8 +276,8 @@ startBarrier = unsafePerformIO newEmptyMVar
 -- | Warning: partial!
 getSchedForCap :: Int -> IO Sched
 getSchedForCap cap = do
-  msched <- IntMap.lookup cap <$> readHotVar globalScheds
-  case msched of
+  scheds <- readHotVar globalScheds
+  case scheds V.! cap of
     Just sched -> return sched
     Nothing -> error $ 
       printf "tried to get a Sched for capability %d before initializing" cap
@@ -289,12 +293,12 @@ makeOrGetSched ws cap = do
                      <*> newHotVar 0            -- ivarUID
                      <*> pure ws                -- workSearch
   modifyHotVar globalScheds $ \scheds ->
-    case IntMap.lookup cap scheds of
+    case scheds V.! cap of
       Just sched -> (scheds, sched)
       Nothing -> if dbg
                  then DT.trace (printf "[%d] created scheduler" cap)
-                               (IntMap.insert cap sched scheds, sched)
-                 else (IntMap.insert cap sched scheds, sched)
+                               (scheds V.// [(cap, Just sched)], sched)
+                 else (scheds V.// [(cap, Just sched)], sched)
 
 --------------------------------------------------------------------------------
 -- Worker routines
