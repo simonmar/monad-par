@@ -109,22 +109,22 @@ Library
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
 
-                 -- A collection of combinators for common parallel
-                 -- patterns and data structure traversals:
-                 , Control.Monad.Par.Combinator
-
                  -- This is the default scheduler:
                  , Control.Monad.Par.Scheds.Trace
                  , Control.Monad.Par.Scheds.TraceInternal
+
+                 -- Replacement scheduler for Trace:
+                 , Control.Monad.Par.Scheds.Direct
 
                  -- This scheduler uses sparks rather than IO threads.
                  -- It only supports Futures, not full IVars:
                  , Control.Monad.Par.Scheds.Sparks
 
-
   Build-depends: base >= 4 && < 5
                -- This provides the interface which monad-par implements:
                , abstract-par 
+               -- Extras such as parMap, RNG, State
+               , monad-par-extras == 0.3.*
 
 -- The parallel package currently requires deepseq 1.1:
 --               , deepseq >= 1.1 && < 1.2
@@ -164,14 +164,11 @@ Library
                --                Schedulers & Infrastructure             --
                ------------------------------------------------------------
 
-               -- Replacement scheduler for Trace, not exposing yet:
-                 Control.Monad.Par.Scheds.Direct
-
                -- Strawman scheduler that forks IO threads:
 --               , Control.Monad.Par.Scheds.ContFree
 
                -- Internal logging framework:
-               , Control.Monad.Par.Logging
+               Control.Monad.Par.Logging
 
                -- Serial Elision is currently experimental:
                , Control.Monad.Par.Scheds.SerialElision
@@ -196,25 +193,6 @@ Library
 
                -- More compact representation for [Bool]:
 --               , Data.BitList
-
-               -- AList should probably be internal.  Needs more testing and tuning:
-               , Control.Monad.Par.AList 
-
-               ------------------------------------------------------------
-               --                      Par Add-ons                       -- 
-               ------------------------------------------------------------
-
-               -- State is generally useful, should expose this soon:
-               , Control.Monad.Par.State
-
-               -- Pedigree is experimental, but potentially useful for
-               -- many purposes such as assigning unique, reproducable
-               -- identifiers to IVars
-               , Control.Monad.Par.Pedigree
-
-               -- Deterministic RNG should be released as soon as its tested more.
-               , Control.Monad.Par.RNG
-
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0

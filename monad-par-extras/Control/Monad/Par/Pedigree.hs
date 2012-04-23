@@ -11,7 +11,6 @@ module Control.Monad.Par.Pedigree
  ) 
  where 
 
-import qualified Control.Monad.Par as Default
 import Control.Monad.Par.Class
 import Control.Monad.Par.State
 import Control.Monad.Trans.State.Strict as S 

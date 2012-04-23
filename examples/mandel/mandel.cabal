@@ -1,0 +1,46 @@
+name:                mandel
+version:             0.3
+build-type:          Simple
+cabal-version:       >=1.8
+
+executable mandel
+  main-is:           mandel.hs
+  build-depends:     base == 4.*,
+                     deepseq == 1.3.*,
+                     vector == 0.9.*,
+                     abstract-par,
+                     monad-par-extras
+  extensions:        CPP
+  ghc-options:       -O2 -threaded -rtsopts -with-rtsopts=-N
+  
+  if flag(trace)
+     build-depends:   monad-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Trace
+
+  if flag(direct)
+     build-depends:   monad-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Direct
+
+  if flag(sparks)
+     build-depends:   monad-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Sparks
+
+  if flag(meta-smp)
+     build-depends:   meta-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.SMP
+
+  if !(flag(trace) || flag(direct) || flag(sparks) || flag(meta-smp))
+     build-depends:   monad-par
+     -- uses Control.Monad.Par by default
+
+flag trace
+  default:           False
+
+flag direct
+  default:           False
+
+flag sparks
+  default:           False
+
+flag meta-smp
+  default:           False

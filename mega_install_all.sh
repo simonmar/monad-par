@@ -19,11 +19,12 @@ git submodule update --init --recursive
 
 # This installs all the monad par packages and other packages with which it is co-developed.
 
-$CABAL install  --with-ghc=$GHC $*     \
+$CABAL install --force-reinstalls --with-ghc=$GHC $*     \
   Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ Deques/ChaseLev/ Deques/MegaDeque/ \
   accelerate/ accelerate/accelerate-io/ \
-  abstract-par/ monad-par/ meta-par/  \
+  abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
   RPC/ meta-par-dist-tcp/             \
-  meta-par-cuda/ abstract-par-accelerate/ meta-par-accelerate/ 
+  abstract-par-accelerate/ meta-par-accelerate/ 
 
+# meta-par-cuda/
 # accelerate-backend-kit

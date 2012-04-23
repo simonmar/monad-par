@@ -5,7 +5,8 @@
 -- constant-time append, and is therefore ideal for building the
 -- result of tree-shaped parallel computations.
 
-module Control.Monad.Par.AList
+module Control.Monad.Par.AList 
+{-# DEPRECATED "This structure does not perform well, and will be removed in future versions" #-}
  (
   -- * The 'AList' type and operations
   AList(..),
@@ -31,7 +32,6 @@ import qualified Data.List as L
 import qualified Control.Monad.Par.Combinator as C
 import Control.Monad.Par.Class
 import Data.Typeable
-import Data.Binary    as B
 import qualified Data.Serialize as S
 
 ----------------------------------------------------------------------------------------------------
@@ -53,10 +53,6 @@ instance Show a => Show (AList a) where
   show al = "fromList "++ show (toList al)
 
 -- TODO: Better Serialization
-instance Binary a => Binary (AList a) where
-  put al = B.put (toList al)
-  get = do x <- B.get 
-	   return (fromList x)
 instance S.Serialize a => S.Serialize (AList a) where
   put al = S.put (toList al)
   get = do x <- S.get 

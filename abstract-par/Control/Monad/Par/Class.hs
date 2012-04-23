@@ -28,6 +28,7 @@ module Control.Monad.Par.Class
   -- * Distributed Par monads
   , ParDist(..)
 #endif
+  , NFData()
   )
 where
 
