@@ -40,10 +40,13 @@ import Data.Word              (Word8)
 import Data.Maybe             (fromMaybe)
 import Data.Char              (isSpace)
 import qualified Data.ByteString.Char8 as BS
+-- Attempting to use a real concurrent data structure here:
 #ifdef MSQUEUE
 import Data.Concurrent.Queue.MichaelScott as R
+import Data.Concurrent.Queue.MichaelScott.DequeInstance
 #else
 import Data.Concurrent.Deque.Reference as R
+import Data.Concurrent.Deque.Reference.DequeInstance -- Populate the type family with instances.
 #endif
 
 import Data.Concurrent.Deque.Class     as DQ
@@ -68,7 +71,7 @@ import Control.Monad.Par.Class (new, put_)
 import Control.Monad.Par.Meta.Resources.Debugging
    (dbgTaggedMsg, dbgDelay, dbgCharMsg, taggedmsg_global_mode)
 import Control.Monad.Par.Meta (forkWithExceptions, Sched(Sched,no,ivarUID),
-			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..))
+			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..), GlobalState)
 import qualified Network.Transport     as T
 import RPC.Closure  (Closure(Closure))
 import RPC.Encoding (Payload, Serializable, serialDecodePure)
@@ -781,8 +784,8 @@ masterShutdown token _ = do
 -- TODO: Timeout.
 
 
-workerShutdown :: (IntMap.IntMap Sched) -> IO ()
-workerShutdown _ = do
+workerShutdown :: GlobalState -> IO ()
+workerShutdown schedMap = do
    dbgTaggedMsg 1$ "Shutdown initiated for worker."
 #ifdef SHUTDOWNACK
    mid <- readIORef masterID
@@ -791,14 +794,18 @@ workerShutdown _ = do
    -- Because we are completely shutting down the process we are at
    -- liberty to kill all worker threads here:
 #ifdef KILL_WORKERS_ON_SHUTDOWN
-   forM_ (IntMap.elems schedMap) $ \ Sched{tids} -> do
+   forM_ [0 .. size schedMap] $ \ i -> do
+-- TODO:
+-- FIXME FIXME FIXME FIXME FIXME 
+     Just (Sched{tids}) <- schedMap ! i 
+-- FIXME FIXME FIXME FIXME FIXME 
 --     set <- readHotVar tids
      set <- modifyHotVar tids (\set -> (Set.empty,set))
      mapM_ killThread (Set.toList set) 
    dbgTaggedMsg 1$ "  Killed all Par worker threads."
 #endif
    exitSuccess
-
+   
 -- Kill own pid:
 -- shutDownSelf
 
@@ -893,7 +900,7 @@ longSpawn (local, clo) = do
 --------------------------------------------------------------------------------
 
 -- | Receive steal requests from other nodes.  This runs in a loop indefinitely.
-receiveDaemon :: T.TargetEnd -> HotVar (IntMap.IntMap Sched) -> IO ()
+receiveDaemon :: T.TargetEnd -> HotVar GlobalState -> IO ()
 receiveDaemon targetEnd schedMap = 
   do myid <- readIORef myNodeID
      rcvLoop myid

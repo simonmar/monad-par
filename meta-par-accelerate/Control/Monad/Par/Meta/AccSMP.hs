@@ -7,15 +7,14 @@ module Control.Monad.Par.Meta.AccSMP (
   , runPar
   , runParIO
   
---  , module Accelerate
-  -- * Accelerate-specific `Par` operations:
-  , Accelerate.runAcc
-  , Accelerate.spawnAcc
-  , Accelerate.unsafeHybrid    
+  -- -- * Accelerate-specific `Par` operations:
+  -- , Accelerate.runAcc
+  -- , Accelerate.spawnAcc
+  -- , Accelerate.unsafeHybrid    
   
-  -- * Example applications of `unsafeHybrid`
-  , Accelerate.unsafeHybridIArray
-  , Accelerate.unsafeHybridVector
+  -- -- * Example applications of `unsafeHybrid`
+  -- , Accelerate.unsafeHybridIArray
+  -- , Accelerate.unsafeHybridVector
   
 --  , module Control.Monad.Par.Meta
   , Meta.IVar
@@ -23,10 +22,13 @@ module Control.Monad.Par.Meta.AccSMP (
 
 import Data.Monoid
 import qualified Control.Monad.Par.Class as PC
+import qualified Control.Monad.Par.Accelerate as AC
 import qualified Control.Monad.Par.Meta as Meta 
 import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
+
+--------------------------------------------------------------------------------
 
 tries :: Int
 tries = numCapabilities
@@ -34,8 +36,9 @@ tries = numCapabilities
 -- | A `Par` monad supporting only SMP and GPU resources.
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 
-           PC.ParFuture Meta.IVar,
-           PC.ParIVar   Meta.IVar 
+           PC.ParFuture     Meta.IVar,
+           PC.ParIVar       Meta.IVar,
+           AC.ParAccelerate Meta.IVar 
           )
           -- NOT MonadIO
 
