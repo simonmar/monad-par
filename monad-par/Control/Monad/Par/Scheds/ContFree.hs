@@ -588,13 +588,13 @@ get    :: IVar a -> Par a
 runPar :: Par a -> a 
 newFull_ ::  a -> Par (IVar a)
 
-instance PC.ParFuture Par IVar where
+instance PC.ParFuture IVar Par where
   get    = get
   spawn  = spawn
   spawn_ = spawn_
   spawnP = spawnP
 
-instance PC.ParIVar Par IVar where
+instance PC.ParIVar IVar Par where
   fork = fork
   new  = new
   put_ = put_

@@ -46,14 +46,14 @@ import qualified Control.Monad.Par.Scheds.Trace as T
 --
 -- > parMap :: NFData b => (a -> b) -> [a] -> Par [b]
 --
-parMap :: (Traversable t, NFData b, ParFuture p iv) => (a -> b) -> t a -> p (t b)
+parMap :: (Traversable t, NFData b, ParFuture iv p) => (a -> b) -> t a -> p (t b)
 parMap f xs = mapM (spawnP . f) xs >>= mapM get
 
 -- | Like 'parMap', but the function is a @Par@ monad operation.
 --
 -- > parMapM f xs = mapM (spawn . f) xs >>= mapM get
 --
-parMapM :: (Traversable t, NFData b, ParFuture p iv) => (a -> p b) -> t a -> p (t b)
+parMapM :: (Traversable t, NFData b, ParFuture iv p) => (a -> p b) -> t a -> p (t b)
 parMapM f xs = mapM (spawn . f) xs >>= mapM get
 
 -- TODO: parBuffer
@@ -81,7 +81,7 @@ data InclusiveRange = InclusiveRange Int Int
 -- >        0
 --
 parMapReduceRangeThresh
-   :: (NFData a, ParFuture p iv)
+   :: (NFData a, ParFuture iv p)
       => Int                            -- ^ threshold
       -> InclusiveRange                 -- ^ range over which to calculate
       -> (Int -> p a)                 -- ^ compute one result
@@ -113,7 +113,7 @@ auto_partition_factor = 4
 
 -- | \"Auto-partitioning\" version of 'parMapReduceRangeThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parMapReduceRange :: (NFData a, ParFuture p iv) => 
+parMapReduceRange :: (NFData a, ParFuture iv p) => 
 		     InclusiveRange -> (Int -> p a) -> (a -> a -> p a) -> a -> p a
 parMapReduceRange (InclusiveRange start end) fn binop init =
    loop (length segs) segs
@@ -157,7 +157,7 @@ parMapReduceRange (InclusiveRange start end) fn binop init =
 -- then @parFor@ has deterministic semantics.  One easy way to follow
 -- this rule is to only use 'put' or 'put_' in @f@, never 'get'.
 
-parFor :: (ParFuture p iv) => InclusiveRange -> (Int -> p ()) -> p ()
+parFor :: (ParFuture iv p) => InclusiveRange -> (Int -> p ()) -> p ()
 parFor (InclusiveRange start end) body =
  do
     let run (x,y) = for_ x (y+1) body

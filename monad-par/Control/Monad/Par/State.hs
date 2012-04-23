@@ -36,9 +36,9 @@ class SplittableState a where
 ----------------------------------------------------------------------------------------------------
 -- Strict State:
 
--- | Adding State to a `ParFuture` monad yield s another `ParFuture` monad.
-instance (SplittableState s, PC.ParFuture p fut) 
-      =>  PC.ParFuture (S.StateT s p) fut 
+-- | Adding State to a `ParFuture` monad yields another `ParFuture` monad.
+instance (SplittableState s, PC.ParFuture fut p) 
+      =>  PC.ParFuture fut (S.StateT s p) 
  where
   get = lift . PC.get
   spawn_ (task :: S.StateT s p ans) = 
@@ -48,8 +48,8 @@ instance (SplittableState s, PC.ParFuture p fut)
        lift$ PC.spawn_ $ S.evalStateT task s1   -- Child the other.
 
 -- | Likewise, adding State to a `ParIVar` monad yield s another `ParIVar` monad.
-instance (SplittableState s, PC.ParIVar p iv) 
-      =>  PC.ParIVar (S.StateT s p) iv 
+instance (SplittableState s, PC.ParIVar iv p) 
+      =>  PC.ParIVar iv (S.StateT s p) 
  where
   fork (task :: S.StateT s p ()) = 
               do s <- S.get 
@@ -76,8 +76,8 @@ instance (SplittableState s, PC.ParChan p snd rcv)
 -- <DUPLICATE_CODE>
 
 -- | Adding State to a `ParFuture` monad yield s another `ParFuture` monad.
-instance (SplittableState s, PC.ParFuture p fut) 
-      =>  PC.ParFuture (SL.StateT s p) fut 
+instance (SplittableState s, PC.ParFuture fut p) 
+      =>  PC.ParFuture fut (SL.StateT s p) 
  where
   get = lift . PC.get
   spawn_ (task :: SL.StateT s p ans) = 
@@ -87,8 +87,8 @@ instance (SplittableState s, PC.ParFuture p fut)
        lift$ PC.spawn_ $ SL.evalStateT task s1   -- Child the other.
 
 -- | Likewise, adding State to a `ParIVar` monad yield s another `ParIVar` monad.
-instance (SplittableState s, PC.ParIVar p iv) 
-      =>  PC.ParIVar (SL.StateT s p) iv 
+instance (SplittableState s, PC.ParIVar iv p) 
+      =>  PC.ParIVar iv (SL.StateT s p) 
  where
   fork (task :: SL.StateT s p ()) = 
               do s <- SL.get 

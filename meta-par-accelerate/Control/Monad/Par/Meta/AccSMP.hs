@@ -25,27 +25,22 @@ import Data.Monoid
 import qualified Control.Monad.Par.Class as PC
 import qualified Control.Monad.Par.Meta as Meta 
 import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
-import qualified Control.Monad.Par.Meta.Resources.SharedMemory as SharedMemory
+import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
 
 tries :: Int
 tries = numCapabilities
 
--- We use Constraint kinds just to flip the arguments here:
-type ParFutureFlipped p = (PC.ParFuture p Meta.IVar)
-                    
-foo :: ParFutureFlipped p => p a -> Int
-foo = undefined
-
 -- | A `Par` monad supporting only SMP and GPU resources.
 newtype Par a = AccSMPPar (Meta.Par a)
- deriving (Monad, Functor)
+ deriving (Monad, Functor, 
+           PC.ParFuture Meta.IVar,
+           PC.ParIVar   Meta.IVar 
+          )
           -- NOT MonadIO
 
--- instance PC.ParFuture Par Meta.IVar where
-
 resource :: Meta.Resource
-resource = SharedMemory.mkResource tries <> Accelerate.mkResource
+resource = SMP.mkResource tries <> Accelerate.mkResource
 
 runPar   :: Meta.Par a -> a
 runParIO :: Meta.Par a -> IO a

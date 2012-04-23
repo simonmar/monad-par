@@ -53,7 +53,8 @@ import System.IO.Unsafe
 
 import Text.Printf
 
-import Control.Monad.Par.Meta hiding (dbg)
+import Control.Monad.Par.Meta 
+import Control.Monad.Par.Class (new, put_, get)
 
 dbg :: Bool
 #ifdef DEBUG
@@ -238,13 +239,13 @@ gpuDaemon = do
 mkResource :: Resource
 mkResource = Resource defaultInit defaultSteal
 
-defaultInit :: InitAction
-defaultInit = IA ia
+defaultInit :: Startup
+defaultInit = St ia
   where ia _ _ = do
           void $ forkIO gpuDaemon
 
-defaultSteal :: StealAction
-defaultSteal = SA sa 
+defaultSteal :: WorkSearch
+defaultSteal = WS sa 
   where sa _ _ = do
           mfinished <- R.tryPopR resultQueue
           case mfinished of

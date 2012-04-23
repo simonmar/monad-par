@@ -16,12 +16,13 @@ fi
 
 function doall () {
   CMD=$1
-  (cd abstract-par;      $CMD)
-  (cd monad-par;         $CMD)
-  (cd meta-par;          $CMD)
-  (cd RPC;               $CMD)
-  (cd meta-par-dist-tcp; $CMD)
-  (cd meta-par-cuda;     $CMD)
+  (cd abstract-par;        $CMD)
+  (cd monad-par;           $CMD)
+  (cd meta-par;            $CMD)
+  (cd RPC;                 $CMD)
+  (cd meta-par-dist-tcp;   $CMD)
+  (cd meta-par-cuda;       $CMD)
+  (cd meta-par-accelerate; $CMD)
 }
 
 # Pass through extra command line arguments to cabal:
