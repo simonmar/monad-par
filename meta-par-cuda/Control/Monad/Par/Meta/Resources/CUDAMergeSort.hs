@@ -31,7 +31,9 @@ import Text.Printf
 
 import Foreign.CUDA.Driver (initialise)
 
-import Control.Monad.Par.Meta hiding (dbg)
+
+import Control.Monad.Par.Class (new,put_)
+import Control.Monad.Par.Meta 
 import Control.Monad.Par.Meta.HotVar.IORef
 
 dbg :: Bool
