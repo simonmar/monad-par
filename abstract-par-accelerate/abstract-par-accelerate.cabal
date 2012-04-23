@@ -27,7 +27,8 @@ Library
   Build-depends:  
                   base >= 4 && < 5
                 , abstract-par >= 0.3
-                , accelerate >= 0.10 
+                , accelerate >= 0.12
+                , accelerate-io 
                 , vector >= 0.9
                 , array 
 

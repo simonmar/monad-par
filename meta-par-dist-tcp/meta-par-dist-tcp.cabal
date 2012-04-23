@@ -55,38 +55,4 @@ Library
                 , split
                 , abstract-deque
 
-
---   if !flag(NoGPU) {
---     Build-depends:
---                  --  accelerate >= 0.9.0.1
---                    cuda >= 0.4.1
---                  , vector-algorithms >= 0.5
---     ld-options: /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o
---   }
-
-
-
---   if !flag(NoGPU) {
---      Exposed-modules: 
--- --                   Control.Monad.Par.Meta.SharedMemoryAccelerate
--- --                 , Control.Monad.Par.Meta.Resources.Accelerate
---                    Data.Vector.Algorithms.CUDA.Merge
---                  , Control.Monad.Par.Meta.Resources.CUDAMergeSort
---                  , Control.Monad.Par.Meta.SMPMergeSort
---   }
-
-
-
-
-
-
-
--- Flag NoGPU
---   Description: Turn of GPU support and therefore accelerate dependencies.
---   Default:     True
-
--- Flag NoDist
---   Description: Turn of Distributed support and therefore certain dependencies.
---   Default:     False
-
   ghc-options:    -Wall
