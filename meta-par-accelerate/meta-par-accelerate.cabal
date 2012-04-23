@@ -33,7 +33,8 @@ Library
                 , abstract-par
                 , meta-par
                 , abstract-deque
-                , accelerate >= 0.10 
+                , accelerate >= 0.12
+                , accelerate-io
                 , QuickCheck 
                 , transformers
                 , vector

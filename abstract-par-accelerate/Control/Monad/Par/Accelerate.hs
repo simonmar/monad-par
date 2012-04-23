@@ -12,12 +12,19 @@ module Control.Monad.Par.Accelerate
 
 import Control.Monad.Par.Class
 import Data.Array.IArray (IArray)
+import Foreign (Ptr, Storable)
 import qualified Data.Array.IArray as IArray    
 import qualified Data.Vector.Storable as Vector
+
+-- From 'accelerate':
 import Data.Array.Accelerate (Acc, Arrays, Shape)
 import Data.Array.Accelerate.Array.Sugar (EltRepr,Elt,Array,DIM1,toIArray)
+
+-- From 'accelerate-io':
 import qualified Data.Array.Accelerate.IO as IO 
-import Foreign (Ptr, Storable)
+
+--------------------------------------------------------------------------------
+
 
 -- | A class containing Accelerate-specific `Par` operations.
 class ParFuture iv p => ParAccelerate iv p where 
@@ -50,6 +57,8 @@ class ParFuture iv p => ParAccelerate iv p where
   unsafeHybrid :: Arrays b => (b -> a) -> (p a, Acc b) -> p (iv a)
 
 
+
+--------------------------------------------------------------------------------
 
 -- | An example application of `unsafeHybrid` for vectors.
 unsafeHybridVector :: (Vector.Storable a, Elt a, 
