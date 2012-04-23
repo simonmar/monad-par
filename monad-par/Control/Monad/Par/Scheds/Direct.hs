@@ -597,20 +597,20 @@ newFull :: NFData a => a -> Par (IVar a)
 newFull_ ::  a -> Par (IVar a)
 
 
-instance PC.ParFuture Par IVar where
+instance PC.ParFuture IVar Par  where
   get    = get
   spawn  = spawn
   spawn_ = spawn_
   spawnP = spawnP
 
-instance PC.ParIVar Par IVar where
+instance PC.ParIVar IVar Par  where
   fork = fork
   new  = new
   put_ = put_
   newFull = newFull
   newFull_ = newFull_
 
-instance UN.ParUnsafe Par IVar where
+instance UN.ParUnsafe IVar Par  where
   unsafePeek   = unsafePeek
   unsafeTryPut = unsafeTryPut
   unsafeParIO  = unsafeParIO

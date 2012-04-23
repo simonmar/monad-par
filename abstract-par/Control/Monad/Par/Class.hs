@@ -42,7 +42,7 @@ import Control.DeepSeq
 --   A minimal implementation consists of `spawn_` and `get`.
 --   However, for monads that are also a member of `ParIVar` it is
 --   typical to simple define `spawn` in terms of `fork`, `new`, and `put`.
-class Monad m => ParFuture m future | m -> future where
+class Monad m => ParFuture future m | m -> future where
   spawn  :: NFData a => m a -> m (future a)
   spawnP :: NFData a =>   a -> m (future a)
   spawn_ :: m a -> m (future a)
@@ -57,7 +57,7 @@ class Monad m => ParFuture m future | m -> future where
 
 -- | @ParIVar@ builds on futures by adding full /anyone-writes, anyone-reads/ IVars.
 --   These are more expressive but may not be supported by all distributed schedulers.
-class ParFuture m ivar => ParIVar m ivar | m -> ivar where
+class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
   fork :: m () -> m ()
   new  :: m (ivar a)
   put  :: NFData a => ivar a -> a -> m ()
@@ -136,12 +136,12 @@ class Monad m => ParDist m var | m -> var where
 
 -- t1 :: P.Par Int
 -- If the ParIVar => ParFuture instance exists the following is sufficient:
-t1 :: (ParFuture m v) => m Int
+t1 :: (ParFuture v m) => m Int
 t1 = do 
   x <- spawn (return 3)
   get x
 
-t2 :: (ParIVar m v) => m Int
+t2 :: (ParIVar v m) => m Int
 t2 = do 
   x <- new
   put x "hi"

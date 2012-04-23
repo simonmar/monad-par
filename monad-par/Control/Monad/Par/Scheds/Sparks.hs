@@ -50,7 +50,7 @@ instance Monad Par where
   return x = Done x
   Done x >>= k = k x
 
-instance PC.ParFuture Par Future where 
+instance PC.ParFuture Future Par  where 
   get    = get
   spawn  = spawn
   spawn_ = spawn_

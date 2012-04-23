@@ -1,0 +1,44 @@
+Name:                meta-par-accelerate
+Version:             0.3
+Synopsis:            Support for integrated Accelerate computations within Meta-par.
+
+-- Version history:
+-- 
+-- 0.3: Initial release.
+
+Description:        
+
+Homepage:            https://github.com/simonmar/monad-par
+License:             BSD3
+License-file:        LICENSE
+Author:              Adam Foltzer 2011-2012
+Maintainer:          Ryan Newton <rrnewton@gmail.com>
+Copyright:           (c) Adam Foltzer 2011-2012
+Stability:           Experimental
+Category:            Parallelism
+Build-type:          Simple
+Cabal-version:       >=1.8
+
+Library
+  Exposed-modules: 
+                 -- This is a complete scheduler for shared-memory
+                 -- (parallel) and GPU computation:
+                 Control.Monad.Par.Meta.AccSMP,
+
+                 -- This is a resource used to build schedulers:
+                 Control.Monad.Par.Meta.Resources.Accelerate
+
+  Build-depends:  
+                  base >= 4 && < 5
+                , abstract-par
+                , meta-par
+                , abstract-deque
+                , accelerate >= 0.10 
+                , QuickCheck 
+                , transformers
+                , vector
+                , array
+
+  ghc-options:    -Wall
+
+-- ACCELERATE_CUDA_BACKEND

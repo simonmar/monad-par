@@ -48,8 +48,8 @@ class SplittableState a where
 
 -- Allow State to be added to any ParFuture monad:
 -- This could be used for RNG.
-instance (SplittableState s, PC.ParFuture p iv)
-      =>  PC.ParFuture (S.StateT s p) iv where
+instance (SplittableState s, PC.ParFuture iv p)
+      =>  PC.ParFuture iv (S.StateT s p) where
   get   = lift . PC.get
   spawn_ (task :: S.StateT s p a) = 
 		  do s <- S.get 
@@ -66,8 +66,8 @@ instance (SplittableState s, PC.ParFuture p iv)
 --  spawn p  = do r <- new;  fork (p >>= put r);   return r
 --  spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
 
-instance (SplittableState s, PC.ParIVar p iv) 
-      =>  PC.ParIVar (S.StateT s p) iv 
+instance (SplittableState s, PC.ParIVar iv p) 
+      =>  PC.ParIVar iv (S.StateT s p) 
  where
   fork     = fork
   new      = new
@@ -75,13 +75,13 @@ instance (SplittableState s, PC.ParIVar p iv)
   newFull_ = lift . PC.newFull_
   newFull  = lift . PC.newFull
 
-new :: PC.ParIVar p iv => S.StateT s p (iv a)
+new :: PC.ParIVar iv p => S.StateT s p (iv a)
 new      = lift  PC.new
 
 put  v x = lift$ PC.put  v x
 put_ v x = lift$ PC.put_ v x
 
-fork :: (SplittableState s, PC.ParIVar p iv) 
+fork :: (SplittableState s, PC.ParIVar iv p) 
      => S.StateT s p () -> S.StateT s p ()
 fork task = 
 		do s <- S.get 
@@ -133,9 +133,7 @@ instance SplittableState (CursorMap a) where
 data SendPort a = SendPort a
 data RecvPort a = RecvPort a
 
--- instance ParIVar m v => ParChan m (SendPort v) (RecvPort v) where 
--- instance ParIVar m v => ParChan m SendPort RecvPort where 
-instance PC.ParIVar m v => PC.ParChan (ParC m) SendPort RecvPtr where 
+instance PC.ParIVar v m => PC.ParChan (ParC m) SendPort RecvPtr where 
 
   -- A new channel coins a unique key that can be used to lookup the stream.
   newChan = undefined

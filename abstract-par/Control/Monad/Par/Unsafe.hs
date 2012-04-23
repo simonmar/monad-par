@@ -20,7 +20,7 @@ where
 
 -- The class of Par monads that provide unsafe functionality.
 -- class ParFuture p iv => ParUnsafe p iv where 
-class ParUnsafe p iv | p -> iv where 
+class ParUnsafe iv p | p -> iv where 
   -- | Peek at the current contents of an IVar in a nonblocking way.
   unsafePeek   :: iv a -> p (Maybe a)
 

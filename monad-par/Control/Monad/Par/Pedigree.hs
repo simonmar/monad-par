@@ -43,7 +43,7 @@ instance SplittableState Pedigree where
     (Pedigree cnt (cons False bl), 
      Pedigree cnt (cons True bl))
 
-pedigree :: ParFuture p iv => S.StateT Pedigree p Pedigree
+pedigree :: ParFuture iv p => S.StateT Pedigree p Pedigree
 pedigree = S.get
 
 runParPedigree :: Monad p => ParPedigreeT p a -> p a

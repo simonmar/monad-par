@@ -37,7 +37,7 @@ instance RandomGen g => SplittableState g where
 
 -- | The most straightforward way to get a `ParRand` monad: carry a
 --   RNG in a state transformer.
-instance (ParFuture p fut, RandomGen g) => ParRand (StateT g p) where 
+instance (ParFuture fut p, RandomGen g) => ParRand (StateT g p) where 
   rand    = do 
                g <- S.get
 	       let (x,g') = random g 
@@ -54,7 +54,7 @@ instance (ParFuture p fut, RandomGen g) => ParRand (StateT g p) where
 -- randInt :: (ParFuture p fut, RandomGen g)           => StateT g p Int
 
 -- runParRand :: ParRand p => (p a -> a) -> p a -> IO a
-runParRand :: ParFuture p fut => (p a -> a) -> StateT StdGen p a -> IO a
+runParRand :: ParFuture fut p => (p a -> a) -> StateT StdGen p a -> IO a
 runParRand runPar m = 
   do g <- newStdGen
      evaluate (runPar (evalStateT m g))
