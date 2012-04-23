@@ -3,8 +3,7 @@
 
 -- | This module provides the 'Serializable' type class and functions
 -- to convert to and from 'Payload's. It's implemented in terms of the
--- @cereal@ package's "Data.Serialize". The message sending and
--- receiving functionality in "RPC.Process" depends on this.
+-- @cereal@ package's "Data.Serialize". 
 module RPC.Encoding (
           Serializable,
           serialEncode,
