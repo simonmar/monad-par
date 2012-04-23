@@ -138,14 +138,19 @@ module Control.Monad.Par
   -- 
   -- >  spawnP = spawn . return
 
-  module Control.Monad.Par.Combinator
+  module Control.Monad.Par.Combinator,
   -- | This module also reexports the Combinator library for backwards
   --   compatibility with version 0.1.
+
+  NFData()
+  -- | /(0.3)/ Reexport 'NFData' for fully-strict operators.
+
  )
 where 
 
--- import Control.Monad.Par.Class
-import Control.Monad.Par.Scheds.Trace -- hiding (spawn_, spawn, put, get, new, newFull, fork, put_, newFull_)
+-- | /(0.3)/ Export 'Par' operators via the generic interface.
+import Control.Monad.Par.Class
+import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
 -- import Control.Monad.Par.Scheds.Direct 
 
 import Control.Monad.Par.Combinator

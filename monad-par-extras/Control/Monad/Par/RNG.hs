@@ -18,7 +18,7 @@ module Control.Monad.Par.RNG
 
 import System.Random
 import Control.Exception
-import qualified Control.Monad.Par as Default
+
 import Control.Monad.Par.Class
 import Control.Monad.Par.State
 import Control.Monad.Trans
@@ -61,4 +61,4 @@ runParRand runPar m =
 
 
 -- | A convenience type for the most standard
-type ParRandStd a = StateT StdGen Default.Par a 
+type ParRandStd par a = StateT StdGen par a 

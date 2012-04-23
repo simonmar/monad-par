@@ -16,9 +16,6 @@ module Control.Monad.Par.Combinator
   )
 where 
 
--- import qualified Control.Monad.Par.Scheds.Trace  as PT
--- import qualified Control.Monad.Par.Scheds.Direct as PD
-
 import Control.DeepSeq
 import Data.Traversable
 import Control.Monad as M hiding (mapM, sequence, join)
@@ -26,12 +23,6 @@ import Prelude hiding (mapM, sequence, head,tail)
 import GHC.Conc (numCapabilities)
 
 import Control.Monad.Par.Class
-import qualified Control.Monad.Par.Scheds.Trace as T
-
--- {-# SPECIALISE parMap  :: (NFData b) => (a -> b)     -> [a] -> PT.Par [b] #-}
--- {-# SPECIALISE parMap  :: (NFData b) => (a -> b)     -> [a] -> PD.Par [b] #-}
--- {-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> PT.Par [b] #-}
--- {-# SPECIALISE parMapM :: (NFData b) => (a -> Par b) -> [a] -> PD.Par [b] #-}
 
 -- -----------------------------------------------------------------------------
 -- Parallel maps over Traversable data structures
