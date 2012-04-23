@@ -1,5 +1,9 @@
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+
+-- | A very simple layer of abstraction for frequently modified shared
+--   variables.  This additional indirection is only present for
+--   benchmarking `IORef` operations vs. `MVar` or `TVar` implementations.
 module Control.Monad.Par.Meta.HotVar.IORef ( HotVar
                                            , modifyHotVar
                                            , modifyHotVar_
@@ -31,3 +35,10 @@ readHotVarRaw  :: HotVar a -> IO a
 writeHotVarRaw :: HotVar a -> a -> IO ()
 readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar
+
+{- INLINE newHotVar -}
+{- INLINE modifyHotVar -}
+{- INLINE modifyHotVar_ -}
+{- INLINE readHotVar -}
+{- INLINE writeHotVar -}
+

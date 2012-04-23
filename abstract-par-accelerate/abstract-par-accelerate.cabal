@@ -15,8 +15,6 @@ Description:         Following the convention the @abstract-par@ package,
 -- 
 -- 0.3: Initial release.
 
-Description:        
-
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
