@@ -7,6 +7,13 @@ Synopsis:            Support for integrated Accelerate computations within Meta-
 -- 0.3: Initial release.
 
 Description:        
+  This package provides a 'Control.Monad.Par.Meta.Resource' for building meta-par
+  (<hackage.haskell.org/package/meta-par>) schedulers with GPU support.  
+  
+  This package also provides a complete scheduler for CPU plus GPU
+  execution.  It supports the 'Control.Monad.Par.Par' monad
+  programming model with additional support for GPUs.
+
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3

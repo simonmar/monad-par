@@ -1,24 +1,18 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts, MultiParamTypeClasses #-}
 {-# OPTIONS_GHC -Wall #-}
 
-module Control.Monad.Par.Meta.AccSMP (
-  -- * Running `Par` computations using Accelerate and SMP parallelism.
-    Par
-  , runPar
-  , runParIO
-  
-  -- -- * Accelerate-specific `Par` operations:
-  -- , Accelerate.runAcc
-  -- , Accelerate.spawnAcc
-  -- , Accelerate.unsafeHybrid    
-  
-  -- -- * Example applications of `unsafeHybrid`
-  -- , Accelerate.unsafeHybridIArray
-  -- , Accelerate.unsafeHybridVector
-  
---  , module Control.Monad.Par.Meta
-  , Meta.IVar
-) where
+-- | A meta-par /scheduler/ for programming with shared memory
+--   multicore CPUs plus GPU parallelism.
+-- 
+-- This provides a full implementation of the
+-- 'Control.Monad.Par.Par'-monad programming abstraction
+-- (specifically, the 'Control.Monad.Par.ParIVar' class).
+--
+module Control.Monad.Par.Meta.AccSMP 
+ (
+    Par, Meta.IVar,
+    runPar, runParIO
+ ) where
 
 import Data.Monoid
 import qualified Control.Monad.Par.Class as PC
@@ -47,5 +41,9 @@ resource = SMP.mkResource tries <> Accelerate.mkResource
 
 runPar   :: Meta.Par a -> a
 runParIO :: Meta.Par a -> IO a
+
+-- | Running `Par` computations on CPU and GPU.
 runPar   = Meta.runMetaPar   resource
+
+-- | Same as `runPar` but don't hide the IO.
 runParIO = Meta.runMetaParIO resource

@@ -6,7 +6,8 @@
 {-# OPTIONS_GHC -Wall #-}
 {-# OPTIONS_HADDOCK ignore-exports, prune #-}
 
--- | Do not use his module directly.  Use a /SCHEDULER/ module.  
+-- | Do not use his module directly.  Use a /SCHEDULER/ module (such
+--   as `Control.Monad.Par.Meta.AccSMP`).
 -- 
 -- This provides a component (Resource) for assembling schedulers, as well as 
 -- exporting a `Control.Monad.Par.Accelerate.ParAccelerate` instance.
@@ -14,7 +15,6 @@
 module Control.Monad.Par.Meta.Resources.Accelerate 
   (
       mkResource
-    -- * 
   ) where
 
 import Control.Concurrent
