@@ -27,27 +27,11 @@ Library
                   base >= 4 && < 5
                 , cuda >= 0.4.1
                 , vector-algorithms >= 0.5
+                , abstract-par
                 , meta-par
                 , abstract-deque
---                 , bytestring >= 0.9
---                 , network
---                 , directory >= 1.1
---                 , ghc-prim
---                 , containers
                 , transformers
---                 , deepseq >= 1.2
---                 , mtl
---                 , network-transport
---                 , network-transport-pipes
---                 , process >= 1.1
---                 , syb >= 0.3
---                 , unix >= 2.5
---                 , RPC
---                 , random 
---                 , cereal
                 , vector
---                 , split
 
-
-  -- TEMP!  Fixme.
+  -- TEMP!  FIXME -- GENERALIZE THIS:
   ld-options: /nobackup/afoltzer/NVIDIA_GPU_Computing_SDK/C/src/mergeSort/obj/x86_64/release/mergeSort.cu.o

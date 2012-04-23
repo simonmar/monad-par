@@ -21,7 +21,9 @@ function doall () {
   (cd meta-par;            $CMD)
   (cd RPC;                 $CMD)
   (cd meta-par-dist-tcp;   $CMD)
+
   (cd meta-par-cuda;       $CMD)
+  (cd abstract-par-accelerate; $CMD)
   (cd meta-par-accelerate; $CMD)
 }
 

@@ -39,6 +39,6 @@ Library
                 , vector
                 , array
 
-  ghc-options:    -Wall
+  ghc-options:    -Wall 
+-- -DACCELERATE_CUDA_BACKEND
 
--- ACCELERATE_CUDA_BACKEND
