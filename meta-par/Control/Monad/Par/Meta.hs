@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing #-}
 
 -- The Meta scheduler which can be parameterized over various
@@ -476,13 +477,14 @@ runMetaPar rsrc work = unsafePerformIO $ runMetaParIO rsrc work
 spawnP :: NFData a => a -> Par (IVar a)
 spawnP = spawn . return
 
-instance PC.ParFuture IVar Par where
+instance PC.ParFuture Par where
+  type Future Par = IVar
   get    = get
   spawn  = spawn
   spawn_ = spawn_
   spawnP = spawnP
 
-instance PC.ParIVar IVar Par where
+instance PC.ParIVar Par where
   fork = fork
   new  = new
   put_ = put_

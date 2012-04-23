@@ -1,5 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies, CPP,
-     FlexibleInstances, UndecidableInstances
+     FlexibleInstances, UndecidableInstances, TypeFamilies
   #-}
 -- UndecidableInstances
 
@@ -42,11 +42,12 @@ import Control.DeepSeq
 --   A minimal implementation consists of `spawn_` and `get`.
 --   However, for monads that are also a member of `ParIVar` it is
 --   typical to simple define `spawn` in terms of `fork`, `new`, and `put`.
-class Monad m => ParFuture future m | m -> future where
-  spawn  :: NFData a => m a -> m (future a)
-  spawnP :: NFData a =>   a -> m (future a)
-  spawn_ :: m a -> m (future a)
-  get    :: future a -> m a
+class Monad m => ParFuture m  where
+  type Future m :: * -> * 
+  spawn  :: NFData a => m a -> m (Future m a)
+  spawnP :: NFData a =>   a -> m (Future m a)
+  spawn_ :: m a -> m (Future m a)
+  get    :: Future m a -> m a
 
   -- Default implementations:
   spawn  p = spawn_ (do x <- p; deepseq x (return x))
@@ -57,19 +58,19 @@ class Monad m => ParFuture future m | m -> future where
 
 -- | @ParIVar@ builds on futures by adding full /anyone-writes, anyone-reads/ IVars.
 --   These are more expressive but may not be supported by all distributed schedulers.
-class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
+class ParFuture m  => ParIVar m where  
   fork :: m () -> m ()
-  new  :: m (ivar a)
-  put  :: NFData a => ivar a -> a -> m ()
+  new  :: m (Future m a)
+  put  :: NFData a => Future m a -> a -> m ()
   put v a = deepseq a (put_ v a)
-  put_ :: ivar a -> a -> m ()
+  put_ :: Future m a -> a -> m ()
 
   -- Extra API routines that have default implementations:
 
-  newFull :: NFData a => a -> m (ivar a)
+  newFull :: NFData a => a -> m (Future m a)
   newFull a = deepseq a (newFull_ a)
 
-  newFull_ ::  a -> m (ivar a)
+  newFull_ ::  a -> m (Future m a)
   newFull_ a = do v <- new
                   -- This is usually inefficient! 
 		  put_ v a
@@ -136,12 +137,12 @@ class Monad m => ParDist m var | m -> var where
 
 -- t1 :: P.Par Int
 -- If the ParIVar => ParFuture instance exists the following is sufficient:
-t1 :: (ParFuture v m) => m Int
+t1 :: (ParFuture m) => m Int
 t1 = do 
   x <- spawn (return 3)
   get x
 
-t2 :: (ParIVar v m) => m Int
+t2 :: (ParIVar m) => m Int
 t2 = do 
   x <- new
   put x "hi"

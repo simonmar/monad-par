@@ -34,8 +34,8 @@ tries = numCapabilities
 -- | A `Par` monad supporting only SMP and GPU resources.
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 
-           PC.ParFuture Meta.IVar,
-           PC.ParIVar   Meta.IVar 
+           PC.ParFuture,
+           PC.ParIVar   
           )
           -- NOT MonadIO
 
