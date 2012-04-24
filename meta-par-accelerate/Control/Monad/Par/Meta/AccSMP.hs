@@ -10,8 +10,17 @@
 --
 module Control.Monad.Par.Meta.AccSMP 
  (
-    Par, Meta.IVar,
-    runPar, runParIO
+    -- | A `Par` monad supporting only SMP and GPU resources.
+    Par, 
+
+    -- | The IVar type for use with the `Par` newtype in this module.
+    Meta.IVar,
+
+    -- | Running `Par` computations on CPU and GPU.
+    runPar, 
+
+    -- | Same as `runPar` but don't hide the IO.
+    runParIO
  ) where
 
 import Data.Monoid
@@ -27,7 +36,6 @@ import GHC.Conc (numCapabilities)
 tries :: Int
 tries = numCapabilities
 
--- | A `Par` monad supporting only SMP and GPU resources.
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 
            PC.ParFuture     Meta.IVar,
@@ -42,8 +50,6 @@ resource = SMP.mkResource tries <> Accelerate.mkResource
 runPar   :: Meta.Par a -> a
 runParIO :: Meta.Par a -> IO a
 
--- | Running `Par` computations on CPU and GPU.
 runPar   = Meta.runMetaPar   resource
 
--- | Same as `runPar` but don't hide the IO.
 runParIO = Meta.runMetaParIO resource

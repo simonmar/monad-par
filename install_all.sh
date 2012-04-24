@@ -19,9 +19,11 @@ fi
 # # doall "cabal haddock --with-haddock=$HADDOCK"
 # # doall "cabal install --haddock"
 
-
 $CABAL install  --with-ghc=$GHC $*     \
-  abstract-par/ monad-par/ meta-par/  \
+  abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
   RPC/ meta-par-dist-tcp/             \
-  meta-par-cuda/ abstract-par-accelerate/ meta-par-accelerate/
+  abstract-par-accelerate/ meta-par-accelerate/
+
+# meta-par-cuda/ 
+
  
