@@ -15,18 +15,28 @@
 --   * Remote Machine "accelerators" (i.e. distributed)
 
 
-module Control.Monad.Par.Meta ( forkWithExceptions
-                              , IVar
-                              , Par
-                              , Resource(..)
-                              , runMetaPar
-                              , runMetaParIO
-                              , Sched(..)
-                              , spawnWorkerOnCPU
-                              , Startup(..)
-                              , WorkSearch(..)
-                              , GlobalState
-                              ) where
+module Control.Monad.Par.Meta 
+( 
+-- * Core Meta-Par types
+  Par
+, IVar
+-- * Operations
+, PC.ParFuture(..)
+, PC.ParIVar(..)
+-- * Entrypoints
+, runMetaPar
+, runMetaParIO
+-- * Implementation API
+, Sched(..)
+, GlobalState
+-- ** Execution Resources
+, Resource(..)
+, Startup(..)
+, WorkSearch(..)
+-- ** Utilities
+, forkWithExceptions
+, spawnWorkerOnCPU
+) where
 
 import Control.Applicative
 import Control.Concurrent ( getNumCapabilities
@@ -93,23 +103,37 @@ dbg = False
 --------------------------------------------------------------------------------
 -- Types
 
+-- | The Meta-Par monad with its full suite of instances. Note that
+-- the 'MonadIO' instance, while essential for building new
+-- 'Resource's, is unsafe in client code when combined with
+-- 'runMetaPar'. This type should therefore be exposed to client code
+-- as a @newtype@ that omits the 'MonadIO' instance.
 newtype Par a = Par { unPar :: ContT () ROnly a }
     deriving (Monad, MonadCont, MonadReader Sched, 
               MonadIO, Applicative, Functor, Typeable)
+
 type ROnly = ReaderT Sched IO
 
+-- | An 'IVar' is a /write-once/, /read-many/ structure for
+-- communication between 'Par' threads.
 newtype IVar a = IVar (HotVar (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
+-- | A 'GlobalState' structure tracks the state of all Meta-Par
+-- workers in a program in a 'Data.Vector' indexed by capability
+-- number.
 type GlobalState = Vector (Maybe Sched)
 
+-- | The 'Startup' component of a 'Resource' is a callback that
+-- implements initialization behavior. For example, the SMP 'Startup'
+-- calls 'spawnWorkerOnCPU' a number of times. The arguments to
+-- 'Startup' are the combined 'Resource' of the current scheduler and
+-- a thread-safe reference to the 'GlobalState'.
 newtype Startup = St { runSt ::
-     -- Combined 'StealAction' for the current scheduler.
-     WorkSearch
-     -- The global structure of schedulers.
+     WorkSearch 
   -> HotVar GlobalState 
-  -> IO ()
+  -> IO () 
   }
 
 instance Show Startup where
@@ -120,10 +144,12 @@ instance Monoid Startup where
   (St st1) `mappend` (St st2) = St st'
     where st' ws schedMap = st1 ws schedMap >> st2 ws schedMap            
                              
+-- | The 'WorkSearch' component of a 'Resource' is a callback that
+-- responds to requests for work from Meta-Par workers. The arguments
+-- to 'WorkSearch' are the 'Sched' for the current thread and a
+-- thread-safe reference to the 'GlobalState'.
 newtype WorkSearch = WS { runWS ::
-     -- 'Sched' for the current thread
      Sched
-     -- Map of all 'Sched's
   -> HotVar GlobalState
   -> IO (Maybe (Par ()))
   }
@@ -140,6 +166,12 @@ instance Monoid WorkSearch where
               Nothing -> ws2 sched schedMap
               _ -> return mwork                
 
+-- | A 'Resource' provides an abstraction of heterogeneous execution
+-- resources, and may be combined using 'Data.Monoid'
+-- operations. Composition of resources is left-biased; for example,
+-- if @resource1@ always returns work from its 'WorkSearch', the
+-- composed resource @resource1 `mappend` resource2@ will never
+-- request work from @resource2@.
 data Resource = Resource {
     startup  :: Startup
   , workSearch :: WorkSearch
@@ -153,21 +185,35 @@ instance Monoid Resource where
 data Sched = Sched 
     { 
       ---- Per capability ----
+      -- | Capability number
       no       :: {-# UNPACK #-} !Int,
+      -- | The 'ThreadId's of all worker threads on this capability
       tids     :: HotVar (Set ThreadId),
+      -- | The local 'WSDeque' for this worker. The worker may push
+      -- and pop from the left of its own 'workpool', but workers on
+      -- other threads may only steal from the right.
       workpool :: WSDeque (Par ()),
-      rng      :: HotVar GenIO, -- Random number gen for work stealing.
-      mortals  :: HotVar Int, -- How many threads are mortal on this capability?
+      -- | A 'GenIO' for random work stealing.
+      rng      :: HotVar GenIO,
+      -- | A counter of how many extra workers are working on this
+      -- capability. This situation arises during nested calls to
+      -- 'runMetaPar', and the worker loop kills workers as necessary
+      -- to keep this value at @1@.
+      mortals  :: HotVar Int, 
 
-      -- | Are we on the *first* steal attempt (after doing productive
-      --   work), or is this the Nth failed steal in a row?
+      -- | Tracks the number of consecutive times this worker has
+      -- invoked a 'WorkSearch' and received 'Nothing'. This is used
+      -- to implement backoff in
+      -- 'Control.Monad.Par.Meta.Resources.Backoff'.
       consecutiveFailures :: IORef Int,
 
-      -- | A per-thread counter used for unique ivarIDs.  
-      --   (Multiple by numCapabilities and add 'no' for uniqueness.)
+      -- | A per-thread source of unique identifiers for
+      -- 'IVar's. Multiply this value by 'getNumCapabilities' and add
+      -- 'no' for uniqueness.
       ivarUID :: HotVar Int,
 
       ---- Meta addition ----
+      -- | The 'WorkSearch' of this worker's associated 'Resource'.
       schedWs :: WorkSearch
     }
 
@@ -177,8 +223,11 @@ instance Show Sched where
 --------------------------------------------------------------------------------
 -- Helpers
 
--- Exceptions that walk up the fork tree of threads:
-forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
+-- | Produces a variant of 'forkOn' that allows exceptions from child
+-- threads to propagate up to the parent thread.
+forkWithExceptions :: (IO () -> IO ThreadId) -- ^ The basic 'forkOn' implementation
+                   -> String -- ^ A name for the child thread in error messages
+                   -> (IO () -> IO ThreadId)
 forkWithExceptions forkit descr action = do 
    parent <- myThreadId
    forkit $ 
@@ -311,12 +360,15 @@ forkOn' cap k = forkOn cap $ setAffinityOS cap >> k
 forkOn' = forkOn
 #endif
 
--- | Spawn a pinned worker that will stay on a capability.
+-- | Spawn a Meta-Par worker that will stay on a given capability.
 -- 
--- Note: this does not check for nesting, and should be called
--- appropriately. It is the caller's responsibility to manage things
--- like mortal counts.
-spawnWorkerOnCPU :: WorkSearch -> Int -> IO ThreadId
+-- Note: this does not check whether workers already exist on the
+-- capability, and should be called appropriately. In particular, it
+-- is the caller's responsibility to manage things like the 'mortal'
+-- count of the given capability.
+spawnWorkerOnCPU :: WorkSearch -- ^ The 'WorkSearch' called by the new worker
+                 -> Int        -- ^ Capability
+                 -> IO ThreadId
 spawnWorkerOnCPU ws cap = 
   forkWithExceptions (forkOn' cap) "spawned Par worker" $ do
     me <- myThreadId
@@ -424,6 +476,8 @@ spawn_ p = do r <- new; fork (p >>= put_ r); return r
 --------------------------------------------------------------------------------
 -- Entrypoint
 
+-- | Run a 'Par' computation in the 'IO' monad, allowing
+-- non-deterministic Meta-Par variants to be safely executed.
 runMetaParIO :: Resource -> Par a -> IO a
 runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $ 
   do
@@ -472,6 +526,10 @@ runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $
   return ans
 
 {-# INLINE runMetaPar #-}
+-- | Run a 'Par' computation, and return its result as a pure
+-- value. If the choice of 'Resource' introduces non-determinism, use
+-- 'runMetaParIO' instead, as non-deterministic computations are not
+-- referentially-transparent.
 runMetaPar :: Resource -> Par a -> a
 runMetaPar rsrc work = unsafePerformIO $ runMetaParIO rsrc work
 
