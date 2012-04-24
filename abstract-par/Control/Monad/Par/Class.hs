@@ -141,7 +141,7 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
 --   in the /local/ @Par@ thread.  That is, at @fork@ points it is
 --   necessary to give the child computation a separate set of stream
 --   cursors so that it observes the same sequences as the parent.
-class Monad m => ParChan m snd rcv | m -> snd, m -> rcv where
+class Monad m => ParChan snd rcv m | m -> snd, m -> rcv where
    -- | Create a new communication channel, with separate send and receive ports.
    newChan :: m (snd a, rcv a)
    -- | Receive a message on a channel in a synchronous, blocking manner.
