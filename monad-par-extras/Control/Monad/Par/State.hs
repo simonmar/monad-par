@@ -101,8 +101,8 @@ instance (SplittableState s, PC.ParIVar iv p)
   newFull_ = lift . PC.newFull_
 
 -- | Likewise, adding State to a `ParChan` monad yield s another `ParChan` monad.
-instance (SplittableState s, PC.ParChan p snd rcv) 
-      =>  PC.ParChan (SL.StateT s p) snd rcv
+instance (SplittableState s, PC.ParChan snd rcv p) 
+      =>  PC.ParChan snd rcv (SL.StateT s p)
  where
    newChan  = lift   PC.newChan
    recv   r = lift $ PC.recv r

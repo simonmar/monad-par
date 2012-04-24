@@ -35,7 +35,7 @@ type ParPedigreeT p a = S.StateT Pedigree p a
 
 data Pedigree = 
       Pedigree { ivarCounter :: {-# UNPACK #-} !Int, 
-	         treePath    :: {-# UNPACK #-} !BList }
+	         treePath    :: !BList }
 
 instance SplittableState Pedigree where
   splitState (Pedigree cnt bl) = 

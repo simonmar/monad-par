@@ -18,17 +18,16 @@ where
 
 -- import Control.Monad.Par.Class
 
--- The class of Par monads that provide unsafe functionality.
--- class ParFuture p iv => ParUnsafe p iv where 
+-- | The class of Par monads that provide unsafe functionality.
 class ParUnsafe iv p | p -> iv where 
-  -- | Peek at the current contents of an IVar in a nonblocking way.
+  -- | Peek at the current contents of an 'IVar' in a nonblocking way.
   unsafePeek   :: iv a -> p (Maybe a)
 
-  -- | Attempt to put a value into an IVar.  If successful, return the
+  -- | Attempt to put a value into an 'IVar'.  If successful, return the
   --   value put.  If something is already there, return it instead.
   unsafeTryPut :: iv a -> a -> p a
 
-  -- | Lift an IO operation into the Par monad.
+  -- | Lift an 'IO' operation into the Par monad.
   unsafeParIO  :: IO a -> p a
 
 -- Aside:
