@@ -3,13 +3,19 @@
 
 {-# OPTIONS_GHC -Wall -fno-warn-unused-do-bind -fno-warn-name-shadowing #-}
 
+-- | This module implements a Meta-Par 'Resource' for SMP parallelism,
+-- suitable as a base for combined execution resources (e.g.,
+-- @Control.Monad.Par.Meta.AccSMP@).
 module Control.Monad.Par.Meta.Resources.SMP (
-    defaultStartup
+    -- * Resource creation
+    mkResource
+  , mkResourceOn
+    -- * Default implementation
+  , defaultStartup
   , defaultWorkSearch
+    -- * Customizable implementation
   , startupForCaps
   , wsForCaps
-  , mkResource
-  , mkResourceOn
 ) where
 
 import Control.Concurrent
@@ -31,14 +37,15 @@ import Control.Monad.Par.Meta
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 
--- | Produce an SMP resource on all capabilities. The second
--- argument is the number of steal attempts per steal request.
-mkResource :: Int -> Resource
+-- | Create an SMP resource for all capabilities. 
+mkResource :: Int -- ^ The number of steal attempts per 'WorkSearch' call.
+           -> Resource
 mkResource tries = Resource defaultStartup (defaultWorkSearch tries)
 
--- | Produce an SMP resource on the given capabilities. The second
--- argument is the number of steal attempts per steal request.
-mkResourceOn :: [Int] -> Int -> Resource
+-- | Create an SMP resource for a configurable list of capabilities.
+mkResourceOn :: [Int] -- ^ Capability list.
+             -> Int   -- ^ The number of steal attempts per 'WorkSearch' call.
+             -> Resource
 mkResourceOn caps tries = Resource (startupForCaps caps) (wsForCaps caps tries)
 
 {-# NOINLINE getCaps #-}

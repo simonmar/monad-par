@@ -1,18 +1,33 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# Language Trustworthy #-}
+
 {-# OPTIONS_GHC -Wall #-}
 
 module Control.Monad.Par.Meta.Serial (
-    runPar
+    -- * Meta-Par monad for single-threaded execution
+    Par
+    -- * Operations
+  , ParFuture(..)
+  , ParIVar(..)
+    -- * Entrypoints
+  , runPar
   , runParIO
-  , module Control.Monad.Par.Meta
 ) where
 
-import Control.Monad.Par.Meta
+import Control.Applicative (Applicative)
+import Control.Monad.Par.Class
+import qualified Control.Monad.Par.Meta as Meta
 import qualified Control.Monad.Par.Meta.Resources.SingleThreaded as Single
 
-resource :: Resource
+-- | The Meta-Par monad specialized for single-threaded execution.
+newtype Par a = Par { unPar :: Meta.Par a }
+  deriving (Functor, Applicative, Monad,
+            ParFuture Meta.IVar, ParIVar Meta.IVar)
+
+resource :: Meta.Resource
 resource = Single.mkResource 
 
 runPar   :: Par a -> a
 runParIO :: Par a -> IO a
-runPar   = runMetaPar   resource
-runParIO = runMetaParIO resource
+runPar   = Meta.runMetaPar   resource . unPar
+runParIO = Meta.runMetaParIO resource . unPar

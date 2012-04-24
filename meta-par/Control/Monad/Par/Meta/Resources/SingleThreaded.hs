@@ -2,12 +2,16 @@
 
 {-# OPTIONS_GHC -Wall #-}
 
--- | A simple single-threaded resource that is a useful accompaniment
--- for testing non-CPU resources such as GPU or distributed.
-module Control.Monad.Par.Meta.Resources.SingleThreaded ( defaultStartup
-                                                       , defaultWorkSearch
-                                                       , mkResource
-                                                       ) where
+-- | A simple single-threaded 'Resource' that is a useful
+-- accompaniment for testing non-CPU resources such as GPU or
+-- distributed.
+module Control.Monad.Par.Meta.Resources.SingleThreaded ( 
+    -- * Resource creation
+    mkResource
+    -- * Implementation
+  , defaultStartup
+  , defaultWorkSearch
+) where
 
 import Control.Concurrent ( myThreadId, threadCapability )
 import Control.Monad
@@ -23,9 +27,11 @@ dbg = True
 dbg = True
 #endif
 
+-- | Create a single-threaded resource.
 mkResource :: Resource
 mkResource = Resource defaultStartup defaultWorkSearch
 
+-- | Spawn a single Meta-Par worker.
 defaultStartup :: Startup
 defaultStartup = St st 
   where st ws _ = do
@@ -35,8 +41,8 @@ defaultStartup = St st
           -- to spawn a worker to do the actual work:
           void $ spawnWorkerOnCPU ws cap
 
--- | In the singlethreaded scenario there are NO other workers from
---   which to steal.
+-- | A single-threaded resource by itself is not aware of any other
+-- sources of work, so its 'WorkSearch' always returns 'Nothing'.
 defaultWorkSearch :: WorkSearch
 defaultWorkSearch = WS ws 
   where ws _ _ = return Nothing
