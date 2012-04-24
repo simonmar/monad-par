@@ -14,7 +14,8 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2.2    : incorporation of real deque package
 --  0.2.3    : Restricted module export for 0.2 release.
 
---  0.3      : Factored/reorganized modules.  This module is the original, core monad-par.
+--  0.3      : Factored/reorganized modules and packages.  
+--             This package is the original, core monad-par.
 
 
 Description:         This library offers an alternative parallel programming
@@ -31,15 +32,17 @@ Description:         This library offers an alternative parallel programming
                      exposed so that you can build your own scheduler
                      if necessary.
 
+
                      Examples of use can be found in the examples/ directory
                      of the source package.
+
 
                      The modules below provide additionaly schedulers,
                      data structures, and other added capabilities
                      layered on top of the 'Par' monad.
 
-                       * Finish These
-                       * Module Descriptions
+--                       * Finish These
+--                       * Module Descriptions
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3

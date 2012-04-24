@@ -11,8 +11,17 @@
     
     Not all Par monad schedulers must provide all functionality.
 
+    For more documentation of the programming model, see  
+
+      * The "Control.Monad.Par" module in the @monad-par@ package.
+      * The wiki/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
+      * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
+      * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
+      * Other slides: <http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>, 
+                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>
+
  -}
---    For documentation of individual Par functions, please see "Control.Monad.Par".
+--  
 
 module Control.Monad.Par.Class 
   (  
@@ -132,7 +141,7 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
 --   in the /local/ @Par@ thread.  That is, at @fork@ points it is
 --   necessary to give the child computation a separate set of stream
 --   cursors so that it observes the same sequences as the parent.
-class Monad m => ParChan snd rcv m | m -> snd, m -> rcv where
+class Monad m => ParChan m snd rcv | m -> snd, m -> rcv where
    -- | Create a new communication channel, with separate send and receive ports.
    newChan :: m (snd a, rcv a)
    -- | Receive a message on a channel in a synchronous, blocking manner.
