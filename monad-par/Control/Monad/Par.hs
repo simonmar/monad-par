@@ -73,6 +73,14 @@
   divides the work as evenly as possible between the available
   processors at runtime.
 
+  For more information on the programming model, please see these sources:
+
+      * The wiki/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
+      * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
+      * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
+      * Other slides: <http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>, 
+                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>
+
  -}
 
 module Control.Monad.Par 

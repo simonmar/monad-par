@@ -8,8 +8,9 @@ Synopsis:            Type classes generalizing the functionality of the 'monad-p
 --  0.3      : Factored out of monad-par package.
 
 
-Description:         This library offers an alternative parallel programming
-                     API to that provided by the @parallel@ package.
+Description:         The 'Par' monad(s) offer an alternative 
+                     parallel programming API to that provided by the 
+                     @parallel@ package.
 
                      A 'Par' monad allows the simple description of
                      parallel computations, and can be used to add
