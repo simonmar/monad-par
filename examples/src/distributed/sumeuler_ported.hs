@@ -146,6 +146,8 @@ dist_sum_totient_sliced lower upper slices = do
 -- spark_sum_euler :: [Int] -> Par (IVar (Closure Integer))
 spark_sum_euler :: [Int] -> Par (IVar Integer)
 spark_sum_euler xs = do 
+-- Original, HDpH version:
+--------------------------
 --  v <- new
 --  gv <- glob v
 --  let val = force (sum_totient xs) >>= rput gv . toClosure
@@ -153,6 +155,8 @@ spark_sum_euler xs = do
 --  let fun = spark_sum_euler_Static
 --  spark $ unsafeMkClosure val fun env
 --  return v
+--------------------------
+-- Meta-par version:
   longSpawn$ $(mkClosureRec 'sum_totient) xs
 
 

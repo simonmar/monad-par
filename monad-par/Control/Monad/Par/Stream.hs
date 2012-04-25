@@ -5,7 +5,7 @@
 -- A module for stream processing built on top of Control.Monad.Par
 -- 
 -- (In the future we may want to look into the stream interface used by
---  the stream fusion framework.)
+--  the stream fusion framework, or iteratees/conduits/pipes.)
 
 #define DEBUGSTREAMS
 

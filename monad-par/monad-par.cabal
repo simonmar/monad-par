@@ -131,7 +131,7 @@ Library
 
 -- The parallel package currently requires deepseq 1.1:
 --               , deepseq >= 1.1 && < 1.2
-               , deepseq >= 1.2
+               , deepseq >= 1.1
                , HUnit >= 1.2 
 --               , QuickCheck <= 2
                , QuickCheck 
@@ -185,6 +185,7 @@ Library
                , Control.Monad.Par.IList
 
                -- RRN: Not exposing Streams or OpenLists yet.  Need to improve performance.
+               -- We have some ideas for enabling bounded chans while preventing deadlock:
                , Control.Monad.Par.OpenList
                , Control.Monad.Par.Stream
 
@@ -202,6 +203,7 @@ Test-Suite test-monad-par
     main-is:    tests/AllTests.hs
     ghc-options: -itests -rtsopts -threaded
     build-depends: base >= 4 && < 5
+                 , abstract-par, monad-par-extras
                  , array >= 0.3
                  , deepseq >= 1.2
                  , binary
