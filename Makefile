@@ -37,6 +37,11 @@ CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-haddock=${HADDOCK}
 
 # --------------------------------------------------------------------------------
 
+install: install-with-tests
+
+install-with-tests:
+	${CABAL_INSTALL} ${OUR_PKGS} --enable-tests
+
 install-all:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
@@ -53,6 +58,9 @@ doc:
 	mv ./Deques/*/dist/doc/html/* docs/
 	mv ./accelerate/*/dist/doc/html/* docs/
 
+# TODO: If we also moved over all the otherd docs from the global and
+# user DBs we could create a complete documentation collection on this
+# website and no longer depend on hackage:
 install-doc:
 	rsync -vrplt docs/ ~/.hyplan/haddock/
 	cd ~/.hyplan/haddock/
