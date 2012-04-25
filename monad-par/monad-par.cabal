@@ -131,7 +131,7 @@ Library
 
 -- The parallel package currently requires deepseq 1.1:
 --               , deepseq >= 1.1 && < 1.2
-               , deepseq >= 1.2
+               , deepseq >= 1.1
                , HUnit >= 1.2 
 --               , QuickCheck <= 2
                , QuickCheck 
