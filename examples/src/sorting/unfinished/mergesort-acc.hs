@@ -1,5 +1,13 @@
 {-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE FlexibleContexts #-}
+
+-- UNFINISHED:
+
+-- This file represents rebecca's attempt to port the IPDPS'09
+-- mergesort algorithm to Accelerate.
+
+--------------------------------------------------------------------------------
+
 import Data.Array.Accelerate as Acc
 import Data.Array.Accelerate.Interpreter (run)
 import Prelude           hiding (zip, map, scanl, scanr, zipWith, fst, scanl1)
@@ -14,6 +22,8 @@ import Control.Exception  (evaluate)
 import System.Environment (getArgs)
 import System.Random ()
 import System.Random.MWC  (uniformR, withSystemRandom, Variate, GenIO)
+
+--------------------------------------------------------------------------------
 
 {-
 main :: IO ()
