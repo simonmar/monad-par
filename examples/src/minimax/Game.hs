@@ -13,7 +13,7 @@ import qualified Control.Monad.Par.Combinator as C
 #ifdef PARSCHED
 import PARSCHED
 #else
-import Control.Monad.Par (runPar, parMap, parMapM, Par)
+import Control.Monad.Par (runPar, Par)
 #endif
 
 type Player = Evaluation -> Evaluation -> Evaluation
@@ -26,7 +26,7 @@ alternate _ _ _ _ b | static b == OWin = []
 alternate depth player f g board = move : alternate depth opponent g f board'
   where
     move@(board',eval) = best f possibles scores
-    scores = runPar $ parMapM (bestMove depth opponent g f) possibles
+    scores = runPar $ C.parMapM (bestMove depth opponent g f) possibles
     possibles = newPositions player board
     opponent = opposite player
 
@@ -37,7 +37,7 @@ alternateNested _ _ _ _ b | static b == OWin = []
 alternateNested depth player f g board = move : alternateNested depth opponent g f board'
   where
     move@(board',eval) = best f possibles scores
-    scores = runPar $ parMap (bestMoveNested depth opponent g f) possibles
+    scores = runPar $ C.parMap (bestMoveNested depth opponent g f) possibles
     possibles = newPositions player board
     opponent = opposite player
 

@@ -3,7 +3,6 @@
  - Intel Concurrent Collections for Haskell
  - Copyright (c) 2010, Intel Corporation.
  -}
-{-# OPTIONS -fglasgow-exts #-}
 {-# LANGUAGE ExistentialQuantification
    , ScopedTypeVariables
    , BangPatterns
@@ -12,6 +11,7 @@
    , FlexibleInstances
    , DeriveDataTypeable
    , MagicHash 
+   , UnboxedTuples
    , CPP
   #-}
 -- This is INCOMPATIBLE with CncPure..

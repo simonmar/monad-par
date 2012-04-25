@@ -250,8 +250,8 @@ rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 -- Running computations in the Par monad
 --------------------------------------------------------------------------------
 
--- instance NFData (IVar a) where
---   rnf _ = ()
+instance NFData (IVar a) where
+  rnf _ = ()
 
 runPar userComp = unsafePerformIO $ do
   

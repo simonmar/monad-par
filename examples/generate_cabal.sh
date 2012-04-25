@@ -41,18 +41,20 @@ EOF
 
 cat >> foo.cabal <<EOF
 --------------------------------------------------------------------------------
-executable nbody
+executable nbody.exe
   main-is:           src/nbody.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
                      array
+  if flag(sparks)
+     buildable:      False
 EOF
 boilerplate 
 
 
 cat >> foo.cabal <<EOF
 --------------------------------------------------------------------------------
-executable queens
+executable queens.exe
   main-is:           src/queens.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras, 
@@ -64,13 +66,173 @@ boilerplate
 
 cat >> foo.cabal <<EOF
 --------------------------------------------------------------------------------
-executable blackscholes
+executable blackscholes.exe
   main-is:           src/blackscholes.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras, 
                      array, parallel
 EOF
 boilerplate 
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable coins.exe
+  main-is:           src/coins.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     parallel
+EOF
+boilerplate 
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable parfib_monad.exe
+  main-is:           src/parfib_monad.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable parfib_pseq.exe
+  main-is:           src/parfib_pseq.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable randomGen.exe
+  main-is:           src/randomGen.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     random, transformers
+EOF
+boilerplate 
+
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable primes.exe
+  main-is:           src/primes.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable cholesky.exe
+  main-is:           src/cholesky/cholesky.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     array, bytestring, containers, time, unix
+  if flag(sparks)
+     buildable:      False
+EOF
+boilerplate 
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable sumeuler.exe
+  main-is:           sumeuler.hs
+  hs-source-dirs:    src/sumeuler
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable MatMult.exe
+  main-is:           MatMult.hs
+  hs-source-dirs:    src/matmult
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable minimax.exe
+  main-is:           Main.hs
+  hs-source-dirs:    src/minimax
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     parallel, random
+EOF
+boilerplate 
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable partree.exe
+  main-is:           partree.hs
+  hs-source-dirs:    src/partree
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     parallel
+EOF
+boilerplate
+
+
+
+
+cat >> foo.cabal <<EOF
+--------------------------------------------------------------------------------
+executable kmeans.exe
+  main-is:           kmeans.hs
+  hs-source-dirs:    src/kmeans
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     array, bytestring, cereal, cereal-vector, mwc-random, 
+                     parallel, time, transformers, vector
+EOF
+boilerplate 
+
+
+
+
+# Disabled until Control.Monad.Par.Stream is imported
+#
+# cat >> foo.cabal <<EOF
+# --------------------------------------------------------------------------------
+# executable simple1_measureSrc.exe
+#   main-is:           simple1_measureSrc.hs
+#   hs-source-dirs:    src/stream
+#   build-depends:     $COMMON_DEPS , 
+#                      abstract-par, monad-par-extras
+# EOF
+# boilerplate 
 
 
 

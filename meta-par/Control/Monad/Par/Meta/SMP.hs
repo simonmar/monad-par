@@ -6,6 +6,7 @@
 module Control.Monad.Par.Meta.SMP (
     -- * Meta-Par monad for SMP parallelism
     Par
+  , Meta.IVar
     -- * Operations
   , ParFuture(..)
   , ParIVar(..)

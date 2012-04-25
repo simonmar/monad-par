@@ -118,6 +118,9 @@ type ROnly = ReaderT Sched IO
 -- communication between 'Par' threads.
 newtype IVar a = IVar (HotVar (IVarContents a))
 
+instance NFData (IVar a) where
+  rnf _ = ()
+
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
 -- | A 'GlobalState' structure tracks the state of all Meta-Par

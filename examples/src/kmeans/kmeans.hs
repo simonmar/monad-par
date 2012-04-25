@@ -25,7 +25,6 @@ import qualified Data.Vector.Storable as SV
 import Data.Vector.Storable.Serialize
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
-import Control.Monad.Par as Par
 import System.Random.MWC
 import Control.DeepSeq
 import System.Environment
@@ -33,6 +32,12 @@ import Data.Time.Clock
 import Control.Exception
 import Control.Monad
 import Data.ByteString (readFile)
+
+#ifdef PARSCHED 
+import PARSCHED as Par
+#else
+import qualified Control.Monad.Par as Par
+#endif
 
 nClusters = 4
 
