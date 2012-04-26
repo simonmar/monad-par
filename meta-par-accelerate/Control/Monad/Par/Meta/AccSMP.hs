@@ -20,7 +20,12 @@ module Control.Monad.Par.Meta.AccSMP
     runPar, 
 
     -- | Same as `runPar` but don't hide the IO.
-    runParIO
+    runParIO,
+ 
+    -- Reexport the ParAccelerate class:
+--    module Control.Monad.Par.Accelerate
+    AC.ParAccelerate
+
  ) where
 
 import Data.Monoid

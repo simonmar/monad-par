@@ -8,7 +8,9 @@
 
 OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
   RPC/ meta-par-dist-tcp/                                       \
-  meta-par-cuda/ abstract-par-accelerate/ meta-par-accelerate/
+  abstract-par-accelerate/ meta-par-accelerate/
+
+# meta-par-cuda/ 
 
 DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ Deques/ChaseLev/ Deques/MegaDeque/ 
 

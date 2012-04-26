@@ -49,5 +49,9 @@ Library
                 , array
 
   ghc-options:    -Wall 
--- -DACCELERATE_CUDA_BACKEND
 
+  if flag(cuda)
+     ghc-options: -DACCELERATE_CUDA_BACKEND
+
+flag cuda
+  default:           False
