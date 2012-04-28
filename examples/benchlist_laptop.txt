@@ -1,6 +1,6 @@
 # See README.md for format description.
 #
-# Version: laptop 0.0
+# Version: laptop 0.1
 # 
 # I'm attempting to keep track of changes to this config with the above.
 # Note that changes to the benchmarks themselves also require changing
@@ -8,7 +8,8 @@
 # a version bump. 
 # 
 # CHANGELOG:
-# 
+# 0.1 Changed to naming convention without path prefixes for cabal-based
+# benchmark build system -ACF
 
 parfib_monad  default 34
 parfib_pseq   default 34
@@ -34,6 +35,5 @@ nbody         default 12000
 # # What should the arguments be here:
 # # minimax/minimax ? ? 
 
-# # These don't match the naming convention at the moment.
-# matmult/matmult   default 768 0 64
-# sumeuler/sumeuler default 38 8000 100
+MatMult   default 768 0 64
+sumeuler default 38 8000 100

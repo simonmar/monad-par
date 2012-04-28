@@ -27,11 +27,11 @@ coins         futures 8 1250
 # queens        futures 14
 
 # These don't match the naming convention at the moment.
-matmult/MatMult   futures 768 0 64
+MatMult   futures 768 0 64
 
-sumeuler/sumeuler futures 38 8000 100
+sumeuler futures 38 8000 100
 
-sorting/mergesort futures cpu 24 8192
+mergesort futures cpu 24 8192
 
 # binomial lattice?
 
