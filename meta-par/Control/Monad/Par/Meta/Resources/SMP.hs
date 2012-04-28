@@ -54,12 +54,12 @@ getCaps = unsafePerformIO $ do
   env <- getEnvironment
   case lookup "SMP_CAPS" env of
     Just cs -> do
-      dbgTaggedMsg 1 $ BS.pack $ printf "[SMP] initialized with capability list %s\n" 
+      dbgTaggedMsg 2 $ BS.pack $ printf "[SMP] initialized with capability list %s\n" 
                        (show ((read cs) :: [Int]))
       return $ read cs
     Nothing -> do 
       n <- getNumCapabilities
-      dbgTaggedMsg 1 $ BS.pack $ printf "[SMP] initialized with capability list %s\n" 
+      dbgTaggedMsg 2 $ BS.pack $ printf "[SMP] initialized with capability list %s\n" 
                    (show ([0..n-1] :: [Int])) 
       return [0..n-1]
 
