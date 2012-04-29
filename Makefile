@@ -8,13 +8,22 @@
 
 OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
   RPC/ meta-par-dist-tcp/                                       \
-  meta-par-cuda/ abstract-par-accelerate/ meta-par-accelerate/
+  abstract-par-accelerate/ meta-par-accelerate/
 
-DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ Deques/ChaseLev/ Deques/MegaDeque/ 
+# This isn't really meant to be distributed:
+# meta-par-cuda/
 
-ACC_PKGS= accelerate/ accelerate/accelerate-io/ accelerate/accelerate-cuda/ 
+DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ \
+  Deques/ChaseLev/ Deques/MegaDeque/ 
 
-ALL_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS}
+NETWORK_PKGS= distributed-process/network-transport \
+  distributed-process/network-transport-pipes/
+
+ACC_PKGS= accelerate/ accelerate/accelerate-io/
+ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
+
+ALL_PKGS= ${DEQUE_PKGS} ${NETWORK_PKGS} ${ACC_PKGS} ${OUR_PKGS}
+ALL_GPU_PKGS = ${ALL_PKGS} ${ACC_GPU_PKGS}
 
 # if [ "$HADDOCK" == "" ];
 # then HADDOCK=`which haddock`
@@ -33,7 +42,7 @@ endif
 HADDOCK= "$(HOME)/.cabal/bin/haddock"
 CABAL= cabal
 
-CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-haddock=${HADDOCK}
+CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-haddock=${HADDOCK} ${CABAL_ARGS}
 
 # --------------------------------------------------------------------------------
 
@@ -47,7 +56,10 @@ install-all:
 
 
 mega-install:
-	${CABAL_INSTALL} ${ALL_PKGS}
+	${CABAL_INSTALL} ${ALL_PKGS} 
+
+mega-install-gpu:
+	${CABAL_INSTALL} ${ALL_GPU_PKGS} 
 
 doc:
 	rm -rf docs
