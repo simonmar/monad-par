@@ -7,7 +7,6 @@
 # --------------------------------------------------------------------------------
 
 OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
-  RPC/ meta-par-dist-tcp/                                       \
   abstract-par-accelerate/ meta-par-accelerate/
 
 # This isn't really meant to be distributed:
@@ -16,13 +15,15 @@ OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
 DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ \
   Deques/ChaseLev/ Deques/MegaDeque/ 
 
-NETWORK_PKGS= distributed-process/network-transport \
+NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
+  distributed-process/network-transport \
   distributed-process/network-transport-pipes/
 
 ACC_PKGS= accelerate/ accelerate/accelerate-io/
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
 
-ALL_PKGS= ${DEQUE_PKGS} ${NETWORK_PKGS} ${ACC_PKGS} ${OUR_PKGS}
+ALL_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
+ALL_NETWORK_PKGS = ${ALL_PKGS} ${NETWORK_PKGS}
 ALL_GPU_PKGS = ${ALL_PKGS} ${ACC_GPU_PKGS}
 
 # if [ "$HADDOCK" == "" ];
