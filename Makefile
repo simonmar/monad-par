@@ -39,10 +39,15 @@ ifeq ($(GHC),)
   GHC=`which ghc`
 endif 
 
-HADDOCK= "$(HOME)/.cabal/bin/haddock"
-CABAL= cabal
+ifeq ($(HADDOCK),)
+  HADDOCK= "$(HOME)/.cabal/bin/haddock"
+endif
 
-CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-haddock=${HADDOCK} ${CABAL_ARGS}
+ifeq ($(CABAL),)
+  CABAL= cabal
+endif
+
+CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} ${CABAL_ARGS}
 
 # --------------------------------------------------------------------------------
 
@@ -65,7 +70,7 @@ doc:
 	rm -rf docs
 	mkdir docs
         # Link EVERYTHING to Haddock:
-	${CABAL_INSTALL} ${ALL_PKGS} --enable-documentation --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' 
+	${CABAL_INSTALL} ${ALL_PKGS} --enable-documentation --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' --with-haddock=${HADDOCK}
 	mv */dist/doc/html/* docs/
 	mv ./Deques/*/dist/doc/html/* docs/
 	mv ./accelerate/*/dist/doc/html/* docs/
