@@ -28,3 +28,4 @@ rm -rf accelerate-cuda
 git clone https://github.com/AccelerateHS/accelerate-cuda.git accelerate-cuda
 rm -rf accelerate-backend-kit
 git clone https://github.com/AccelerateHS/accelerate-backend-kit.git accelerate-backend-kit
+popd
