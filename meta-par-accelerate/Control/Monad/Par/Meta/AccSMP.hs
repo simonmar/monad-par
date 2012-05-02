@@ -36,8 +36,6 @@ import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
 
-import Data.Time.Clock.POSIX (getPOSIXTime)
-
 --------------------------------------------------------------------------------
 
 tries :: Int
