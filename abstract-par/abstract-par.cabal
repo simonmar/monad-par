@@ -20,9 +20,11 @@ Description:         The 'Par' monad(s) offer an alternative
 
                      This module is an interface module only. It
                      provides a number of type clasess, but not an
-                     implementation.  The type classes separate different levels of 
+                     implementation.  The type classes separate different 
+                     levels of @Par@ functionality.  See the 
+                     "Control.Monad.Par.Class" module for more details.
 
-                     The 'monad-par' library is an example of a
+                     The 'monad-par' library is one example of a
                      concrete library providing this interface.
 
 
@@ -48,60 +50,5 @@ Library
                  -- A class providing unsafe functionality:
                  , Control.Monad.Par.Unsafe
 
-
   Build-depends: base >= 4 && < 5
                , deepseq >= 1.2
--- --                , HUnit >= 1.2 
--- --                , QuickCheck 
--- --                , rdtsc >= 1.1.3.1
--- --                , split >= 0.1.2.3
--- --                , carray >= 0.1.5
--- --                , array >= 0.3
--- --                , random >= 1.0.0.0
--- --                , mwc-random >= 0.11
--- --                , transformers >= 0.2.2.0
--- --                , vector
--- --                , containers
--- --                , mtl >= 2.0.1.0
--- --                , parallel >= 3.1
--- --                , abstract-deque >= 0.1.4
--- --                , binary
--- --                , cereal >= 0.3
--- --                , bytestring >= 0.9
-
-
--- --  ghc-options: -O2
-
--- Test-Suite test-monad-par
---     type:       exitcode-stdio-1.0
---     main-is:    tests/AllTests.hs
---     ghc-options: -itests -rtsopts -threaded
---     build-depends: base >= 4 && < 5
---                  , array >= 0.3
---                  , deepseq >= 1.2
---                  , binary
---                  , QuickCheck, HUnit, time
---                  , test-framework, test-framework-th
---                  , test-framework-hunit, test-framework-quickcheck2
-
-
-
-
-
-
-
--- Flag NoGPU
---   Description: Turn of GPU support and therefore accelerate dependencies.
---   Default:     True
-
--- Flag NoDist
---   Description: Turn of Distributed support and therefore certain dependencies.
---   Default:     False
-
--- Flag affinity
---   Description: Turn on pinning to CPUs via pthread/linux scheduler calls.
---   Default:     False
-
--- Flag MichaelScott
---   Description: Temporary flag.  Turn on MichaelScott lockfree queues for Remote.hs
---   Default:     False

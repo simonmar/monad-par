@@ -5,6 +5,8 @@
 # handful of shell scripts.
 
 # --------------------------------------------------------------------------------
+# Set up some Variables
+# --------------------------------------------------------------------------------
 
 OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
   abstract-par-accelerate/ meta-par-accelerate/
@@ -51,9 +53,12 @@ endif
 CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} ${CABAL_ARGS}
 
 # --------------------------------------------------------------------------------
+# Installation
+# --------------------------------------------------------------------------------
 
-install: install-with-tests
+install: install-all
 
+# Issue a single big cabal command to install everything.
 install-with-tests:
 	${CABAL_INSTALL} ${OUR_PKGS} --enable-tests
 
@@ -67,11 +72,32 @@ mega-install:
 mega-install-gpu:
 	${CABAL_INSTALL} ${ALL_GPU_PKGS} 
 
+
+# --------------------------------------------------------------------------------
+# Testing 
+# --------------------------------------------------------------------------------
+
+# Running a full test uses cabal-dev to sandbox the build.
+test: 
+	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='--enable-tests --disable-documentation'
+# SANDBOX=`pwd`/cabal-dev
+# pushd monad-par
+# cabal-dev -s $SANDBOX configure --with-ghc=$GHC --with-ghc-pkg=$GHC_PKG --enable-tests
+# cabal-dev -s $SANDBOX build
+# cabal-dev -s $SANDBOX test --test-options='--jxml=dist/test/$test-suite.xml'
+# popd
+
+
+# --------------------------------------------------------------------------------
+# Documentation 
+# --------------------------------------------------------------------------------
+
 doc:
 	rm -rf docs
 	mkdir docs
         # Link EVERYTHING to Haddock:
-	${CABAL_INSTALL} ${ALL_PKGS} --enable-documentation --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' --with-haddock=${HADDOCK}
+	${CABAL_INSTALL} ${ALL_PKGS} --enable-documentation \
+           --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' --with-haddock=${HADDOCK}
 	mv */dist/doc/html/* docs/
 	mv ./Deques/*/dist/doc/html/* docs/
 	mv ./accelerate/*/dist/doc/html/* docs/
@@ -84,6 +110,8 @@ install-doc:
 	cd ~/.hyplan/haddock/
 	makedirindex > index.html
 	chmod ugo+rX -R .
+
+# --------------------------------------------------------------------------------
 
 clean:
 
