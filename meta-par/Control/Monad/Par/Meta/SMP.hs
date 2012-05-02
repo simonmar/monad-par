@@ -1,5 +1,9 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+
+#if __GLASGOW_HASKELL__ >= 702
 {-# Language Trustworthy #-}
+#endif
 
 {-# OPTIONS_GHC -Wall #-}
 
