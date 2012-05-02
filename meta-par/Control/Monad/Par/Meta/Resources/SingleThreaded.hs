@@ -44,7 +44,7 @@ defaultStartup = St st
           when dbg $ printf " [%d] spawning single worker\n" cap
           -- This startup is called from the "main" thread, we need
           -- to spawn a worker to do the actual work:
-          void $ spawnWorkerOnCPU ws cap
+          spawnWorkerOnCPU ws cap >> return ()
 
 -- | A single-threaded resource by itself is not aware of any other
 -- sources of work, so its 'WorkSearch' always returns 'Nothing'.
