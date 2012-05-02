@@ -70,7 +70,7 @@ mega-install:
 	${CABAL_INSTALL} ${ALL_PKGS} 
 
 mega-install-gpu:
-	${CABAL_INSTALL} ${ALL_GPU_PKGS} 
+	${CABAL_INSTALL} -fcuda ${ALL_GPU_PKGS} 
 
 
 # --------------------------------------------------------------------------------
