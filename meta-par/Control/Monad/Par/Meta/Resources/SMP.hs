@@ -37,6 +37,14 @@ import Control.Monad.Par.Meta
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 
+#if __GLASGOW_HASKELL__ >= 702
+import Control.Concurrent (getNumCapabilities)
+#else
+import GHC.Conc (numCapabilities)
+getNumCapabilities = return numCapabilities
+#endif
+
+
 -- | Create an SMP resource for all capabilities. 
 mkResource :: Int -- ^ The number of steal attempts per 'WorkSearch' call.
            -> Resource

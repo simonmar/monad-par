@@ -185,7 +185,7 @@ executable cholesky
   main-is:           src/cholesky/cholesky.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
-                     array, bytestring, containers, time, unix
+                     array, bytestring, containers, time, unix, deepseq > 1.2
   if flag(sparks)
      buildable:      False
 EOF

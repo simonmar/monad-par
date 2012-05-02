@@ -5,6 +5,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE NamedFieldPuns #-}
 {-# LANGUAGE PackageImports #-}
+{-# LANGUAGE TupleSections #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing #-}
 
 -- The Meta scheduler which can be parameterized over various
@@ -39,8 +40,7 @@ module Control.Monad.Par.Meta
 ) where
 
 import Control.Applicative
-import Control.Concurrent ( getNumCapabilities
-                          , MVar
+import Control.Concurrent ( MVar
                           , newEmptyMVar
                           , putMVar
                           , readMVar
@@ -82,13 +82,42 @@ import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
 import Control.Monad.Par.Meta.HotVar.IORef
 import qualified Control.Monad.Par.Class as PC
 
-#if  (__GLASGOW_HASKELL__ < 700)
-import GHC.Conc (forkOnIO, ThreadId, myThreadId)
-forkOn = forkOnIO
-threadCapability n = n -- ERROR, the scheduler won't work.  Need to find something here.
-void = fmap (const ())
-#else
+#if __GLASGOW_HASKELL__ >= 702
 import GHC.Conc (forkOn, ThreadId, myThreadId, threadCapability)
+import Control.Concurrent (getNumCapabilities)
+threadCapability' tid = Just <$> threadCapability tid
+#else
+import GHC.Conc (forkOnIO, ThreadId, myThreadId, numCapabilities)
+forkOn :: Int -> IO () -> IO ThreadId
+forkOn = forkOnIO
+getNumCapabilities :: IO Int
+getNumCapabilities = return numCapabilities
+
+-- This is a best-effort recreation of threadCapability for older GHC
+-- versions that lack it. If the calling thread is a meta-par worker,
+-- it must have been spawned with forkOn, so we return an answer that
+-- indicates it is pinned.
+-- 
+-- It does a search through the ThreadIds stored in the global
+-- scheduler structure, and if it finds a match for the current
+-- thread, it returns the 'no' field associated with that
+-- ThreadId. Otherwise it returns Nothing.
+threadCapability' tid = do
+  vec <- readHotVar globalScheds
+  let f Nothing = return $ mempty
+      f (Just Sched{ no, tids }) = do
+        set <- readHotVar tids
+        case Set.member tid set of
+          False -> return $ mempty
+          True -> return $ First (Just no)
+  cap <- getFirst . mconcat <$> mapM f (V.toList vec)
+  return ((,True) <$> cap)
+#endif
+threadCapability' :: ThreadId -> IO (Maybe (Int, Bool))
+
+
+#if __GLASGOW_HASKELL__ < 700
+void = fmap (const ())
 #endif
 
 
@@ -245,13 +274,22 @@ forkWithExceptions forkit descr action = do
 ensurePinned :: IO a -> IO a
 ensurePinned action = do 
   tid <- myThreadId
-  (cap, pinned) <- threadCapability tid  
-  if pinned 
-   then action 
-   else do mv <- newEmptyMVar 
-	   void $ forkOn cap (action >>= putMVar mv)
-	   takeMVar mv
-
+  mp <- threadCapability' tid  
+  case mp of
+    Just (_, True) -> action
+    Just (cap, _ ) -> do
+      mv <- newEmptyMVar 
+      void $ forkOn cap (action >>= putMVar mv)
+      takeMVar mv
+    Nothing -> do
+      -- Older GHC case: we only consider a thread pinned if it's one
+      -- of the threads manaaged by the global sched state. If it's
+      -- not, we have no choice but to assume that it's not pinned,
+      -- and spawn a new thread on CPU 0, which is an arbitrary
+      -- choice.
+      mv <- newEmptyMVar 
+      void $ forkOn 0 (action >>= putMVar mv)
+      takeMVar mv
 
 --------------------------------------------------------------------------------
 -- Work queue helpers
@@ -260,8 +298,12 @@ ensurePinned action = do
 popWork :: Sched -> IO (Maybe (Par ()))
 popWork Sched{ workpool, no } = do
   when dbg $ do
+#if __GLASGOW_HASKELL__ >= 702
     (cap, _) <- threadCapability =<< myThreadId
     dbgTaggedMsg 4 $ BS.pack $ "[meta: cap "++show cap++ "] trying to pop local work on Sched "++ show no
+#else
+    dbgTaggedMsg 4 $ BS.pack $ "[meta] trying to pop local work on Sched "++ show no
+#endif
   R.tryPopL workpool
 
 {-# INLINE pushWork #-}
@@ -486,7 +528,13 @@ runMetaParIO Resource{ startup=st, workSearch=ws } work = ensurePinned $
   do
   -- gather information
   tid <- myThreadId
-  (cap, _) <- threadCapability tid
+  mp <- threadCapability' tid
+  let cap = case mp of
+              Just (n, _) -> n
+              -- Older GHC case: default to CPU 0 if the calling
+              -- thread is not already managed by meta-par
+              Nothing -> 0
+
   sched@Sched{ tids, mortals } <- makeOrGetSched ws cap
 
   -- make the MVar for this answer, and wrap the incoming work, and

@@ -13,7 +13,7 @@ module Control.Monad.Par.Meta.Resources.SingleThreaded (
   , defaultWorkSearch
 ) where
 
-import Control.Concurrent ( myThreadId, threadCapability )
+import Control.Concurrent
 import Control.Monad
 
 import Text.Printf
@@ -35,7 +35,12 @@ mkResource = Resource defaultStartup defaultWorkSearch
 defaultStartup :: Startup
 defaultStartup = St st 
   where st ws _ = do
+#if __GLASGOW_HASKELL__ >= 702
           (cap, _) <- threadCapability =<< myThreadId
+#else
+          -- Older GHCs: run on CPU 0 if we can't ask for caller's capability
+          let cap = 0
+#endif
           when dbg $ printf " [%d] spawning single worker\n" cap
           -- This startup is called from the "main" thread, we need
           -- to spawn a worker to do the actual work:
