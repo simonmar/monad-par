@@ -1,7 +1,6 @@
 {-# LANGUAGE BangPatterns, CPP #-}
 
 import Control.Monad
-import Control.Seq
 import Control.DeepSeq
 import Control.Exception
 import Data.Complex

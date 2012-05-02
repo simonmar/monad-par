@@ -419,7 +419,8 @@ main = do args <- getArgs
                     -- Just for testing, not for benchmarking:
 --                    []     -> ("dynamic", 16, 22, 10, 2)
                     []     -> ("cpu", 16,22, 10, 32)
-
+                    -- hack for SHORTRUN in benchmark script
+                    ["cpu"] -> ("cpu", 16,22, 10, 32)
                     -- "Dynamic partitioning takes extra arguments:"
                     ["dynamic", n, t, lo, hi] 
                            -> ("dynamic", (read lo), (read hi), (read n), (read t))

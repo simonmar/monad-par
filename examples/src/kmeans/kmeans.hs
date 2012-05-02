@@ -34,9 +34,9 @@ import Control.Monad
 import Data.ByteString (readFile)
 
 #ifdef PARSCHED 
-import PARSCHED as Par
+import PARSCHED
 #else
-import qualified Control.Monad.Par as Par
+import Control.Monad.Par
 #endif
 
 nClusters = 4

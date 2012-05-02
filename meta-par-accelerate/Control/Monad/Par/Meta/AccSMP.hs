@@ -50,7 +50,7 @@ newtype Par a = AccSMPPar (Meta.Par a)
           -- NOT MonadIO
 
 resource :: Meta.Resource
-resource = SMP.mkResource tries <> Accelerate.mkResource
+resource = SMP.mkResource tries `mappend` Accelerate.mkResource
 
 runPar   :: Meta.Par a -> a
 runParIO :: Meta.Par a -> IO a

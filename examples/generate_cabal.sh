@@ -2,7 +2,7 @@
 
 # This is a LAME way of eliminating boilerplate in our .cabal file.
 
-cat > foo.cabal <<EOF
+cat > monad-par-examples.cabal <<EOF
 name:                monad-par-examples
 version:             0.3
 build-type:          Simple
@@ -12,7 +12,7 @@ EOF
 COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector == 0.9.* "
 
 function boilerplate() {
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
   if flag(trace)
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Trace
@@ -20,6 +20,10 @@ cat >> foo.cabal <<EOF
   if flag(direct)
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Direct
+
+  if flag(contfree)
+     build-depends:   monad-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.ContFree
 
   if flag(sparks)
      build-depends:   monad-par
@@ -29,7 +33,12 @@ cat >> foo.cabal <<EOF
      build-depends:   meta-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.SMP
 
-  if !(flag(trace) || flag(direct) || flag(sparks) || flag(meta-smp))
+  if flag(meta-numa)
+     build-depends:   meta-par
+     cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.NUMAOnly
+
+  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
      build-depends:   monad-par
      -- uses Control.Monad.Par by default
 
@@ -39,9 +48,39 @@ EOF
 }
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable nbody.exe
+executable mandel
+  main-is:           src/mandel.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+
+
+
+
+cat >> monad-par-examples.cabal <<EOF
+--------------------------------------------------------------------------------
+executable mergesort
+  main-is:           src/sorting/mergesort.hs
+  build-depends:     $COMMON_DEPS , 
+                     abstract-par, monad-par-extras,
+                     mwc-random,
+                     QuickCheck, split, time, transformers, vector, vector-algorithms
+  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
+    buildable:       False
+EOF
+boilerplate 
+
+
+
+
+cat >> monad-par-examples.cabal <<EOF
+--------------------------------------------------------------------------------
+executable nbody
   main-is:           src/nbody.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
@@ -52,9 +91,9 @@ EOF
 boilerplate 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable queens.exe
+executable queens
   main-is:           src/queens.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras, 
@@ -64,9 +103,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable blackscholes.exe
+executable blackscholes
   main-is:           src/blackscholes.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras, 
@@ -77,9 +116,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable coins.exe
+executable coins
   main-is:           src/coins.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
@@ -90,9 +129,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable parfib_monad.exe
+executable parfib_monad
   main-is:           src/parfib_monad.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras
@@ -102,9 +141,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable parfib_pseq.exe
+executable parfib_pseq
   main-is:           src/parfib_pseq.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras
@@ -113,9 +152,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable randomGen.exe
+executable randomGen
   main-is:           src/randomGen.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
@@ -127,9 +166,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable primes.exe
+executable primes
   main-is:           src/primes.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras
@@ -140,9 +179,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable cholesky.exe
+executable cholesky
   main-is:           src/cholesky/cholesky.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
@@ -154,9 +193,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable sumeuler.exe
+executable sumeuler
   main-is:           sumeuler.hs
   hs-source-dirs:    src/sumeuler
   build-depends:     $COMMON_DEPS , 
@@ -167,9 +206,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable MatMult.exe
+executable MatMult
   main-is:           MatMult.hs
   hs-source-dirs:    src/matmult
   build-depends:     $COMMON_DEPS , 
@@ -180,9 +219,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable minimax.exe
+executable minimax
   main-is:           Main.hs
   hs-source-dirs:    src/minimax
   build-depends:     $COMMON_DEPS , 
@@ -193,9 +232,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable partree.exe
+executable partree
   main-is:           partree.hs
   hs-source-dirs:    src/partree
   build-depends:     $COMMON_DEPS , 
@@ -207,9 +246,9 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
-executable kmeans.exe
+executable kmeans
   main-is:           kmeans.hs
   hs-source-dirs:    src/kmeans
   build-depends:     $COMMON_DEPS , 
@@ -224,9 +263,9 @@ boilerplate
 
 # Disabled until Control.Monad.Par.Stream is imported
 #
-# cat >> foo.cabal <<EOF
+# cat >> monad-par-examples.cabal <<EOF
 # --------------------------------------------------------------------------------
-# executable simple1_measureSrc.exe
+# executable simple1_measureSrc
 #   main-is:           simple1_measureSrc.hs
 #   hs-source-dirs:    src/stream
 #   build-depends:     $COMMON_DEPS , 
@@ -237,7 +276,7 @@ boilerplate
 
 
 
-cat >> foo.cabal <<EOF
+cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------  
 
 -- BUILDABLE??
@@ -249,10 +288,16 @@ flag trace
 flag direct
   default:           False
 
+flag contfree
+  default:           False
+
 flag sparks
   default:           False
 
 flag meta-smp
+  default:           False
+
+flag meta-numa
   default:           False
 
 EOF
