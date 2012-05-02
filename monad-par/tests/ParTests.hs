@@ -42,8 +42,7 @@ case_forkNFill  = par three (do r <- new; fork (put r 3); get r)
 -- non-Trace scheduler. --ACF
 case_getEmpty   = do
   _ <- timeout 100000 $ assertException "no result" $ 
-         case runPar $ do r <- new; get r of
-           () -> assertFailure "shouldn't get a value"
+         runPar $ do r <- new; get r
   return ()
 
 
