@@ -36,10 +36,19 @@ import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
 
+import Data.Time.Clock.POSIX (getPOSIXTime)
+
 --------------------------------------------------------------------------------
 
 tries :: Int
 tries = numCapabilities
+
+-- timeit :: IO () -> IO Double
+-- timeit act = do 
+--   start <- getCurrentTime
+-- printf "Creating vector took %0.3f sec.\n"
+--             ((fromRational$ toRational $ diffUTCTime end start) :: Double)
+
 
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 

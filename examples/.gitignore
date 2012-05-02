@@ -1,0 +1,8 @@
+*.hi
+*.o
+*.exe
+*.dat
+*.log
+*.bak
+*conflicted*
+._*.*

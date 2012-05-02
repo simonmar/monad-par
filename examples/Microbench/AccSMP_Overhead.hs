@@ -4,38 +4,41 @@
 -- In this microbenchmark we measure it.
 
 import Control.Monad.Par.Accelerate
-import Control.Monad.Par.Meta.AccSMP 
+import Control.Monad.Par.Meta.AccSMP (runPar)
 
 -- import System.Random.MWC
 import Data.Array.Unboxed
-import Data.Array.Accelerate as Acc
+import qualified Data.Array.Accelerate as A
+import Data.Array.Accelerate (Z, (:.))
 
 import qualified Data.Array.Accelerate.IO as IO
 -- import qualified Data.Vector as V
 
+import Data.Time.Clock.POSIX (getPOSIXTime)
+import Control.Exception (evaluate)
+
+--------------------------------------------------------------------------------
+
 
 -- Dot product
 -- -----------
-dotpAcc :: Vector Float -> Vector Float -> Acc (Scalar Float)
+dotpAcc :: A.Vector Float -> A.Vector Float -> A.Acc (A.Scalar Float)
 dotpAcc xs ys
   = let
-      xs' = use xs
-      ys' = use ys
+      xs' = A.use xs
+      ys' = A.use ys
     in
-    Acc.fold (+) 0 (Acc.zipWith (*) xs' ys')
+    A.fold (+) 0 (A.zipWith (*) xs' ys')
 
 
 main = do 
-  print "hi"
+  putStrLn "Measuring one roundtrip through the GPU:"
   
-  let v1 = listArray (0,1) [3.3] :: UArray Int Float
-      v2 = listArray (0,1) [4.4] :: UArray Int Float
---  v1' <- convertUArray v1
---  v2' <- convertUArray v2
+  let 
+      v1 = A.fromList (A.Z A.:. (5::Int)) [1..5::Float]
+      v2 = A.fromList (A.Z A.:. (5::Int)) [6..10::Float]
   
-  print $ runPar $ do
---    spawnAcc (dotpAcc (V.singleton 3.3) (V.singleton 4.4))
-    
---     spawnAcc (dotpAcc (listArray (0,1) [3.3]) 
---                       (listArray (0,1) [4.4]))
-    return 33
+  start <- getPOSIXTime
+  x <- evaluate$ runPar $ spawnAcc (dotpAcc v1 v2)
+  end <- getPOSIXTime
+  putStrLn$ "First execution took: "++show (end-start)

@@ -6,24 +6,26 @@ This directory contains a collection of programs using the Par monad.
 It is called "examples" but it also serves as most of our tests and
 benchmarks as well.
 
-The primary commands of interest in this directory are:
+Building examples:
 
-    make deps
-    make
-    make test
+    ./generate_cabal.sh
+    cabal install
 
 Make deps will install package dependencies that aren't already
 installed by monad-par itself.
 
-Also, this directory provides benchmarking.  Ranging from the simple:
+BENCHMARKING
+=============================
+
+This directory provides benchmarking.  Ranging from the simple:
 
     SHORTRUN=1 THREADS="1" ./benchmark.hs
 
-To the involved:
+To the more involved:
 
     KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.hs
 
-Both of which will populate a file named results_$HOSTNAME.dat.
+Both of the above will populate a file named results_$HOSTNAME.dat.
 Typically that will be followed by the following call to file the
 results:
 

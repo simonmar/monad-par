@@ -24,6 +24,7 @@ import Control.Monad.IO.Class
 
 import Data.Array.Accelerate (Acc, Arrays)
 #ifdef ACCELERATE_CUDA_BACKEND
+#warning "Loading REAL, LIVE CUDA BACKEND..."
 import qualified Data.Array.Accelerate.CUDA as Acc
 #else
 import qualified Data.Array.Accelerate.Interpreter as Acc
