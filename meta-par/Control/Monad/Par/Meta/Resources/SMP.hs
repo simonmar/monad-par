@@ -18,7 +18,6 @@ module Control.Monad.Par.Meta.Resources.SMP (
   , wsForCaps
 ) where
 
-import Control.Concurrent
 import Control.Monad
 
 import Data.Concurrent.Deque.Reference as R
@@ -86,7 +85,7 @@ startupForCaps caps = St st
           dbgTaggedMsg 2 $ BS.pack $ printf "\t%s\n" (show caps)
           let caps' = nub caps
           forM_ caps' $ \n ->
-            void $ spawnWorkerOnCPU ws n
+            spawnWorkerOnCPU ws n >> return ()
 
 {-# INLINE randModN #-}
 randModN :: Int -> HotVar GenIO -> IO Int
