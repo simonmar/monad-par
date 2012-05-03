@@ -52,6 +52,13 @@ Library
 
   if flag(cuda)
      ghc-options: -DACCELERATE_CUDA_BACKEND
+     Build-depends: accelerate-cuda
+
+  if flag(debug)
+     ghc-options: -DDEBUG
 
 flag cuda
+  default:           False
+
+flag debug
   default:           False

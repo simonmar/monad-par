@@ -89,7 +89,7 @@ spawnAcc comp = do
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
     iv <- new
     let wrappedComp = do
-          when dbg $ printf "running Accelerate computation\n"
+          when dbg $ printf$ "running Accelerate computation:\n"++show comp++"\n"
           ans <- evaluate $ Acc.run comp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
@@ -125,7 +125,6 @@ unsafeHybrid convert (parComp, accComp) = do
 -- and runs it.
 gpuDaemon :: IO ()
 gpuDaemon = do
-  when dbg $ printf "gpu daemon entering loop\n" 
   mwork <- R.tryPopL gpuOnlyQueue
   case mwork of
     Just work -> work

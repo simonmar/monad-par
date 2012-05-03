@@ -23,14 +23,15 @@ module Control.Monad.Par.Meta.AccSMP
     runParIO,
  
     -- Reexport the ParAccelerate class:
---    module Control.Monad.Par.Accelerate
-    AC.ParAccelerate
-
+--    AC.ParAccelerate(..),
+    --    module Control.Monad.Par.Accelerate,
+    module AC, 
+    module PC    
  ) where
 
 import Data.Monoid
-import qualified Control.Monad.Par.Class as PC
-import qualified Control.Monad.Par.Accelerate as AC
+import Control.Monad.Par.Class as PC
+import Control.Monad.Par.Accelerate as AC
 import qualified Control.Monad.Par.Meta as Meta 
 import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
