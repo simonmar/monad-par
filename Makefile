@@ -86,9 +86,13 @@ mega-install-gpu:
 # Testing 
 # --------------------------------------------------------------------------------
 
+test:
+	$(MAKE) mega-install CABAL_ARGS='--enable-tests --disable-documentation'
+
 # Running a full test uses cabal-dev to sandbox the build.
-test: 
+validate: 
 	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='--enable-tests --disable-documentation'
+# force-reinstalls
 # SANDBOX=`pwd`/cabal-dev
 # pushd monad-par
 # cabal-dev -s $SANDBOX configure --with-ghc=$GHC --with-ghc-pkg=$GHC_PKG --enable-tests
