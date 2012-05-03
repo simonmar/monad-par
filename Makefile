@@ -72,15 +72,15 @@ install-with-tests:
 install-all:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
-jenkins-all-versions:
-	${CABAL_INSTALL} ${OUR_PKGS} Deques/AbstractDeque/
-
 mega-install:
 	${CABAL_INSTALL} ${ALL_PKGS} 
 
 mega-install-gpu:
 	${CABAL_INSTALL} -fcuda ${ALL_GPU_PKGS} 
 
+# For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:
+jenkins-all-versions:
+	${CABAL_INSTALL} ${OUR_PKGS} Deques/AbstractDeque/
 
 # --------------------------------------------------------------------------------
 # Testing 

@@ -13,9 +13,14 @@ install:
 # it passes a bunch of different flags.
 test: 
 	./generate_cabal.sh
-	ghc --make benchmark.hs -o benchmark.run
+	ghc -threaded --make benchmark.hs -o benchmark.run
 	SHORTRUN=1 THREADS="1" ./benchmark.run
 
 clean:
 	cabal clean
 	rm -rf bin
+
+
+test:
+	./bin/parfib.exe
+	./bin/mandel.exe
