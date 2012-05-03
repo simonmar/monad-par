@@ -18,7 +18,6 @@ module Control.Monad.Par.Meta.Resources.SMP (
   , wsForCaps
 ) where
 
-import Control.Concurrent
 import Control.Monad
 
 import Data.Concurrent.Deque.Reference as R
@@ -36,6 +35,14 @@ import Control.Monad.Par.Meta
 
 import Control.Monad.Par.Meta.HotVar.IORef
 import Control.Monad.Par.Meta.Resources.Debugging (dbgTaggedMsg)
+
+#if __GLASGOW_HASKELL__ >= 702
+import Control.Concurrent (getNumCapabilities)
+#else
+import GHC.Conc (numCapabilities)
+getNumCapabilities = return numCapabilities
+#endif
+
 
 -- | Create an SMP resource for all capabilities. 
 mkResource :: Int -- ^ The number of steal attempts per 'WorkSearch' call.
@@ -78,7 +85,7 @@ startupForCaps caps = St st
           dbgTaggedMsg 2 $ BS.pack $ printf "\t%s\n" (show caps)
           let caps' = nub caps
           forM_ caps' $ \n ->
-            void $ spawnWorkerOnCPU ws n
+            spawnWorkerOnCPU ws n >> return ()
 
 {-# INLINE randModN #-}
 randModN :: Int -> HotVar GenIO -> IO Int

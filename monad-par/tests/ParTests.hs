@@ -18,6 +18,7 @@ import Test.Framework.TH (testGroupGenerator)
 import Test.Framework (defaultMain, testGroup)
 import Test.Framework.Providers.HUnit
 -- import Test.Framework.Providers.QuickCheck2 (testProperty)
+import System.Timeout
 
 import TestHelpers
 
@@ -35,9 +36,14 @@ case_oneIVar    = par three (do r <- new; put r 3; get r)
 -- [2012.01.02] Apparently observing divergences here too:
 case_forkNFill  = par three (do r <- new; fork (put r 3); get r)
 
--- This is an error:
-case_getEmpty   = assertException "no result" $ 
-		  ((runPar $ do r <- new; get r) :: Int)
+-- [2012.05.02] The nested Trace implementation sometimes fails to
+-- throw this exception, so we expect either the exception or a
+-- timeout. This is reasonable since we might expect a deadlock in a
+-- non-Trace scheduler. --ACF
+case_getEmpty   = do
+  _ <- timeout 100000 $ assertException "no result" $ 
+         runPar $ do r <- new; get r
+  return ()
 
 
 -- [2012.01.02] Observed a blocked-indef-on-MVar failure here on

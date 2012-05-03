@@ -182,10 +182,13 @@ boilerplate
 cat >> monad-par-examples.cabal <<EOF
 --------------------------------------------------------------------------------
 executable cholesky
+  -- disabling due to dependency hell with deepseq and containers
+  buildable: False
   main-is:           src/cholesky/cholesky.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
                      array, bytestring, containers, time, unix
+                     , deepseq > 1.2
   if flag(sparks)
      buildable:      False
 EOF

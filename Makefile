@@ -8,8 +8,7 @@
 # Set up some Variables
 # --------------------------------------------------------------------------------
 
-OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/  \
-  abstract-par-accelerate/ meta-par-accelerate/
+OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
 
 # This isn't really meant to be distributed:
 # meta-par-cuda/
@@ -21,12 +20,15 @@ NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
   distributed-process/network-transport \
   distributed-process/network-transport-pipes/
 
-ACC_PKGS= accelerate/ accelerate/accelerate-io/
+ACC_PKGS= accelerate/ accelerate/accelerate-io/ \
+	  abstract-par-accelerate/ meta-par-accelerate/
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
 
 ALL_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
 ALL_NETWORK_PKGS = ${ALL_PKGS} ${NETWORK_PKGS}
 ALL_GPU_PKGS = ${ALL_PKGS} ${ACC_GPU_PKGS}
+
+ALL_VERSION_PKGS= ${OUR_PKGS} Deques/AbstractDeque/
 
 # if [ "$HADDOCK" == "" ];
 # then HADDOCK=`which haddock`
@@ -42,6 +44,10 @@ ifeq ($(GHC),)
   GHC=`which ghc`
 endif 
 
+ifeq ($(GHC_PKG),)
+  GHC_PKG=`which ghc-pkg`
+endif
+
 ifeq ($(HADDOCK),)
   HADDOCK= "$(HOME)/.cabal/bin/haddock"
 endif
@@ -50,7 +56,8 @@ ifeq ($(CABAL),)
   CABAL= cabal
 endif
 
-CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} ${CABAL_ARGS}
+CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
+  ${CABAL_ARGS}
 
 # --------------------------------------------------------------------------------
 # Installation
@@ -65,6 +72,8 @@ install-with-tests:
 install-all:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
+jenkins-all-versions:
+	${CABAL_INSTALL} ${OUR_PKGS} Deques/AbstractDeque/
 
 mega-install:
 	${CABAL_INSTALL} ${ALL_PKGS} 

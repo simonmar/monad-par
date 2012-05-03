@@ -98,7 +98,8 @@ type Tiles3D = Map (Int, Int, Int) (IVar Tile)
 -- NFData is needed for spawnP.  Use default instances.
 instance NFData Matrix
 instance NFData Tile where
--- instance NFData Tiles3D where
+
+instance NFData Tiles3D where
 -- ^^ The automatic instance for Maps was REMOVED in Deepseq 1.2
 --    Deepseq 1.1 will cause a problem here.  We force 1.2 in the monad-par.cabal file.
 
