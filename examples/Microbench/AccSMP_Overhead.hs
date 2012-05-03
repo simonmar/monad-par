@@ -50,10 +50,11 @@ main = do
   let 
       v1 = A.fromList (A.Z A.:. (5::Int)) [1..5::Float]
       v2 = A.fromList (A.Z A.:. (5::Int)) [6..10::Float]
-    
+      acc = dotpAcc v1 v2    
+      
       runone = do     
         start <- getPOSIXTime
-        x <- evaluate$ runPar $ spawnAcc (dotpAcc v1 v2) >>= get 
+        x <- evaluate$ runPar $ spawnAcc acc >>= get 
         putStrLn$ "Result "++show x
         end <- getPOSIXTime
         return (end-start)
