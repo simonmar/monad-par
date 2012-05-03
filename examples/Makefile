@@ -17,10 +17,11 @@ test:
 	SHORTRUN=1 THREADS="1" ./benchmark.run
 
 clean:
-	cabal clean
+	cabal clean || echo 
 	rm -rf bin
 
-
-test:
-	./bin/parfib.exe
-	./bin/mandel.exe
+# TODO: A cheap way to run everything for a quick test without having to
+# rely on the benchmark script.
+# runall:
+# 	./bin/parfib.exe
+# 	./bin/mandel.exe
