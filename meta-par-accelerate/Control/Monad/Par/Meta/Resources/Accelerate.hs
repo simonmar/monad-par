@@ -28,7 +28,7 @@ import Data.Array.Accelerate (Acc, Arrays)
 -- #warning "Loading REAL, LIVE CUDA BACKEND..."
 -- import qualified Data.Array.Accelerate.CUDA as Acc
 -- #else
--- import qualified Data.Array.Accelerate.Interpreter as Acc
+import qualified Data.Array.Accelerate.Interpreter as Run
 -- #endif
 
 import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
@@ -167,11 +167,11 @@ defaultSteal = WS sa
 
 -- Generic instance for Meta.Par, needs to be newtype-derived for specific schedulers.
 instance AC.ParAccelerate IVar Par where 
-  runAcc       = error "Accelerate resource -- runAcc not implemented yet"
+  runAcc       = runAccWith Run.run
   spawnAcc     = error "Accelerate resource -- spawnAcc not implemented yet"
   compileAcc   = error "Accelerate resource -- compileAcc not implemented yet"
   unsafeHybrid = error "Accelerate resource -- unsafeHybrid not implemented yet"  
-  getDefaultAccImpl = error "Accelerate resource -- getDefaultAccImpl not implemented yet"  
+  getDefaultAccImpl = return Run.run -- TEMP! FIXME - returning interpreter for now.
   
   runAccWith       = runAccWith
   spawnAccWith     = spawnAccWith

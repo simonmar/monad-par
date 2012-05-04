@@ -47,7 +47,8 @@ class ParFuture iv p => ParAccelerate iv p where
   -- calling `runAcc`.  That choice is deferred to the point where
   -- `runPar` is invoked for the scheduler in question.
   runAcc   :: (Arrays a) => Acc a -> p a
-  runAcc comp = spawnAcc comp >>= get
+    
+runAcc comp = spawnAcc comp >>= get
 
   -- | Like `runAcc` but runs the Accelerate computation asynchronously.
   spawnAcc :: (Arrays a) => Acc a -> p (iv a)
@@ -94,7 +95,7 @@ class ParFuture iv p => ParAccelerate iv p where
 
   -- Retrieve the Accelerate @run@ function that is the default for
   -- this execution, i.e. the one used for `runAcc` or `spawnAcc`.
-  getDefaultAccImpl :: p (Acc a -> a)
+  getDefaultAccImpl :: Arrays a => p (Acc a -> a)
 
   -- | Like `runAcc` but specify a specific Accelerate implementation, e.g. @CUDA.run@.
   runAccWith   :: (Arrays a) => (Acc a -> a) -> Acc a -> p a
