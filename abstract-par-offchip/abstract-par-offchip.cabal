@@ -1,15 +1,8 @@
 Name:                abstract-par-offchip
 Version:             0.3
-Synopsis:            Provides the class ParAccelerate, nothing more.
+Synopsis:            
 
-Description:         Following the convention the @abstract-par@ package,
-                     this package simply defines an interface, in the form of a
-		     type class, and does not contain any implementation.
-
-                     Importing this module gives the user an API to
-                     access @Accelerate@ computations from within
-                     @Par@ computations, with the added benefit that
-                     the @Par@ can do integrated CPU/GPU scheduling.
+Description:         
 
 -- Version history:
 -- 

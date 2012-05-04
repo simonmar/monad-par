@@ -42,6 +42,8 @@ Library
                 , abstract-deque
                 , accelerate >= 0.12
                 , accelerate-io
+                -- TEMPORARY, until Async can be factored out:
+--                , accelerate-cuda
                 , abstract-par-accelerate 
                 , abstract-par-offchip
                 , QuickCheck 

@@ -4,6 +4,10 @@
 {-# LANGUAGE DefaultSignatures #-}
 {-# OPTIONS_GHC -Wall #-}
 
+-- | This module is conceptually part of "Control.Monad.Par.Class", but
+--   is factored into a separate package because it depends on
+--   ConstraintKinds, available only in GHC 7.4 and later.
+
 module Control.Monad.Par.OffChip
        (
          -- * The Class
