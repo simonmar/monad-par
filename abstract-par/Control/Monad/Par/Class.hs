@@ -29,18 +29,17 @@ module Control.Monad.Par.Class
     ParFuture(..)
   -- * IVars
   , ParIVar(..)
-  -- * Channels (Streams)
-  , ParChan(..)
--- define DIST_MONAD_PAR
-#ifdef DIST_MONAD_PAR
-  -- * Distributed Par monads
-  , ParDist(..)
-#endif
+  
+    -- RRN: Not releasing this interface until there is a nice implementation of it:
+    --  Channels (Streams)
+    --  , ParChan(..)
+
   , NFData()
   )
 where
 
 import Control.DeepSeq
+import GHC.Exts (Constraint)
 
 --------------------------------------------------------------------------------
 
@@ -122,7 +121,8 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
 		  put_ v a
 		  return v
 
-  
+--------------------------------------------------------------------------------  
+
 -- class ParYieldable ?? 
   -- TODO: I think we should add yield officially:
 
@@ -130,6 +130,8 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
   -- necessary in most cases).
   --  yield  :: m ()
 
+
+--------------------------------------------------------------------------------
 
 -- | @ParChan@ provides communication via streams of values between
 --   computations in a Par monad.  Channels in this case are split

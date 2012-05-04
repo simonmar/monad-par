@@ -1,5 +1,5 @@
 {-# LANGUAGE ScopedTypeVariables, FlexibleInstances, 
-     MultiParamTypeClasses, UndecidableInstances
+     MultiParamTypeClasses, UndecidableInstances, CPP
   #-}
 
 -- | This module provides a notion of (Splittable) State that is
@@ -61,6 +61,8 @@ instance (SplittableState s, PC.ParIVar iv p)
   put_ v x = lift$ PC.put_ v x
   newFull_ = lift . PC.newFull_
 
+-- ParChan not released yet:
+#if 0
 -- | Likewise, adding State to a `ParChan` monad yield s another `ParChan` monad.
 instance (SplittableState s, PC.ParChan snd rcv p) 
       =>  PC.ParChan snd rcv (S.StateT s p) 
@@ -68,6 +70,7 @@ instance (SplittableState s, PC.ParChan snd rcv p)
    newChan  = lift   PC.newChan
    recv   r = lift $ PC.recv r
    send s x = lift $ PC.send s x
+#endif
 
 
 ----------------------------------------------------------------------------------------------------
@@ -100,6 +103,7 @@ instance (SplittableState s, PC.ParIVar iv p)
   put_ v x = lift$ PC.put_ v x
   newFull_ = lift . PC.newFull_
 
+#if 0
 -- | Likewise, adding State to a `ParChan` monad yield s another `ParChan` monad.
 instance (SplittableState s, PC.ParChan snd rcv p) 
       =>  PC.ParChan snd rcv (SL.StateT s p)
@@ -107,5 +111,6 @@ instance (SplittableState s, PC.ParChan snd rcv p)
    newChan  = lift   PC.newChan
    recv   r = lift $ PC.recv r
    send s x = lift $ PC.send s x
+#endif
 
 -- </DUPLICATE_CODE>
