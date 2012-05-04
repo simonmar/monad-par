@@ -167,15 +167,12 @@ defaultSteal = WS sa
 
 -- Generic instance for Meta.Par, needs to be newtype-derived for specific schedulers.
 instance AC.ParAccelerate IVar Par where 
-  runAcc       = runAccWith Run.run
-  spawnAcc     = error "Accelerate resource -- spawnAcc not implemented yet"
-  compileAcc   = error "Accelerate resource -- compileAcc not implemented yet"
-  unsafeHybrid = error "Accelerate resource -- unsafeHybrid not implemented yet"  
-  getDefaultAccImpl = return Run.run -- TEMP! FIXME - returning interpreter for now.
-  
-  runAccWith       = runAccWith
-  spawnAccWith     = spawnAccWith
-  unsafeHybridWith = unsafeHybridWith
+  getDefaultAccImpl = return Run.run -- TEMP! FIXME - returning interpreter for now.  
+  runAccWith        = runAccWith
+  spawnAccWith      = spawnAccWith
+  unsafeHybridWith  = unsafeHybridWith
+
+--  compileAcc   = error "Accelerate resource -- compileAcc not implemented yet"
 
 -- instance OC.ParOffChip Acc IVar Par where
 --   type OffChipConstraint a = Arrays a
