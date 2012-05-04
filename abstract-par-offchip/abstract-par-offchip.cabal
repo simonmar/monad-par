@@ -1,0 +1,31 @@
+Name:                abstract-par-offchip
+Version:             0.3
+Synopsis:            
+
+Description:         
+
+-- Version history:
+-- 
+-- 0.3: Initial release.
+
+Homepage:            https://github.com/simonmar/monad-par
+License:             BSD3
+License-file:        LICENSE
+Author:              Adam Foltzer 2011-2012
+Maintainer:          Ryan Newton <rrnewton@gmail.com>
+Copyright:           (c) Adam Foltzer 2011-2012
+Stability:           Experimental
+Category:            Parallelism
+Build-type:          Simple
+Cabal-version:       >=1.8
+
+Library
+  Exposed-modules: 
+                 -- Provides the class ParOffChip:
+                 Control.Monad.Par.OffChip
+   
+  -- Only GHC 7.4 and greater have constraint kinds.
+  Build-depends: base >= 4.5 
+               , abstract-par >= 0.3
+
+  ghc-options:    -Wall

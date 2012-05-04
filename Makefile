@@ -8,7 +8,7 @@
 # Set up some Variables
 # --------------------------------------------------------------------------------
 
-OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
+OUR_PKGS= abstract-par/ abstract-par-offchip/ monad-par-extras/ monad-par/ meta-par/
 
 # This isn't really meant to be distributed:
 # meta-par-cuda/
@@ -92,6 +92,7 @@ test:
 # Running a full test uses cabal-dev to sandbox the build.
 validate: 
 	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='--enable-tests --disable-documentation'
+	(cd examples; $(MAKE) validate)
 # force-reinstalls
 # SANDBOX=`pwd`/cabal-dev
 # pushd monad-par
@@ -109,8 +110,9 @@ doc:
 	rm -rf docs
 	mkdir docs
         # Link EVERYTHING to Haddock:
-	${CABAL_INSTALL} ${ALL_PKGS} --enable-documentation \
-           --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' --with-haddock=${HADDOCK}
+	${CABAL_INSTALL} ${ALL_GPU_PKGS} --enable-documentation \
+           --haddock-html-location='http://hackage.haskell.org/packages/archive/$pkg/latest/doc/html' \
+           --with-haddock=${HADDOCK} --force-reinstalls
 	mv */dist/doc/html/* docs/
 	mv ./Deques/*/dist/doc/html/* docs/
 	mv ./accelerate/*/dist/doc/html/* docs/

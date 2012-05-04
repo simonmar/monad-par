@@ -26,8 +26,12 @@ import qualified Data.Array.Accelerate.IO as IO
 
 --------------------------------------------------------------------------------
 
-
 -- | A class containing Accelerate-specific `Par` operations.
+-- 
+-- A minimal complete instance contains:
+--  * one of `runAcc` or `spawnAcc` 
+--  * one of `runAccWith` or `spawnAccWith`
+--  * `compileAcc`.
 class ParFuture iv p => ParAccelerate iv p where 
   
   -- | Run an Accelerate computation and wait for its result.  In the
@@ -38,13 +42,37 @@ class ParFuture iv p => ParAccelerate iv p where
   -- 
   -- Moreover, when configured with a high-performance /CPU/ Accelerate backend
   -- in the future this routine can enable automatic CPU/GPU work partitioning.
+  -- 
+  -- The specific Accelerate implementation is NOT specified when
+  -- calling `runAcc`.  That choice is deferred to the point where
+  -- `runPar` is invoked for the scheduler in question.
   runAcc   :: (Arrays a) => Acc a -> p a
   runAcc comp = spawnAcc comp >>= get
 
   -- | Like `runAcc` but runs the Accelerate computation asynchronously.
   spawnAcc :: (Arrays a) => Acc a -> p (iv a)
+  -- This default implementation is actually QUITE BAD.  It's an
+  -- anti-pattern.  We don't want to wait until the spawned
+  -- computation is executed to enqueue the GPU computation.  This is
+  -- a problem with child-stealing Par implemenations, but not so much
+  -- with parent-stealing ones.
+  spawnAcc acc = spawn_ $ runAcc acc
+
+  -- | Prepare a GPU computation for repeated execution.  
+  -- 
+  -- Typically, this is applied to its first argument once in an outer
+  -- scope then applied to its second argument repeatedly inside a loop.
+  -- 
+  -- Whereas the normal `runAcc` will /attempt/ to cache compiled
+  -- programs and avoid recompilation, this function guarantees no
+  -- recompilation and further avoids some overhead from re-executing
+  -- the Accelerate front-end.
+  -- 
+  -- See "Data.Array.Accelerate.CUDA.run1" for more explanation.
+  compileAcc :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> a -> p b
+
   
-  -- | Spawn an computation which may execute /either/ on the CPU or GPU
+-- | Spawn an computation which may execute /either/ on the CPU or GPU
   -- based on runtime load.  The CPU and GPU implementations may employ
   -- completely different algorithms; this is an UNSAFE operation which
   -- will not guarantee determinism unless the user ensures that the
@@ -56,6 +84,36 @@ class ParFuture iv p => ParAccelerate iv p where
   -- > unsafeHybrid Data.Array.Accelerate.IO.toVector
   --
   unsafeHybrid :: Arrays b => (b -> a) -> (p a, Acc b) -> p (iv a)
+
+  -- This default implementation simply /always/ runs the GPU version:
+  unsafeHybrid cvrt (_, acc) = spawn_ $ do x <- runAcc acc
+                                           return (cvrt x)
+                                           
+  ------------------------------------------------------------
+  -- * Control over selecting the Accelerate implementation.
+
+  -- Retrieve the Accelerate @run@ function that is the default for
+  -- this execution, i.e. the one used for `runAcc` or `spawnAcc`.
+  getDefaultAccImpl :: p (Acc a -> a)
+
+  -- | Like `runAcc` but specify a specific Accelerate implementation, e.g. @CUDA.run@.
+  runAccWith   :: (Arrays a) => (Acc a -> a) -> Acc a -> p a
+  runAccWith runner comp = spawnAccWith runner comp >>= get  
+  
+  -- | Analogous to `runAccWith`.
+  spawnAccWith :: (Arrays a) => (Acc a -> a) -> Acc a -> p (iv a)
+  spawnAccWith runner acc = spawn_ $ runAccWith runner  acc
+
+  -- | Analogous to other @*With@ functions.
+  unsafeHybridWith :: Arrays b => (Acc b -> b) -> (b -> a) -> (p a, Acc b) -> p (iv a)
+  -- This default implementation simply /always/ runs the GPU version:
+  unsafeHybridWith runner cvrt (_, acc) = 
+    spawn_ $ do x <- runAccWith runner acc
+                return (cvrt x)
+
+  -- TODO: to be fully consistent we should perhaps have
+  -- compileAccWith, but that gets complicated.
+
 
 
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- | A meta-par /scheduler/ for programming with shared memory
@@ -22,18 +23,20 @@ module Control.Monad.Par.Meta.AccSMP
     -- | Same as `runPar` but don't hide the IO.
     runParIO,
  
-    -- Reexport the ParAccelerate class:
---    AC.ParAccelerate(..),
-    --    module Control.Monad.Par.Accelerate,
+    -- * Par-monad operations, including GPU operations    
     module AC, 
+--    module OC, 
     module PC    
  ) where
 
+-- import Data.Array.Accelerate (Acc,Arrays)
+-- import Data.Array.Accelerate.CUDA (Async)
 import Data.Monoid
 import Control.Monad.Par.Class as PC
 import Control.Monad.Par.Accelerate as AC
+-- import qualified Control.Monad.Par.OffChip    as OC
 import qualified Control.Monad.Par.Meta as Meta 
-import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
+import qualified Control.Monad.Par.Meta.Resources.Accelerate as Rsrc
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
 
@@ -42,27 +45,38 @@ import GHC.Conc (numCapabilities)
 tries :: Int
 tries = numCapabilities
 
--- timeit :: IO () -> IO Double
--- timeit act = do 
---   start <- getCurrentTime
--- printf "Creating vector took %0.3f sec.\n"
---             ((fromRational$ toRational $ diffUTCTime end start) :: Double)
-
-
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 
            PC.ParFuture     Meta.IVar,
            PC.ParIVar       Meta.IVar,
            AC.ParAccelerate Meta.IVar 
-          )
-          -- NOT MonadIO
+          ) -- NOT MonadIO  
 
 resource :: Meta.Resource
-resource = SMP.mkResource tries `mappend` Accelerate.mkResource
+resource = SMP.mkResource tries `mappend` Rsrc.mkResource
+
+-- <boilerplate>
+{-
+instance OC.ParOffChip Acc Meta.IVar Par where 
+  type OffChipConstraint a = Arrays a 
+  runOffChip   r x = AccSMPPar$ Rsrc.runAcc   r x
+  spawnOffChip r x = AccSMPPar$ Rsrc.spawnAcc r x
+  unsafeHybrid r cvt (AccSMPPar p,a) = AccSMPPar$ Rsrc.unsafeHybrid r cvt (p,a)  
+-}
+
+-- run1Async :: (Arrays a, Arrays b) => (Acc a -> Acc b) -> a -> Async b
+
+
+{-
+instance OC.ParOffChip Async Meta.IVar Par where 
+  type OffChipConstraint a = Arrays a 
+  runOffChip   r x = AccSMPPar$ Rsrc.runAcc   r x
+  spawnOffChip r x = AccSMPPar$ Rsrc.spawnAcc r x
+  unsafeHybrid r cvt (AccSMPPar p,a) = AccSMPPar$ Rsrc.unsafeHybrid r cvt (p,a)  
+-}
 
 runPar   :: Meta.Par a -> a
-runParIO :: Meta.Par a -> IO a
-
 runPar   = Meta.runMetaPar   resource
 
+runParIO :: Meta.Par a -> IO a
 runParIO = Meta.runMetaParIO resource
