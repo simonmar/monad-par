@@ -76,8 +76,8 @@ instance OC.ParOffChip Async Meta.IVar Par where
   unsafeHybrid r cvt (AccSMPPar p,a) = AccSMPPar$ Rsrc.unsafeHybrid r cvt (p,a)  
 -}
 
-runPar   :: Meta.Par a -> a
-runPar   = Meta.runMetaPar   resource
+runPar   :: Par a -> a
+runPar (AccSMPPar p) = Meta.runMetaPar resource p
 
-runParIO :: Meta.Par a -> IO a
-runParIO = Meta.runMetaParIO resource
+runParIO :: Par a -> IO a
+runParIO (AccSMPPar p) = Meta.runMetaParIO resource p
