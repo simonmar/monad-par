@@ -16,6 +16,12 @@ test:
 	ghc -threaded --make benchmark.hs -o benchmark.run
 	SHORTRUN=1 THREADS="1" ./benchmark.run
 
+validate: 
+	./generate_cabal.sh
+	ghc -threaded --make benchmark.hs -o benchmark.run
+#	SHORTRUN=1 THREADS="1" ./benchmark.run
+	cabal-dev install -s ../cabal-dev/
+
 clean:
 	cabal clean || echo 
 	rm -rf bin

@@ -14,7 +14,8 @@
 
 module Control.Monad.Par.Meta.Resources.Accelerate 
   (
-      mkResource
+      mkResource,
+      runAcc, spawnAcc, unsafeHybrid
   ) where
 
 import Control.Concurrent
@@ -23,12 +24,12 @@ import Control.Monad
 import Control.Monad.IO.Class
 
 import Data.Array.Accelerate (Acc, Arrays)
-#ifdef ACCELERATE_CUDA_BACKEND
-#warning "Loading REAL, LIVE CUDA BACKEND..."
-import qualified Data.Array.Accelerate.CUDA as Acc
-#else
-import qualified Data.Array.Accelerate.Interpreter as Acc
-#endif
+-- #ifdef ACCELERATE_CUDA_BACKEND
+-- #warning "Loading REAL, LIVE CUDA BACKEND..."
+-- import qualified Data.Array.Accelerate.CUDA as Acc
+-- #else
+-- import qualified Data.Array.Accelerate.Interpreter as Acc
+-- #endif
 
 import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
 import Data.Concurrent.Deque.Reference as R
@@ -37,9 +38,10 @@ import System.IO.Unsafe
 
 import Text.Printf
 
-import qualified Control.Monad.Par.Accelerate as AC
+-- import qualified Control.Monad.Par.Accelerate as AC
+-- import qualified Control.Monad.Par.OffChip    as OC
 import Control.Monad.Par.Meta 
-import Control.Monad.Par.Class (new,put_)
+-- import Control.Monad.Par.Class (new,put_)
 
 dbg :: Bool
 #ifdef DEBUG
@@ -84,23 +86,25 @@ resultQueue = unsafePerformIO R.newQ
 --------------------------------------------------------------------------------
 
 -- | See documentation for `Control.Monad.Par.Accelerate.spawnAcc`
-spawnAcc :: (Arrays a) => Acc a -> Par (IVar a)
-spawnAcc comp = do 
+spawnAcc :: (Arrays a) => (Acc a -> a) -> Acc a -> Par (IVar a)
+spawnAcc runner comp = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
     iv <- new
     let wrappedComp = do
           when dbg $ printf$ "running Accelerate computation:\n"++show comp++"\n"
-          ans <- evaluate $ Acc.run comp
+          ans <- evaluate $ runner comp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
             put_ iv ans
     liftIO $ R.pushR gpuOnlyQueue wrappedComp
     return iv               
 
+runAcc  :: (Arrays a) => (Acc a -> a) -> Acc a -> Par a
+runAcc runner comp = spawnAcc runner comp  >>= get
 
 -- | See documentation for `Control.Monad.Par.Accelerate.unsafeHybrid`
-unsafeHybrid :: Arrays b => (b -> a) -> (Par a, Acc b) -> Par (IVar a)
-unsafeHybrid convert (parComp, accComp) = do 
+unsafeHybrid :: Arrays b => (Acc b -> b) -> (b -> a) -> (Par a, Acc b) -> Par (IVar a)
+unsafeHybrid runner convert (parComp, accComp) = do 
     when dbg $ liftIO $ printf "spawning Accelerate computation\n"
     iv <- new
     let wrappedParComp :: Par ()
@@ -111,7 +115,7 @@ unsafeHybrid convert (parComp, accComp) = do
         wrappedAccComp = do
           when dbg $ printf "running Accelerate computation\n"
 --          ans <- convert $ Acc.run accComp
-          let ans = convert $ Acc.run accComp
+          let ans = convert $ runner accComp
           R.pushL resultQueue $ do
             when dbg $ liftIO $ printf "Accelerate computation finished\n"
             put_ iv ans
@@ -152,6 +156,12 @@ defaultSteal = WS sa
 --------------------------------------------------------------------------------
 
 -- Generic instance for Meta.Par, needs to be newtype-derived for specific schedulers.
-instance AC.ParAccelerate IVar Par where 
-  spawnAcc     = spawnAcc
-  unsafeHybrid = unsafeHybrid
+-- instance AC.ParAccelerate IVar Par where 
+--   spawnAcc     = spawnAcc
+--   unsafeHybrid = unsafeHybrid
+
+-- instance OC.ParOffChip Acc IVar Par where
+--   type OffChipConstraint a = Arrays a
+--   runOffChip = runAcc
+--   spawnOffChip = spawnAcc
+--   unsafeHybrid = unsafeHybrid

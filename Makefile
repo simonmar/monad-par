@@ -92,6 +92,7 @@ test:
 # Running a full test uses cabal-dev to sandbox the build.
 validate: 
 	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='--enable-tests --disable-documentation'
+	(cd examples; $(MAKE) validate)
 # force-reinstalls
 # SANDBOX=`pwd`/cabal-dev
 # pushd monad-par

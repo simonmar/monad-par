@@ -26,7 +26,6 @@ import qualified Data.Array.Accelerate.IO as IO
 
 --------------------------------------------------------------------------------
 
-
 -- | A class containing Accelerate-specific `Par` operations.
 class ParFuture iv p => ParAccelerate iv p where 
   

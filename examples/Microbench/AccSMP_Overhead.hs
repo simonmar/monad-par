@@ -3,7 +3,8 @@
 -- What is the overhead of spawning a single operation on the GPU?
 -- In this microbenchmark we measure it.
 
-import Control.Monad.Par.Accelerate
+-- import Control.Monad.Par.Accelerate
+import Control.Monad.Par.OffChip
 import Control.Monad.Par.Meta.AccSMP (runPar, get)
 
 -- import System.Random.MWC
@@ -19,11 +20,22 @@ import Control.Exception (evaluate)
 
 #ifdef USECUDA
 import Foreign.CUDA.Driver.Device (initialise)
+import qualified Data.Array.Accelerate.CUDA        as Run
+#else
+import qualified Data.Array.Accelerate.Interpreter as Run
 #endif
 
+--------------------------------------------------------------------------------
+-- Helpers:
+
+runAcc   = runOffChip   Run.run
+spawnAcc = spawnOffChip Run.run
+
+#ifdef USECUDA
+Run.run1 = 
+#endif
 
 --------------------------------------------------------------------------------
-
 
 -- Dot product
 -- -----------
@@ -35,11 +47,9 @@ dotpAcc xs ys
     in
     A.fold (+) 0 (A.zipWith (*) xs' ys')
 
-
 main = do 
   putStrLn "Measuring one roundtrip through the GPU:"
   
-
 #ifdef USECUDA
   start <- getPOSIXTime
   initialise []
@@ -54,7 +64,7 @@ main = do
       
       runone = do     
         start <- getPOSIXTime
-        x <- evaluate$ runPar $ spawnAcc acc >>= get 
+        x <- evaluate$ runPar $ runAcc acc 
         putStrLn$ "Result "++show x
         end <- getPOSIXTime
         return (end-start)

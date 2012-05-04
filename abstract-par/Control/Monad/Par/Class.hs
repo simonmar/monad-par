@@ -39,7 +39,6 @@ module Control.Monad.Par.Class
 where
 
 import Control.DeepSeq
-import GHC.Exts (Constraint)
 
 --------------------------------------------------------------------------------
 

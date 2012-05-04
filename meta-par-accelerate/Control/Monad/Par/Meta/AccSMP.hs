@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts, MultiParamTypeClasses #-}
+{-# LANGUAGE ConstraintKinds, TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
 
 -- | A meta-par /scheduler/ for programming with shared memory
@@ -22,18 +23,17 @@ module Control.Monad.Par.Meta.AccSMP
     -- | Same as `runPar` but don't hide the IO.
     runParIO,
  
-    -- Reexport the ParAccelerate class:
---    AC.ParAccelerate(..),
-    --    module Control.Monad.Par.Accelerate,
-    module AC, 
+--    module AC, 
+    module OC, 
     module PC    
  ) where
 
+import Data.Array.Accelerate (Acc,Arrays)
 import Data.Monoid
 import Control.Monad.Par.Class as PC
-import Control.Monad.Par.Accelerate as AC
+import qualified Control.Monad.Par.OffChip    as OC
 import qualified Control.Monad.Par.Meta as Meta 
-import qualified Control.Monad.Par.Meta.Resources.Accelerate as Accelerate
+import qualified Control.Monad.Par.Meta.Resources.Accelerate as Rsrc
 import qualified Control.Monad.Par.Meta.Resources.SMP as SMP
 import GHC.Conc (numCapabilities)
 
@@ -52,13 +52,29 @@ tries = numCapabilities
 newtype Par a = AccSMPPar (Meta.Par a)
  deriving (Monad, Functor, 
            PC.ParFuture     Meta.IVar,
-           PC.ParIVar       Meta.IVar,
-           AC.ParAccelerate Meta.IVar 
+           PC.ParIVar       Meta.IVar
+--           OC.ParOffChip    Acc Meta.IVar 
+--           AC.ParAccelerate Meta.IVar 
           )
           -- NOT MonadIO
 
+-- runOffChip   :: (OffChipConstraint a) => (con a -> a) -> con a -> m a
+
+instance OC.ParOffChip Acc Meta.IVar Par where 
+  type OffChipConstraint a = Arrays a 
+  runOffChip   r x = AccSMPPar$ Rsrc.runAcc r x
+--   spawnOffChip = spawnAcc
+--   unsafeHybrid = unsafeHybrid
+
+  -- instance OC.ParOffChip Acc IVar Par where
+
+--   runOffChip = runAcc
+--   spawnOffChip = spawnAcc
+--   unsafeHybrid = unsafeHybrid
+
+  
 resource :: Meta.Resource
-resource = SMP.mkResource tries `mappend` Accelerate.mkResource
+resource = SMP.mkResource tries `mappend` Rsrc.mkResource
 
 runPar   :: Meta.Par a -> a
 runParIO :: Meta.Par a -> IO a

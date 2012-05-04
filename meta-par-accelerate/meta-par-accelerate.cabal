@@ -43,6 +43,7 @@ Library
                 , accelerate >= 0.12
                 , accelerate-io
                 , abstract-par-accelerate 
+                , abstract-par-offchip
                 , QuickCheck 
                 , transformers
                 , vector
