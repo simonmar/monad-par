@@ -7,9 +7,11 @@ module Control.Monad.Par.Accelerate
          -- * The Class
          ParAccelerate(..),
        
+#ifdef ACC_IO         
          -- * Example applications of `unsafeHybrid`
          unsafeHybridVector,
          unsafeHybridIArray
+#endif
        ) where 
 
 import Control.Monad.Par.Class
@@ -22,8 +24,10 @@ import qualified Data.Vector.Storable as Vector
 import Data.Array.Accelerate (Acc, Arrays, Shape)
 import Data.Array.Accelerate.Array.Sugar (EltRepr,Elt,Array,DIM1,toIArray)
 
+#ifdef ACC_IO         
 -- From 'accelerate-io', or 'accelerate" <= 0.10
 import qualified Data.Array.Accelerate.IO as IO 
+#endif
 
 --------------------------------------------------------------------------------
 
@@ -124,6 +128,7 @@ class ParFuture iv p => ParAccelerate iv p where
 
 --------------------------------------------------------------------------------
 
+#ifdef ACC_IO         
 -- | An example application of `unsafeHybrid` for vectors.
 unsafeHybridVector :: (Vector.Storable a, Elt a, 
                        IO.BlockPtrs (EltRepr a) ~ ((), Ptr a), 
@@ -144,3 +149,4 @@ unsafeHybridIArray :: ( EltRepr ix ~ EltRepr sh
                   ->  p (iv (a ix e))               
 unsafeHybridIArray = unsafeHybrid toIArray
                      --IO.toArray 
+#endif

@@ -1,5 +1,5 @@
 Name:                abstract-par-accelerate
-Version:             0.3.1
+Version:             0.3.2
 Synopsis:            Provides the class ParAccelerate, nothing more.
 
 Description:         Following the convention the @abstract-par@ package,
@@ -15,6 +15,7 @@ Description:         Following the convention the @abstract-par@ package,
 -- 
 -- 0.3: Initial release.
 -- 0.3.1: Tweak Accelerate dependencies.
+-- 0.3.2: Add 'io' flag
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
@@ -38,12 +39,20 @@ Library
                 , vector >= 0.9
                 , array 
 
-  if flag(newAccelerate) {
+  if flag(newAccelerate)
     Build-depends: accelerate >= 0.12
-                 , accelerate-io >= 0.12
-  } else {
+  else 
     Build-depends: accelerate >= 0.10 && < 0.12
-  }
+
+  if flag(io) && flag(newAccelerate)
+    Build-depends: accelerate-io >= 0.12
+
+  if flag(io)
+    cpp-options: -DACC_IO
+
+-- Mirroring accelerate-0.10's 'io' flag:
+flag io
+  default:        False
 
 flag newAccelerate
   default:        False
