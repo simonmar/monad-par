@@ -22,7 +22,7 @@ import qualified Data.Vector.Storable as Vector
 import Data.Array.Accelerate (Acc, Arrays, Shape)
 import Data.Array.Accelerate.Array.Sugar (EltRepr,Elt,Array,DIM1,toIArray)
 
--- From 'accelerate-io':
+-- From 'accelerate-io', or 'accelerate" <= 0.10
 import qualified Data.Array.Accelerate.IO as IO 
 
 --------------------------------------------------------------------------------

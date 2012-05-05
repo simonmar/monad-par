@@ -1,5 +1,5 @@
 Name:                abstract-par-accelerate
-Version:             0.3
+Version:             0.3.1
 Synopsis:            Provides the class ParAccelerate, nothing more.
 
 Description:         Following the convention the @abstract-par@ package,
@@ -14,6 +14,7 @@ Description:         Following the convention the @abstract-par@ package,
 -- Version history:
 -- 
 -- 0.3: Initial release.
+-- 0.3.1: Tweak Accelerate dependencies.
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
@@ -30,13 +31,19 @@ Library
   Exposed-modules: 
                  -- Provides the class ParAccelerate:
                  Control.Monad.Par.Accelerate
-
+  ghc-options:    -Wall
   Build-depends:  
                   base >= 4 && < 5
                 , abstract-par >= 0.3
-                , accelerate >= 0.12
-                , accelerate-io 
                 , vector >= 0.9
                 , array 
 
-  ghc-options:    -Wall
+  if flag(newAccelerate) {
+    Build-depends: accelerate >= 0.12
+                 , accelerate-io >= 0.12
+  } else {
+    Build-depends: accelerate >= 0.10 && < 0.12
+  }
+
+flag newAccelerate
+  default:        False

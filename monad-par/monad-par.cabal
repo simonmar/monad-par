@@ -15,7 +15,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2.3    : Restricted module export for 0.2 release.
 
 --  0.3      : Factored/reorganized modules and packages.  
---             This package is the original, core monad-par.
+--             *This* package is the original, core monad-par.
 
 
 Description:         This library offers an alternative parallel programming
@@ -47,7 +47,7 @@ Description:         This library offers an alternative parallel programming
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
-Author:              Simon Marlow
+Author:              Simon Marlow, Ryan Newton
 Maintainer:          Simon Marlow <marlowsd@gmail.com>
 Copyright:           (c) Simon Marlow 2011
 Stability:           Experimental
@@ -56,56 +56,18 @@ Build-type:          Simple
 Cabal-version:       >=1.8
 
 
-
 extra-source-files:
-     examples/benchlist.txt
-     examples/blackscholes_data.hs
-     examples/blackscholes.hs
-     examples/cholesky.hs
-     examples/cholesky_matrix6.dat
-     examples/coins.hs
-     examples/common.mk
-     examples/get_cholesky_data.sh
-     examples/Makefile
-     examples/mandel.hs
-     examples/matmult/ListAux.hs
-     examples/matmult/Makefile
-     examples/matmult/MatMult.hs
-     examples/matmult/matmult.stdout
-     examples/minimax/Board.hs
-     examples/minimax/Game.hs
-     examples/minimax/Main.hs
-     examples/minimax/Makefile
-     examples/minimax/minimax.stdout
-     examples/minimax/Prog.hs
-     examples/minimax/Tree.hs
-     examples/minimax/Wins.hs
-     examples/nbody.hs
-     examples/ntimes
-     examples/ntimes_minmedmax
-     examples/parfib.hs
-     examples/partree/Makefile
-     examples/partree/partree.hs
-     examples/partree/Tree.hs
-     examples/plot_scaling.hs
-     examples/PortablePixmap.lhs
-     examples/primes.hs
-     examples/queens.hs
-     examples/run_tests.sh
-     examples/stream/DEVLOG.txt
-     examples/stream/disjoint_working_sets_pipeline.hs
-     examples/stream/fft_pipeline.hs
-     examples/stream/Makefile
-     examples/stream/simple1_measureSrc.hs
-     examples/sumeuler/ListAux.hs
-     examples/sumeuler/Makefile
-     examples/sumeuler/SumEuler.hs
-     examples/sumeuler/SumEulerPrimes.hs
-     examples/timeout.sh
      tests/AListTest.hs
-     tests/Test.hs
-     Control/Monad/Par/Stream.hs
-
+     tests/AllTests.hs
+     tests/AsyncTest.hs
+     tests/Makefile
+     tests/ParTests.hs
+     tests/TestHelpers.hs
+     tests/TestParDist.hs
+     tests/Test_ContReaderT.hs
+     tests/Test_ReaderContT.hs
+     tests/hs_cassandra_microbench.hs
+     tests/hs_cassandra_microbench2.hs
 
 Library
   Exposed-modules: 
@@ -126,41 +88,16 @@ Library
   Build-depends: base >= 4 && < 5
                -- This provides the interface which monad-par implements:
                , abstract-par 
+               , abstract-deque >= 0.1.4
                -- Extras such as parMap, RNG, State
                , monad-par-extras == 0.3.*
-
--- The parallel package currently requires deepseq 1.1:
---               , deepseq >= 1.1 && < 1.2
                , deepseq >= 1.1
-               , HUnit >= 1.2 
---               , QuickCheck <= 2
-               , QuickCheck 
-               , rdtsc >= 1.1.3.1
-               , split >= 0.1.2.3
-               , carray >= 0.1.5
                , array >= 0.3
-               , random >= 1.0.0.0
                , mwc-random >= 0.11
-               , transformers >= 0.2.2.0
-               , vector
                , containers
-               , mtl >= 2.0.1.0
                , parallel >= 3.1
-               , abstract-deque >= 0.1.4
-               , binary
-               , cereal >= 0.3
-               , bytestring >= 0.9
+               , mtl >= 2.0.1.0
 
-  if flag(MichaelScott) {
-    Build-depends: lockfree-queue
-  }
-                -- AList now depends on binary/cereal.
-
---               , chaselev-deque
---               , hashtables >= 1.0.0.0
-  -- NOTE!  These dependencies DO NOT include all dependencies required
-  -- by the examples/benchmarks.  Run "make deps" in the examples
-  -- directory.
   ghc-options: -O2
   Other-modules:
                ------------------------------------------------------------
@@ -168,35 +105,26 @@ Library
                ------------------------------------------------------------
 
                -- Strawman scheduler that forks IO threads:
---               , Control.Monad.Par.Scheds.ContFree
+               -- Control.Monad.Par.Scheds.ContFree,
 
                -- Internal logging framework:
-               Control.Monad.Par.Logging
+               -- Control.Monad.Par.Logging,
 
                -- Serial Elision is currently experimental:
-               , Control.Monad.Par.Scheds.SerialElision
-
+               -- Control.Monad.Par.Scheds.SerialElision
 
                ------------------------------------------------------------
                --                   Data Structures                      -- 
                ------------------------------------------------------------
 
                -- ILists are internal:
-               , Control.Monad.Par.IList
+               -- , Control.Monad.Par.IList
 
                -- RRN: Not exposing Streams or OpenLists yet.  Need to improve performance.
                -- We have some ideas for enabling bounded chans while preventing deadlock:
-               , Control.Monad.Par.OpenList
-               , Control.Monad.Par.Stream
+               -- , Control.Monad.Par.OpenList
+               -- , Control.Monad.Par.Stream
 
-               -- Unifinished, in addition to streams, we want associative key-value structures:
---               , Control.Monad.Par.IMap
-
-                -- Channels: Also not ready for primetime quite yet:
---               , Control.Monad.Par.Chan
-
-               -- More compact representation for [Bool]:
---               , Data.BitList
 
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
@@ -206,12 +134,12 @@ Test-Suite test-monad-par
                  , abstract-par, monad-par-extras
                  , array >= 0.3
                  , deepseq >= 1.2
-                 , binary
-                 , QuickCheck, HUnit, time
-                 , test-framework, test-framework-th
+                 , time
+                 , QuickCheck, HUnit
                  , test-framework-hunit, test-framework-quickcheck2
+                 , test-framework, test-framework-th
+                 -- , binary
 
 
-Flag MichaelScott
-  Description: Temporary flag.  Turn on MichaelScott lockfree queues for Remote.hs
-  Default:     False
+
+

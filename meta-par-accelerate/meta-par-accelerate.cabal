@@ -1,10 +1,11 @@
 Name:                meta-par-accelerate
-Version:             0.3
+Version:             0.3.1
 Synopsis:            Support for integrated Accelerate computations within Meta-par.
 
 -- Version history:
 -- 
 -- 0.3: Initial release.
+-- 0.3.1: tweak dependencies
 
 Description:        
   This package provides a 'Control.Monad.Par.Meta.Resource' for building meta-par
@@ -18,7 +19,7 @@ Description:
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
-Author:              Adam Foltzer 2011-2012
+Author:              Ryan Newton, Adam Foltzer 2011-2012
 Maintainer:          Ryan Newton <rrnewton@gmail.com>
 Copyright:           (c) Adam Foltzer 2011-2012
 Stability:           Experimental
@@ -40,12 +41,8 @@ Library
                 , abstract-par
                 , meta-par
                 , abstract-deque
-                , accelerate >= 0.12
-                , accelerate-io
-                -- TEMPORARY, until Async can be factored out:
---                , accelerate-cuda
                 , abstract-par-accelerate 
-                , abstract-par-offchip
+--                , abstract-par-offchip
                 , QuickCheck 
                 , transformers
                 , vector
@@ -53,15 +50,28 @@ Library
 
   ghc-options:    -Wall 
 
-  if flag(cuda)
-     ghc-options: -DACCELERATE_CUDA_BACKEND
+  if flag(newAccelerate) && flag(cuda)
+     cpp-options: -DACCELERATE_CUDA_BACKEND
      Build-depends: accelerate-cuda
 
   if flag(debug)
-     ghc-options: -DDEBUG
+     cpp-options: -DDEBUG
 
+  if flag(newAccelerate) 
+    Build-depends: accelerate >= 0.12
+                 , accelerate-io >= 0.12
+  else
+    Build-depends: accelerate >= 0.10 && < 0.12
+
+
+
+flag newAccelerate
+  default:        False
+
+-- Sets the default backend to CUDA:
 flag cuda
   default:           False
 
 flag debug
   default:           False
+
