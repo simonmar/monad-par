@@ -32,16 +32,6 @@ ALL_GPU_PKGS = ${ALL_PKGS} ${ACC_GPU_PKGS}
 
 ALL_VERSION_PKGS= ${OUR_PKGS} Deques/AbstractDeque/
 
-# if [ "$HADDOCK" == "" ];
-# then HADDOCK=`which haddock`
-# fi
-# if [ "$CABAL" == "" ];
-# then CABAL=`which cabal`
-# fi
-# if [ "$GHC" == "" ];
-# then GHC=`which ghc`
-# fi
-
 ifeq ($(GHC),)
   GHC=`which ghc`
 endif 
