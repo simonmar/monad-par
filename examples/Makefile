@@ -12,9 +12,8 @@ install:
 # This can't reuse the vanilla "cabal install" version above because
 # it passes a bunch of different flags.
 test: 
-	./generate_cabal.sh
-	ghc -threaded --make benchmark.hs -o benchmark.run
-	SHORTRUN=1 THREADS="1" ./benchmark.run
+	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
+	SHORTRUN=1 THREADS="1" ./benchmark.run --par --no-cabal +RTS -N
 
 validate: 
 	./generate_cabal.sh
