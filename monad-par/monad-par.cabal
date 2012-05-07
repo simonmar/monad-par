@@ -48,13 +48,12 @@ Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
 Author:              Simon Marlow, Ryan Newton
-Maintainer:          Simon Marlow <marlowsd@gmail.com>
+Maintainer:          Simon Marlow <marlowsd@gmail.com>, Ryan Newton <rrnewton@gmail.com>
 Copyright:           (c) Simon Marlow 2011
 Stability:           Experimental
 Category:            Control,Parallelism,Monads
 Build-type:          Simple
 Cabal-version:       >=1.8
-
 
 extra-source-files:
      tests/AListTest.hs
@@ -70,6 +69,10 @@ extra-source-files:
      tests/hs_cassandra_microbench2.hs
 
 Library
+  Source-repository head
+    type:     git
+    location: https://github.com/simonmar/monad-par
+
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
