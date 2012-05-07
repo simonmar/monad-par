@@ -8,7 +8,9 @@
 # Set up some Variables
 # --------------------------------------------------------------------------------
 
-OUR_PKGS= abstract-par/ abstract-par-offchip/ monad-par-extras/ monad-par/ meta-par/
+OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
+# This is experimental:
+# abstract-par-offchip/
 
 # This isn't really meant to be distributed:
 # meta-par-cuda/
