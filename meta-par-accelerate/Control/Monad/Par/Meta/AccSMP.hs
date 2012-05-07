@@ -24,7 +24,8 @@ module Control.Monad.Par.Meta.AccSMP
     runParIO,
  
     -- * Par-monad operations, including GPU operations    
-    ParAccelerate(..), unsafeHybridVector, unsafeHybridIArray,
+    ParAccelerate(..), 
+    -- unsafeHybridVector, unsafeHybridIArray,
 --    module AC,     
 --    module OC, 
     module PC    
