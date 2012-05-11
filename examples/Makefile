@@ -17,9 +17,9 @@ test:
 
 validate: 
 	./generate_cabal.sh
-	ghc -threaded --make benchmark.hs -o benchmark.run
-#	SHORTRUN=1 THREADS="1" ./benchmark.run
 	cabal-dev install -s ../cabal-dev/
+	ghc -threaded --make benchmark.hs -o benchmark.run
+	SHORTRUN=1 THREADS="1" ./benchmark.run --no-recomp --par +RTS -N
 
 clean:
 	cabal clean || echo 
