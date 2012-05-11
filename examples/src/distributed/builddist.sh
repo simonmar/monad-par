@@ -21,7 +21,15 @@ fi
 
 # -hide-package remote
 set -x
-$GHC $OBJ -i../..  --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
+$GHC $OBJ \
+        -i../../../monad-par \
+        -i../../../distributed-process/network-transport-pipes/src/ \
+        -i../../../distributed-process/network-transport/src/ \
+        -i../../../meta-par \
+        -i../../../meta-par-dist \
+        -i../../../meta-par-dist-tcp \
+        -i../../../RPC/ \
+        --make $APP.hs -o $APP.exe -O2 -threaded -rtsopts $OPTS $@
 set +x
 
 echo "  Next run this command here:"
