@@ -1,5 +1,5 @@
 Name:                meta-par-accelerate
-Version:             0.3.2
+Version:             0.3.3
 Synopsis:            Support for integrated Accelerate computations within Meta-par.
 
 -- Version history:
@@ -7,6 +7,7 @@ Synopsis:            Support for integrated Accelerate computations within Meta-
 -- 0.3: Initial release.
 -- 0.3.1: tweak dependencies
 -- 0.3.2: tweak resulting from abstract-par-accelerate-0.3.2
+-- 0.3.3: Remove erroneous ConstraintKinds usage.
 
 Description:        
   This package provides a 'Control.Monad.Par.Meta.Resource' for building meta-par

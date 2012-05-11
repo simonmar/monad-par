@@ -1,6 +1,8 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving, ConstraintKinds, FlexibleContexts, MultiParamTypeClasses #-}
-{-# LANGUAGE ConstraintKinds, TypeFamilies #-}
 {-# OPTIONS_GHC -Wall #-}
+
+-- This was when we were using the generic "Offchip" method:
+-- {- LANGUAGE ConstraintKinds, TypeFamilies -}
 
 -- | A meta-par /scheduler/ for programming with shared memory
 --   multicore CPUs plus GPU parallelism.
