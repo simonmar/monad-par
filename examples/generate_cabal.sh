@@ -4,7 +4,7 @@
 
 cat > monad-par-examples.cabal <<EOF
 name:                monad-par-examples
-version:             0.3
+version:             0.3.1
 build-type:          Simple
 cabal-version:       >=1.8
 EOF
@@ -13,6 +13,8 @@ COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector == 0.9.* "
 
 function boilerplate() {
 cat >> monad-par-examples.cabal <<EOF
+
+  -- Only one of these flags should be turned on at once:
   if flag(trace)
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Trace

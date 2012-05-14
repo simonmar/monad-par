@@ -9,16 +9,27 @@ install:
 	./generate_cabal.sh
 	cabal install
 
-# This can't reuse the vanilla "cabal install" version above because
-# it passes a bunch of different flags.
+# This can't reuse the vanilla "cabal install" installation above
+# because it passes a bunch of different flags.
 test: 
 	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
 	SHORTRUN=1 THREADS="1" ./benchmark.run --par --no-cabal +RTS -N
 
+
+CBLDEV=	cabal-dev install -s ../cabal-dev/
+
 validate: 
 	./generate_cabal.sh
-	cabal-dev install -s ../cabal-dev/
-	$(MAKE) quicktest
+	$(CBLDEV) -ftrace    --program-suffix=_Trace_threaded.exe 
+	$(CBLDEV) -fdirect   --program-suffix=_Direct_threaded.exe 
+	$(CBLDEV) -fmeta-smp --program-suffix=_SMP_threaded.exe 
+	$(CBLDEV) -fsparks   --program-suffix=_Sparks_threaded.exe 
+	cabal-dev install -s ../cabal-dev/ -fdirect
+	$(MAKE) quicktest SUFFIX="_Trace_threaded.exe"
+	$(MAKE) quicktest SUFFIX="_Direct_threaded.exe"
+	$(MAKE) quicktest SUFFIX="_SMP_threaded.exe"
+        # No way to run Sparks version with this little hack.
+
 #	ghc -threaded --make benchmark.hs -o benchmark.run
 #	SHORTRUN=1 THREADS="1" ./benchmark.run --no-recomp --par +RTS -N
 
