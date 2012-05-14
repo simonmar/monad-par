@@ -18,15 +18,38 @@ test:
 validate: 
 	./generate_cabal.sh
 	cabal-dev install -s ../cabal-dev/
-	ghc -threaded --make benchmark.hs -o benchmark.run
-	SHORTRUN=1 THREADS="1" ./benchmark.run --no-recomp --par +RTS -N
+	$(MAKE) quicktest
+#	ghc -threaded --make benchmark.hs -o benchmark.run
+#	SHORTRUN=1 THREADS="1" ./benchmark.run --no-recomp --par +RTS -N
 
 clean:
 	cabal clean || echo 
 	rm -rf bin
 
-# TODO: A cheap way to run everything for a quick test without having to
+BIN="../cabal-dev/bin/"
+# SUFFIX=".exe"
+SUFFIX=""
+
+# TEMP: A cheap way to run everything for a quick test without having to
 # rely on the benchmark script.
-# runall:
-# 	./bin/parfib.exe
-# 	./bin/mandel.exe
+quicktest:
+	$(BIN)/parfib_monad$(SUFFIX)
+	$(BIN)/parfib_pseq$(SUFFIX)
+	$(BIN)/mandel$(SUFFIX)
+# needs to run with no args:
+#	$(BIN)/MatMult$(SUFFIX)
+	$(BIN)/blackscholes$(SUFFIX)  
+	$(BIN)/coins$(SUFFIX)
+# needs data:
+#	$(BIN)/kmeans$(SUFFIX)
+	$(BIN)/minimax$(SUFFIX)  
+	$(BIN)/nbody$(SUFFIX)  
+	$(BIN)/partree$(SUFFIX)
+	$(BIN)/primes$(SUFFIX)
+	$(BIN)/queens$(SUFFIX)
+# needs to run with no args:
+#	$(BIN)/sumeuler$(SUFFIX)
+
+#	$(BIN)/randomGen$(SUFFIX)
+
+
