@@ -21,9 +21,9 @@ Description:         Following the convention the @abstract-par@ package,
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
 License-file:        LICENSE
-Author:              Adam Foltzer 2011-2012
+Author:              Ryan Newton <rrnewton@gmail.com>
 Maintainer:          Ryan Newton <rrnewton@gmail.com>
-Copyright:           (c) Adam Foltzer 2011-2012
+Copyright:           (c) Ryan Newton 2011-2012
 Stability:           Experimental
 Category:            Parallelism
 Build-type:          Simple
