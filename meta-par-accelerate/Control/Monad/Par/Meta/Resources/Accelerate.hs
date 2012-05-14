@@ -24,12 +24,12 @@ import Control.Monad
 import Control.Monad.IO.Class
 
 import Data.Array.Accelerate (Acc, Arrays)
--- #ifdef ACCELERATE_CUDA_BACKEND
--- #warning "Loading REAL, LIVE CUDA BACKEND..."
--- import qualified Data.Array.Accelerate.CUDA as Acc
--- #else
+#ifdef ACCELERATE_CUDA_BACKEND
+#warning "meta-par-accelerate: Loading REAL, LIVE CUDA BACKEND..."
+import qualified Data.Array.Accelerate.CUDA        as Run
+#else
 import qualified Data.Array.Accelerate.Interpreter as Run
--- #endif
+#endif
 
 import Data.Concurrent.Deque.Class (ConcQueue, WSDeque)
 import Data.Concurrent.Deque.Reference as R
@@ -167,7 +167,7 @@ defaultSteal = WS sa
 
 -- Generic instance for Meta.Par, needs to be newtype-derived for specific schedulers.
 instance AC.ParAccelerate IVar Par where 
-  getDefaultAccImpl = return Run.run -- TEMP! FIXME - returning interpreter for now.  
+  getDefaultAccImpl = return Run.run -- TEMP! FIXME - don't ever use interpreter in the future.  
   runAccWith        = runAccWith
   spawnAccWith      = spawnAccWith
   unsafeHybridWith  = unsafeHybridWith

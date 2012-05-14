@@ -1,5 +1,5 @@
 Name:                meta-par-accelerate
-Version:             0.3.4
+Version:             0.3.5
 Synopsis:            Support for integrated Accelerate computations within Meta-par.
 
 -- Version history:
@@ -9,6 +9,7 @@ Synopsis:            Support for integrated Accelerate computations within Meta-
 -- 0.3.2: tweak resulting from abstract-par-accelerate-0.3.2
 -- 0.3.3: Remove erroneous ConstraintKinds usage.
 -- 0.3.4: Egad, ditto.
+-- 0.3.5: Remove dep on accelerate-io.  Set default to newAccelerate.  Reactivate real CUDA.
 
 Description:        
   This package provides a 'Control.Monad.Par.Meta.Resource' for building meta-par
@@ -53,8 +54,10 @@ Library
 
   ghc-options:    -Wall 
 
-  if flag(newAccelerate) && flag(cuda)
+  if flag(cuda)
      cpp-options: -DACCELERATE_CUDA_BACKEND
+
+  if flag(newAccelerate) && flag(cuda)
      Build-depends: accelerate-cuda
 
   if flag(debug)
@@ -62,14 +65,14 @@ Library
 
   if flag(newAccelerate) 
     Build-depends: accelerate >= 0.12
-                 , accelerate-io >= 0.12
+--                 , accelerate-io >= 0.12
   else
     Build-depends: accelerate >= 0.10 && < 0.12
 
 
 
 flag newAccelerate
-  default:        False
+  default:        True
 
 -- Sets the default backend to CUDA:
 flag cuda

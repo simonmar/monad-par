@@ -135,14 +135,9 @@ Test-Suite test-monad-par
     ghc-options: -itests -rtsopts -threaded
     build-depends: base >= 4 && < 5
                  , abstract-par, monad-par-extras
-                 , array >= 0.3
+                 , array   >= 0.3
                  , deepseq >= 1.2
                  , time
                  , QuickCheck, HUnit
                  , test-framework-hunit, test-framework-quickcheck2
                  , test-framework, test-framework-th
-                 -- , binary
-
-
-
-

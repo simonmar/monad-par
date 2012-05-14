@@ -1,5 +1,5 @@
 Name:                abstract-par-accelerate
-Version:             0.3.2
+Version:             0.3.3
 Synopsis:            Provides the class ParAccelerate, nothing more.
 
 Description:         Following the convention the @abstract-par@ package,
@@ -16,6 +16,7 @@ Description:         Following the convention the @abstract-par@ package,
 -- 0.3: Initial release.
 -- 0.3.1: Tweak Accelerate dependencies.
 -- 0.3.2: Add 'io' flag
+-- 0.3.3: Set newAccelerate as default.
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
@@ -55,4 +56,4 @@ flag io
   default:        False
 
 flag newAccelerate
-  default:        False
+  default:        True
