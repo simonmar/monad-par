@@ -141,7 +141,7 @@ defaultStartup = St st
           initialise []
           mtid <- readHotVar daemonTid
           when (mtid == Nothing)
-            $ writeHotVar daemonTid . Just =<< forkIO gpuDaemon
+            $ writeHotVar daemonTid . Just =<< forkOS gpuDaemon
 
 #define GPU_BACKSTEALING
 #ifdef GPU_BACKSTEALING
