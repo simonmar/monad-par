@@ -1,0 +1,9 @@
+cuda-0.4.1.0
+dynamic w/blocking, N=1, REALTIME 2.099722 2.215135 2.280407
+dynamic w/yield, N=1, REALTIME 2.083144 2.224708 2.267604
+dynamic w/auto, N=1, REALTIME 2.196699 2.24794 2.263477
+
+cuda-0.4.1.1 @ 93c621b28a00e90cd46218f567019add063a238d w/unsafe->safe on sync call
+dynamic w/blocking, N=1, REALTIME 2.11977 2.207413 2.261914
+dynamic w/yield, N=1, REALTIME 2.085718 2.205506 2.252961
+dynamic w/auto, N=1, REALTIME 2.210271 2.235203 2.255668

@@ -40,7 +40,7 @@ import Control.Monad.Par.Meta.SMPMergeSort
 
 #ifdef GPU_ENABLED
 import Foreign.CUDA.Driver    (initialise)
-import Foreign.CUDA.Runtime.Device (reset)
+import Foreign.CUDA.Runtime.Device (reset, setFlags, DeviceFlag(..))
 #endif
 
 import Foreign.Ptr
@@ -448,6 +448,9 @@ main = do args <- getArgs
 
           initialise [] -- CUDA initialize.
           reset
+--          setFlags [BlockingSync] -- set sync behavior to wait on OS primitive
+--          setFlags [ScheduleYield] -- set sync behavior to yield periodically
+
 #endif
 --          g <- getStdGen
 
