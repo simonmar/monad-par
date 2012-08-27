@@ -9,17 +9,47 @@ install:
 	./generate_cabal.sh
 	cabal install
 
-# This can't reuse the vanilla "cabal install" installation above
-# because it passes a bunch of different flags.
+
+# This is a quick test that assumes dependencies are already there.
 test: 
 	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
 	SHORTRUN=1 THREADS="1" ./benchmark.run --par --no-cabal +RTS -N
 
+clean:
+	cabal clean || echo 
+	rm -rf bin
 
-CBLDEV=	cabal-dev install -s ../cabal-dev/
+linBuildRun: benchmark.run
+	SHORTRUN=1 THREADS="1" ./benchmark.run 
+
+# HSH has ugly dependencies... let's install it locally for now.
+benchmark.run: benchmark.hs
+	cabal install HSH
+#	cabal-dev install HSH
+	ghc -threaded --make benchmark.hs -o benchmark.run
+
+#================================================================================
+# Hacks to build on Windows:
+
+# BAD way to check for Windows:
+ifeq ($(SYSTEMROOT),)
+  BUILDCMD=linBuildRun
+else
+  BUILDCMD=winBuildRun
+endif
 
 validate: 
 	./generate_cabal.sh
+	cabal install --only-dependencies
+	$(MAKE) $(BUILDCMD)
+
+CBLDEV=	cabal-dev install -s ..\\cabal-dev
+BIN="../cabal-dev/bin/"
+# SUFFIX=""
+
+# We don' yet have the benchmark script running on Windows.  So we do
+# things a bit more manually.
+winBuildRun:
 	$(CBLDEV) -ftrace    --program-suffix=_Trace_threaded.exe 
 	$(CBLDEV) -fdirect   --program-suffix=_Direct_threaded.exe 
 	$(CBLDEV) -fmeta-smp --program-suffix=_SMP_threaded.exe 
@@ -29,17 +59,6 @@ validate:
 	$(MAKE) quicktest SUFFIX="_Direct_threaded.exe"
 	$(MAKE) quicktest SUFFIX="_SMP_threaded.exe"
         # No way to run Sparks version with this little hack.
-
-#	ghc -threaded --make benchmark.hs -o benchmark.run
-#	SHORTRUN=1 THREADS="1" ./benchmark.run --no-recomp --par +RTS -N
-
-clean:
-	cabal clean || echo 
-	rm -rf bin
-
-BIN="../cabal-dev/bin/"
-# SUFFIX=".exe"
-SUFFIX=""
 
 # TEMP: A cheap way to run everything for a quick test without having to
 # rely on the benchmark script.

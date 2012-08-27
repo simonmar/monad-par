@@ -16,6 +16,9 @@ The Glorious Glasgow Haskell Compilation System, version 7.4.1
 -}
 
 import Control.Monad.Par
+-- import Control.Monad.Par.Scheds.Direct
+-- import Control.Monad.Par.Meta.SMP (runPar, spawn, get)
+
 import System.Environment (getArgs)
 import Control.DeepSeq
 

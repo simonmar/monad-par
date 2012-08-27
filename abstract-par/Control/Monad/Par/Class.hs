@@ -34,7 +34,7 @@ module Control.Monad.Par.Class
     --  Channels (Streams)
     --  , ParChan(..)
 
-  , NFData()
+  , NFData() -- This is reexported.
   )
 where
 
