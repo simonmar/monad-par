@@ -1,11 +1,21 @@
 
 
 
-PROGS= issue21
+SRC= issue21.hs
 
-EXES= $(PROGS:=.exe)
+EXES= $(SRC:.hs=.exe)
 
+.SUFFIXES: .hs .exe
+
+.hs.exe: $< $(SRC)
+	ghc --make $< -o $@ -rtsopts -threaded $(GHC_ARGS)
+
+all: $(EXES)
+
+# These appear if people do a raw ghc --make.  
+# I like to wipe these out for cleanliness:
+RAWPROGS= $(SRC:.hs=)
 clean:
-	rm -f *~ *.o *.hi $(PROGS) $(EXES)
+	rm -f *~ *.o *.hi $(RAWPROGS) $(EXES)
 
 

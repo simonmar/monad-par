@@ -28,8 +28,15 @@ import Control.DeepSeq
 import Control.Applicative
 import Data.Array
 import Data.List (partition, find)
---import Text.Printf
 
+import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar)
+#ifdef DEBUG
+import Text.Printf
+dbg = True
+#endif
+
+-- Debugging:
+-- import qualified Data.Bytestring.Char8 as B
 
 -- ---------------------------------------------------------------------------
 -- MAIN SCHEDULING AND RUNNING
@@ -183,6 +190,11 @@ reschedule wl q@Sched{ workpool, status } = do
 -- RRN: Note -- NOT doing random work stealing breaks the traditional
 -- Cilk time/space bounds if one is running strictly nested (series
 -- parallel) programs.
+-- 
+-- This non-randomized work stealing should ALSO have the problem that
+-- it increases contention at the front of the scheds array (the first
+-- sched is hit by all thieves).  This latter problem could be
+-- amortized by starting the stealing process at "me+1".
 
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: WorkLimit -> Sched -> IO ()
@@ -274,7 +286,8 @@ type AllStatus = ([Idle], [ExtIdle])
 newStatus :: AllStatus
 newStatus = ([], [])
 
--- | Adds a new Idler to the AllStatus.
+-- | Adds a new Idler to the AllStatus.  Idlers are workers created by
+--   the Par runtime who fail to steal.
 addIdler :: Idle -> AllStatus -> (AllStatus, ())
 addIdler i@(Idle u _) (is, es) = ((insert is, es), ())
     where insert [] = [i]
@@ -282,7 +295,9 @@ addIdler i@(Idle u _) (is, es) = ((insert is, es), ())
             then i  : xs
             else i' : insert xs'
 
--- | Adds a new External idler to the AllStatus.
+-- | Adds a new External idler to the AllStatus.  External idlers are
+--   threads created by the user that come into a Par computation by
+--   calling runPar.
 addExtIdler :: ExtIdle -> AllStatus -> (AllStatus, ())
 addExtIdler e (is, es) = ((is, e:es), ())
 
@@ -469,11 +484,17 @@ runPar_internal _doSync x = unsafePerformIO $ do
     tIds <- replicateM numCapabilities $ newIORef myTId
     workpools <- replicateM numCapabilities $ newIORef NoWork
     statusRef <- newIORef newStatus
+    -- 'states' will only be evaluated/used if we are the first one to the party:
+    -- TODO: A small optimization might be to make the newIORefs above
+    --       lazy as well, with an unsafePerformIO.
     let states = listArray (0, numCapabilities-1)
                     [ Sched { no=n, workpool=wp, status=statusRef, scheds=states, tId=t }
                     | n <- [0..] | wp <- workpools | t <- tIds ]
     res <- globalEstablishScheds states
     case res of
+      --------------------------------------------------------------------------------
+      -- Success case: we are the first and establish the schedulers.
+      --------------------------------------------------------------------------------
       Success uid -> do
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
             -- See [Notes on threadCapability] for more details
@@ -490,6 +511,7 @@ runPar_internal _doSync x = unsafePerformIO $ do
         atomicModifyIORef statusRef $ addExtIdler (ExtIdle uid m)
         forM_ (elems states) $ \(state@Sched{no=cpu}) -> do
           forkOnIO cpu $ do
+--          forkIO_Suppress cpu $ do
             myTId <- myThreadId
             --printf "cpu %d setting threadId=%s\n" cpu (show myTId)
             writeIORef (tId state) myTId
@@ -500,19 +522,26 @@ runPar_internal _doSync x = unsafePerformIO $ do
                 atomicModifyIORef (workpool state) $ \wp -> (Work uid currentWorkers sublst wp, ())
                 sched _doSync workLimit state sublst uid $ runCont (x >>= put_ (IVar rref)) (const Done)
         takeMVar m
-        --printf "done\n"
+--        busyTakeMVar m -- THIS is the MVar where we are experience an indefinite blockage.  [2012.08.29]
+        --printf "done with runpar\n"
         r <- readIORef rref
         
         -- TODO: If we're doing this nested strategy, we should probably just keep the 
         -- threads alive indefinitely.  After all, we can get some weird conditions 
         -- doing it this way.  At the least, we should put this in steal where the 
         -- shutdown occurs.
+#if 0
+-- RRN: Temp... disable this:
         b <- globalThreadShutdown
+#endif
 --         putStrLn $ "Global thread shutdown: " ++ show b
         case r of
             Full a -> return a
             _ -> error "no result"
 
+      --------------------------------------------------------------------------------
+      -- Failure case: the global scheds are already up.  Deal with that.
+      --------------------------------------------------------------------------------
       Failure uid cScheds -> do
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
             -- See [Notes on threadCapability] for more details
@@ -545,12 +574,14 @@ runPar_internal _doSync x = unsafePerformIO $ do
             atomicModifyIORef (status state) $ addExtIdler (ExtIdle uid m)
             atomicModifyIORef (workpool state) $ \wp -> (Work uid currentWorkers sublst wp, ())
             takeMVar m
+--            busyTakeMVar m -- This one does NOT seem to be the culprit in issue21.
         --printf "cpu %d finished in child\n" main_cpu
         r <- readIORef rref
 --        globalThreadShutdown
         case r of
             Full a -> return a
             _ -> error "no result"
+
 
 -- | The main way to run a Par computation
 runPar :: Par a -> a
@@ -593,3 +624,37 @@ put v a = deepseq a (Par $ \c -> Put v a (c ()))
 
 yield :: Par ()
 yield = Par $ \c -> Yield (c ())
+
+
+-- DEBUGGING TOOLs
+--------------------------------------------------------------------------------
+
+-- | For debugging purposes.  This can help us figure out (but an ugly
+--   process of elimination) which MVar reads are leading to a "Thread
+--   blocked indefinitely" exception.
+busyTakeMVar :: MVar a -> IO a
+busyTakeMVar mv = try 5000000
+ where 
+ try 0 = do 
+   tid <- myThreadId
+--   B.putStrLn (B.pack$ show tid ++ "! ")
+   putStr (show tid ++ "! ")
+   try 1 
+ try n = do
+   x <- tryTakeMVar mv
+   case x of 
+     Just y  -> return y
+     Nothing -> try (n-1)
+   
+
+-- | Fork a thread but ALSO set up an error handler that suppresses
+--   MVar exceptions.
+forkIO_Suppress :: Int -> IO () -> IO ThreadId
+forkIO_Suppress whre action = 
+  forkOnIO whre $ 
+           handle (\e -> 
+--                   case fromException (e::SomeException) :: IOException of
+                    case (e::BlockedIndefinitelyOnMVar) of
+                     _ -> return ()
+		  )
+           action

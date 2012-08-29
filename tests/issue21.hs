@@ -14,13 +14,21 @@ $ ghc -V
 The Glorious Glasgow Haskell Compilation System, version 7.4.1
 
 -}
+{-# LANGUAGE CPP #-}
 
+#ifdef PARSCHED 
+import PARSCHED
+#else
+-- This bug was reported for the Trace scheduler:
+-- import Control.Monad.Par.Scheds.Trace
 import Control.Monad.Par
 -- import Control.Monad.Par.Scheds.Direct
 -- import Control.Monad.Par.Meta.SMP (runPar, spawn, get)
+#endif
 
 import System.Environment (getArgs)
 import Control.DeepSeq
+import GHC.Conc (myThreadId)
 
 data M = M !Integer !Integer !Integer !Integer
 instance NFData M
@@ -41,5 +49,12 @@ fib :: Integer -> Integer
 fib n = let M f _ _ _ = M 0 1 1 1 ^ (n + 1) in f
 
 main :: IO ()
-main = print . length . show . fib . read . head =<< getArgs
-
+main = do
+  args <- getArgs
+  tid <- myThreadId
+  putStrLn$"Beginning benchmark on: "++show tid
+  
+  let n = case args of 
+       []  -> 10000000
+       [s] -> read s
+  print $ length $ show $ fib n
