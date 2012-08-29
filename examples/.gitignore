@@ -6,5 +6,5 @@
 *.bak
 *conflicted*
 ._*.*
+cabal-dev
 extras
-
