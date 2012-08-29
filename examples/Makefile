@@ -11,7 +11,10 @@ install:
 
 clean:
 	cabal clean || echo 
-	rm -rf bin
+	rm -rf bin *.hi *.o *.exe
+
+distclean: clean
+	rm -f benchmark.run
 
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
