@@ -57,6 +57,7 @@ CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
 
 install: install-all
 
+
 # Issue a single big cabal command to install everything.
 install-with-tests:
 	${CABAL_INSTALL} ${OUR_PKGS} --enable-tests
@@ -74,6 +75,32 @@ mega-install-gpu:
 jenkins-all-versions:
 	${CABAL_INSTALL} ${OUR_PKGS} Deques/AbstractDeque/
 
+uninstall:
+	ghc-pkg unregister network-transport-pipes --force || echo
+	ghc-pkg unregister network-transport-tcp   --force || echo
+	ghc-pkg unregister network-transport    --force || echo
+	ghc-pkg unregister RPC                  --force || echo
+
+	ghc-pkg unregister meta-par-dist-tcp    --force || echo
+
+	ghc-pkg unregister accelerate-cuda      --force || echo 
+	ghc-pkg unregister accelerate-io        --force || echo 
+	ghc-pkg unregister accelerate           --force || echo 
+	ghc-pkg unregister meta-par-accelerate  --force || echo 
+	ghc-pkg unregister abstract-par-accelerate --force || echo 
+
+	ghc-pkg unregister meta-par             --force || echo 
+	ghc-pkg unregister monad-par            --force || echo 
+	ghc-pkg unregister monad-par-extras     --force || echo
+
+	ghc-pkg unregister mega-deque           --force || echo 
+	ghc-pkg unregister lockfree-queue       --force || echo
+	ghc-pkg unregister chaselev-deques      --force || echo
+	ghc-pkg unregister abstract-deque       --force || echo 
+	ghc-pkg unregister IORefCAS             --force || echo
+
+
+
 # --------------------------------------------------------------------------------
 # Testing 
 # --------------------------------------------------------------------------------
@@ -83,7 +110,7 @@ test:
 
 # Running a full test uses cabal-dev to sandbox the build.
 validate: 
-	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='$(CABAL_ARGS) --enable-tests --disable-documentation'
+	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='$(CABAL_ARGS) --disable-library-profiling --enable-tests --disable-documentation --force-reinstalls'
 	(cd examples; $(MAKE) validate)
 # force-reinstalls
 # SANDBOX=`pwd`/cabal-dev
