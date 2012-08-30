@@ -67,13 +67,31 @@ import qualified Prelude
 
 -- define DEBUG
 #ifdef DEBUG
+import System.Environment (getEnvironment)
+theEnv = unsafePerformIO $ getEnvironment
 dbg = True
 #else
 dbg = False
 #endif
 
+#ifdef PARPUTS
+_PARPUTS = True
+#else
+_PARPUTS = False
+#endif
 #define FORKPARENT
+#define IDLING_ON
 #define WAKEIDLE
+
+--------------------------------------------------------------------------------
+-- Global State
+--------------------------------------------------------------------------------
+
+-- This keeps track of ALL worker threads across all unrelated
+-- `runPar` instantiations.  This is used to detect nested invocations
+-- of `runPar` and avoid reinitialization.
+-- globalWorkerPool :: IORef (Data.IntMap ())
+globalWorkerPool = undefined
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -210,13 +228,11 @@ writeHotVarRaw = writeTVar
 popWork :: Sched -> IO (Maybe (Par ()))
 popWork Sched{ workpool, no } = do 
   mb <- R.tryPopL workpool 
-  if dbg 
-   then case mb of 
-         Nothing -> return Nothing
+  when dbg $ case mb of 
+         Nothing -> return ()
 	 Just x  -> do sn <- makeStableName mb
 		       printf " [%d]                                   -> POP work unit %d\n" no (hashStableName sn)
-		       return mb
-   else return mb
+  return mb
 
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
@@ -225,12 +241,13 @@ pushWork Sched { workpool, idle, no, isMain } task = do
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
+#ifdef IDLING_ON
 #ifdef WAKEIDLE
   --when isMain$    -- Experimenting with reducing contention by doing this only from a single thread.
                     -- TODO: We need to have a proper binary wakeup-tree.
   tryWakeIdle idle
 #endif
-
+#endif
 
 tryWakeIdle idle = do
 -- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
@@ -300,7 +317,10 @@ runPar userComp = unsafePerformIO $ do
 		  -- (the main thread) exit.  But we do signal here that they should terminate:
                   writeIORef (killflag sched) True
 
-   when dbg$ do putStrLn " *** Reading final MVar on main thread."
+   when dbg$ do putStrLn " *** Reading final MVar on main thread."   
+   -- We don't directly use the thread we come in on.  Rather, that thread waits
+   -- waits.  One reason for this is that the main/progenitor thread in
+   -- GHC is expensive like a forkOS thread.
    takeMVar m -- Final value.
 
 
@@ -315,15 +335,16 @@ sanityCheck allscheds = do
 
 
 -- Create the default scheduler(s) state:
+makeScheds :: Int -> IO [Sched]
 makeScheds main = do
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
-   idle <- newHotVar []   
-   killflag <- newHotVar False
+   idle      <- newHotVar []   
+   killflag  <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng
-			}
-                | (x,wp,rng) <- zip3 [0..] workpools rngs]
+			   }
+                   | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
 
 
@@ -375,8 +396,10 @@ unsafePeek iv@(IVar v) = do
     Full a -> return (Just a)
     _      -> return Nothing
 
+--------------------------------------------------------------------------------
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
+--   In this scheduler, puts immediately execute woken work in the current thread.
 put_ iv@(IVar v) !content = do
    sched <- RD.ask 
    io$ do 
@@ -384,14 +407,12 @@ put_ iv@(IVar v) !content = do
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
                Blocked ks -> (Full content, ks)
-
 #ifdef DEBUG
       sn <- makeStableName iv
       printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      mapM_ ($content) ks
-      return ()
+      wakeUp sched ks content
 
 
 -- | NOTE unsafeTryPut is NOT exposed directly through this module.  (So
@@ -411,10 +432,28 @@ unsafeTryPut iv@(IVar v) !content = do
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      mapM_ ($content) ks
+      wakeUp sched ks content
       return res
 
+-- | When an IVar is filled in, continuations wake up.
+{-# INLINE wakeUp #-}
+wakeUp :: Sched -> [a -> IO ()]-> a -> IO ()
+wakeUp sched ks arg = do
+   -- FIXME -- without strict firewalls keeping ivars from moving
+   -- between runPar sessions, if we allow nested scheduler use
+   -- we could potentially wake up work belonging to a different
+   -- runPar and thus bring it into our worker and delay our own
+   -- continuation until its completion.
+   if _PARPUTS then 
+     error "FINISHME" 
+    else 
+     -- This version sacrifices a parallelism opportunity and
+     -- imposes additional serialization.
+     mapM_ ($arg) ks
+   return ()
 
+
+--------------------------------------------------------------------------------
 -- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
@@ -492,6 +531,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
     ----------------------------------------
     -- IDLING behavior:
+#ifdef IDLING_ON
     go 0 _ = 
             do m <- newEmptyMVar
                r <- modifyHotVar idle $ \is -> (m:is, is)
@@ -509,6 +549,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          when dbg$ printf " [%d]  | woken up\n" my_no
 			 i <- getnext (-1::Int)
                          go maxtries i
+#endif
     ----------------------------------------
     go tries i
       | i == my_no = do i' <- getnext i

@@ -31,6 +31,7 @@ import Control.DeepSeq
 import GHC.Conc (myThreadId)
 
 data M = M !Integer !Integer !Integer !Integer
+ deriving Show
 instance NFData M
 
 instance Num M where
