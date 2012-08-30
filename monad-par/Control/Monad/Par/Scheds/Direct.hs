@@ -44,6 +44,7 @@ import System.Mem.StableName
 import qualified Control.Monad.Par.Class  as PC
 import qualified Control.Monad.Par.Unsafe as UN
 import Control.DeepSeq
+import qualified Data.Map as M
 
 -- import Data.Concurrent.Deque.Class as DQ
 #ifdef REACTOR_DEQUE
@@ -74,6 +75,8 @@ dbg = True
 dbg = False
 #endif
 
+-- [2012.08.30] This shows a 10X improvement on nested parfib:
+-- define NESTED_SCHEDS
 #ifdef PARPUTS
 _PARPUTS = True
 #else
@@ -82,16 +85,6 @@ _PARPUTS = False
 #define FORKPARENT
 #define IDLING_ON
 #define WAKEIDLE
-
---------------------------------------------------------------------------------
--- Global State
---------------------------------------------------------------------------------
-
--- This keeps track of ALL worker threads across all unrelated
--- `runPar` instantiations.  This is used to detect nested invocations
--- of `runPar` and avoid reinitialization.
--- globalWorkerPool :: IORef (Data.IntMap ())
-globalWorkerPool = undefined
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -138,6 +131,35 @@ data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 unsafeParIO :: IO a -> Par a 
 unsafeParIO io = Par (lift$ lift io)
 io = unsafeParIO -- shorthand used below
+
+--------------------------------------------------------------------------------
+-- Global State
+--------------------------------------------------------------------------------
+
+-- This keeps track of ALL worker threads across all unrelated
+-- `runPar` instantiations.  This is used to detect nested invocations
+-- of `runPar` and avoid reinitialization.
+-- globalWorkerPool :: IORef (Data.IntMap ())
+globalWorkerPool :: IORef (M.Map ThreadId Sched)
+globalWorkerPool = unsafePerformIO $ newIORef M.empty
+
+amINested :: ThreadId -> IO (Maybe Sched)
+amINested tid = do
+  -- There is no race here.  Each thread inserts itself before it
+  -- becomes an active worker.
+  wp <- readIORef globalWorkerPool
+  return (M.lookup tid wp)
+
+registerWorker :: ThreadId -> Sched -> IO ()
+registerWorker tid sched = 
+  atomicModifyIORef globalWorkerPool $ 
+    \ mp -> (M.insert tid sched mp, ())
+
+unregisterWorker :: ThreadId -> IO ()
+unregisterWorker tid = 
+  atomicModifyIORef globalWorkerPool $ 
+    \ mp -> (M.delete tid mp, ())
+
 
 --------------------------------------------------------------------------------
 -- Helpers #1:  Atomic Variables
@@ -271,7 +293,7 @@ instance NFData (IVar a) where
   rnf _ = ()
 
 runPar userComp = unsafePerformIO $ do
-  
+   tid <- myThreadId  
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
     -- We create a thread on each CPU with forkOnIO.  The CPU on which
@@ -281,7 +303,7 @@ runPar userComp = unsafePerformIO $ do
     -- Note: GHC 7.1.20110301 is required for this to work, because that
     -- is when threadCapability was added.
     --
-   (main_cpu, _) <- threadCapability =<< myThreadId
+   (main_cpu, _) <- threadCapability tid
 #else
     --
     -- Lacking threadCapability, we always pick CPU #0 to run the main
@@ -291,37 +313,60 @@ runPar userComp = unsafePerformIO $ do
     --
    let main_cpu = 0
 #endif
-   allscheds <- makeScheds main_cpu
+   maybSched <- amINested tid
+   case maybSched of 
+#ifdef NESTED_SCHEDS
+     Just (sched@Sched{scheds}) -> do 
+       when dbg$ printf " [%s] Engaging trivial strategy for embedding nested work....\n" (show tid)
+       -- Here the current thread is ALREADY a worker.  All we need to
+       -- do is plug the users new computation in.
+--       runReaderWith sched $ rescheduleR errK
 
-   m <- newEmptyMVar
-   forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-        forkOnIO cpu $
-          if (cpu /= main_cpu)
-             then do when dbg$ printf " [%d] Entering scheduling loop.\n" cpu
-		     runReaderWith sched $ rescheduleR errK
-		     when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
-             else do
-		  let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
-				      res <- userComp
-                                      finalSched <- RD.ask 
-				      when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
+       -- Here we have an extra IORef... ugly.
+       ref <- newIORef (error "this should never be touched")
+       let cont ans = liftIO$ writeIORef ref ans
+       RD.runReaderT (C.runContT (unPar userComp) cont) sched
+       -- By returning here we ARE reengaging the scheduler, since we
+       -- are already inside the rescheduleR loop on this thread.
+       readIORef ref
+     Nothing -> do
+#else 
+     _       -> do
+#endif
+       allscheds <- makeScheds main_cpu
 
-				      -- Sanity check our work queues:
-				      when dbg $ io$ sanityCheck allscheds
-				      io$ putMVar m res
-		  
-		  RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
-                  when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
-                               sanityCheck allscheds
-		  -- Not currently requiring that other scheduler threads have exited before we 
-		  -- (the main thread) exit.  But we do signal here that they should terminate:
-                  writeIORef (killflag sched) True
+       m <- newEmptyMVar
+       forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
+            forkOnIO cpu $ do 
+              tid <- myThreadId
+              registerWorker tid sched
+              if (cpu /= main_cpu)
+                 then do when dbg$ printf " [%d] Entering scheduling loop.\n" cpu
+                         runReaderWith sched $ rescheduleR errK
+                         when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
+                 else do
+                      let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
+                                          res <- userComp
+                                          finalSched <- RD.ask 
+                                          when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
 
-   when dbg$ do putStrLn " *** Reading final MVar on main thread."   
-   -- We don't directly use the thread we come in on.  Rather, that thread waits
-   -- waits.  One reason for this is that the main/progenitor thread in
-   -- GHC is expensive like a forkOS thread.
-   takeMVar m -- Final value.
+                                          -- Sanity check our work queues:
+                                          when dbg $ io$ sanityCheck allscheds
+                                          io$ putMVar m res
+
+                      RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
+                      when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
+                                   sanityCheck allscheds
+                      -- Not currently requiring that other scheduler threads have exited before we 
+                      -- (the main thread) exit.  But we do signal here that they should terminate:
+                      writeIORef (killflag sched) True
+              unregisterWorker tid 
+
+       when dbg$ do putStrLn " *** Reading final MVar on main thread."   
+       -- We don't directly use the thread we come in on.  Rather, that thread waits
+       -- waits.  One reason for this is that the main/progenitor thread in
+       -- GHC is expensive like a forkOS thread.
+       takeMVar m -- Final value.
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -396,7 +441,7 @@ unsafePeek iv@(IVar v) = do
     Full a -> return (Just a)
     _      -> return Nothing
 
---------------------------------------------------------------------------------
+------------------------------------------------------------
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 --   In this scheduler, puts immediately execute woken work in the current thread.
@@ -453,7 +498,7 @@ wakeUp sched ks arg = do
    return ()
 
 
---------------------------------------------------------------------------------
+------------------------------------------------------------
 -- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
@@ -578,6 +623,8 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			 go (tries-1) i'
 
 errK = error "this closure shouldn't be used"
+
+trivialCont :: a -> ROnly ()
 trivialCont _ = 
 #ifdef DEBUG
                 trace "trivialCont evaluated!"
