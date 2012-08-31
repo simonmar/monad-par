@@ -59,7 +59,7 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 #endif
 
-import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar)
+import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar, SomeException, IOException)
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -70,7 +70,7 @@ import qualified Prelude
 
 -- define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
--- define NESTED_SCHEDS
+#define NESTED_SCHEDS
 #define PARPUTS
 #define FORKPARENT
 -- define IDLING_ON
@@ -93,6 +93,13 @@ _FORKPARENT = True
 #warning "FORKPARENT POLICY NOT USED; THIS IS GENERALLY WORSE"
 _FORKPARENT = False
 #endif
+
+#ifdef IDLING_ON
+_IDLING_ON = True
+#else
+_IDLING_ON = False
+#endif
+
 
 #ifdef DEBUG
 import System.Environment (getEnvironment)
@@ -384,7 +391,8 @@ runPar userComp = unsafePerformIO $ do
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
        takeMVar m -- Final value.
---       busyTakeMVar " glob " m -- Final value.                    
+--       dbgTakeMVar "global waiting thread" m -- Final value.
+--       busyTakeMVar " global wait " m -- Final value.                    
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -400,6 +408,7 @@ sanityCheck allscheds = do
 -- Create the default scheduler(s) state:
 makeScheds :: Int -> IO [Sched]
 makeScheds main = do
+   when dbg$ printf "[initialization] Creating %d worker threads\n" numCapabilities
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
@@ -581,7 +590,8 @@ rescheduleR k = do
   when dbg$ liftIO$ printf " [%d]  - Reschedule...\n" (no mysched)
   mtask  <- liftIO$ popWork mysched
   case mtask of
-    Nothing -> do k <- liftIO$ readIORef (killflag mysched) 
+    Nothing -> do 
+                  k <- liftIO$ readIORef (killflag mysched) 
 		  unless k $ do		    
 		     liftIO$ steal mysched
 #ifdef WAKEIDLE
@@ -617,8 +627,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
     ----------------------------------------
     -- IDLING behavior:
-#ifdef IDLING_ON
-    go 0 _ = 
+    go 0 _ | _IDLING_ON = 
             do m <- newEmptyMVar
                r <- modifyHotVar idle $ \is -> (m:is, is)
                if length r == numCapabilities - 1
@@ -635,12 +644,10 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          when dbg$ printf " [%d]  | woken up\n" my_no
 			 i <- getnext (-1::Int)
                          go maxtries i
-#else
-    -- We still need to make sure that we yield (or at least allocate)
-    -- within the stealing spinloop.
-    go 0 i = do yield
-                go maxtries i 
-#endif
+
+    -- We need to return from this loop to check killflag and exit the scheduler if necessary.
+    go 0 i | _IDLING_ON == False = return ()
+
     ----------------------------------------
     go tries i
       | i == my_no = do i' <- getnext i
@@ -763,22 +770,30 @@ instance Applicative Par where
 -- DEBUGGING TOOLs
 --------------------------------------------------------------------------------
 
+dbgTakeMVar :: String -> MVar a -> IO a
+dbgTakeMVar msg mv = 
+--  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
+  catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
+ where   
+   doDebugStuff = do putStrLn$"This takeMVar blocked indefinitely!: "++msg
+                     error "failed"
+
 -- | For debugging purposes.  This can help us figure out (but an ugly
 --   process of elimination) which MVar reads are leading to a "Thread
 --   blocked indefinitely" exception.
 busyTakeMVar :: String -> MVar a -> IO a
-busyTakeMVar msg mv = try 5000000
+busyTakeMVar msg mv = try (10 * 1000 * 1000)
  where 
  try 0 = do 
    tid <- myThreadId
 --   B.putStrLn (B.pack$ show tid ++ "! ")
-   putStr (show tid ++ msg)
-   try 1 
+   putStrLn (show tid ++" not getting anywhere, msg: "++ msg)  -- After we've failed enough times, start complaining.
+   try (100 * 1000)
  try n = do
    x <- tryTakeMVar mv
    case x of 
      Just y  -> return y
-     Nothing -> try (n-1)
+     Nothing -> do yield; try (n-1)
    
 
 -- | Fork a thread but ALSO set up an error handler that suppresses
@@ -787,8 +802,10 @@ forkIO_Suppress :: Int -> IO () -> IO ThreadId
 forkIO_Suppress whre action = 
   forkOn whre $ 
            handle (\e -> 
---                   case fromException (e::SomeException) :: IOException of
+--                   case fromException (e::SomeException) :: Maybe IOException of
                     case (e::BlockedIndefinitelyOnMVar) of
-                     _ -> return ()
+                     _ -> do 
+                             putStrLn$"CAUGHT child thread exception: "++show e 
+                             return ()
 		  )
            action

@@ -224,7 +224,7 @@ multiply operator doesn't really help (no balance).
     0            1        1       0         BlockIndefinitely
 
     1            1        0       0         LiveLock and Leak
-    0            0        0       0         LiveLock and Leak
+    0            0        0       0         LiveLock and Leak   # NOW INVALID...
     1            1        0       1         LiveLock and Leak
 
 
@@ -286,7 +286,25 @@ this config.  Now I'll check in.
 
     1            0        0       1        0           Worked SLOWLY.
 
+----------------
 
+Ok, checked in.
+
+    1            1        0       1        0           Works, 200% cpu,  -N2
+    1            1        0       1        0           LiveLock, no leak -N3 
+
+Wait a sec... this idling off mode is still fishy.  It CANNOT stay in
+the steal loop.  It needs to return to rescheduleR so as to check
+killflag.  If I fix that I get a 200% cpu livelock on -N3.  Is there
+some OTHER way that threads are failing to see the killflag?
+
+Hmm... rerunning with apparently unrelated changes makes that a 300%
+cpu livelock.  Ah it's nondeterministic.  The 200% behavior happens
+comparatively less often.  
+
+Turning on busyTakeMVar seems to ELIMINATE the 200% behavior.  But
+this is odd.  Yes, the main thread should be waiting, fine.  But there
+should still be THREE worker threads, not TWO.
 
 
 TEMP / SCRAP:
