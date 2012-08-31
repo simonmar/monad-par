@@ -152,7 +152,7 @@ data Sched = Sched
       -- a REAL haskell continuation that we need to return to.  In
       -- that case we need to know WHEN to stop rescheduling and
       -- return to that genuine continuation.
-      sessionFinished :: HotVar Bool
+      sessionFinished :: Maybe (HotVar Bool)
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))
@@ -185,7 +185,12 @@ amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
-  return (M.lookup tid wp)
+  case M.lookup tid wp of
+    Nothing -> return Nothing
+    Just Sched{sessionFinished=Nothing, no} -> do
+      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" no
+      return Nothing
+    oth -> return oth
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
@@ -361,7 +366,7 @@ runPar userComp = unsafePerformIO $ do
        ref <- newIORef (error "this should never be touched")
        newSess <- newHotVar False
        let cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
-       RD.runReaderT (C.runContT (unPar userComp) cont) (sched{ sessionFinished=newSess})
+       RD.runReaderT (C.runContT (unPar userComp) cont) (sched{ sessionFinished=Just newSess})
        when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
        -- By returning here we ARE reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread.
@@ -401,9 +406,9 @@ runPar userComp = unsafePerformIO $ do
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
---       takeMVar m -- Final value.
+       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
-       busyTakeMVar " global wait " m -- Final value.                    
+--       busyTakeMVar " global wait " m -- Final value.                    
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -425,10 +430,9 @@ makeScheds main = do
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
    killflag  <- newHotVar False
-   sessionFinished <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=sessionFinished
+                             sessionFinished=Nothing
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -609,8 +613,10 @@ rescheduleR k = do
   case mtask of
     Nothing -> do 
                   k <- liftIO$ readIORef (killflag mysched)
-                  fin <- liftIO$ readIORef (sessionFinished mysched)
-		  if (k ||  fin) 
+                  fin <- liftIO$ case sessionFinished mysched of
+                                   Nothing -> return False
+                                   Just r  -> readIORef r
+		  if (k || fin) 
                    then do when (dbglvl>=0) $ 
                              liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
                                             (no mysched) (show k) (show fin)
