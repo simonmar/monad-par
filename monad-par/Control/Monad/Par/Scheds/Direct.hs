@@ -72,7 +72,7 @@ import qualified Prelude
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 #define NESTED_SCHEDS
 #define PARPUTS
-#define FORKPARENT
+-- define FORKPARENT
 -- define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
 #define WAKEIDLE
@@ -81,6 +81,17 @@ import qualified Prelude
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
 -- that lives in this dangerous region:
 --------------------------------------------------------------------
+
+#ifdef DEBUG
+import System.Environment (getEnvironment)
+theEnv = unsafePerformIO $ getEnvironment
+dbg = True
+dbglvl = 1
+#else
+dbg = False
+dbglvl = 0
+#endif
+
 #ifdef PARPUTS
 _PARPUTS = True
 #else
@@ -99,16 +110,6 @@ _IDLING_ON = True
 #else
 _IDLING_ON = False
 #endif
-
-
-#ifdef DEBUG
-import System.Environment (getEnvironment)
-theEnv = unsafePerformIO $ getEnvironment
-dbg = True
-#else
-dbg = False
-#endif
-
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -145,7 +146,13 @@ data Sched = Sched
       ---- Global data: ----
       killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
-      scheds   :: [Sched]        -- A global list of schedulers.
+      scheds   :: [Sched],   -- A global list of schedulers.
+
+      -- For nested support, our scheduler may be working on behalf of
+      -- a REAL haskell continuation that we need to return to.  In
+      -- that case we need to know WHEN to stop rescheduling and
+      -- return to that genuine continuation.
+      sessionFinished :: HotVar Bool
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))
@@ -298,6 +305,7 @@ pushWork Sched { workpool, idle, no, isMain } task = do
                     -- TODO: We need to have a proper binary wakeup-tree.
   tryWakeIdle idle
 #endif
+  return ()
 
 tryWakeIdle idle = do
 -- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
@@ -344,15 +352,17 @@ runPar userComp = unsafePerformIO $ do
    maybSched <- amINested tid
    case maybSched of 
      Just (sched@Sched{scheds}) -> do 
-       when dbg$ printf " [%s] Engaging trivial strategy for embedding nested work....\n" (show tid)
+       when (dbglvl>=1)$ printf " [%d %s] Engaging trivial strategy for embedding nested work....\n" (no sched) (show tid)
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
 --       runReaderWith sched $ rescheduleR errK
 
        -- Here we have an extra IORef... ugly.
        ref <- newIORef (error "this should never be touched")
-       let cont ans = liftIO$ writeIORef ref ans
-       RD.runReaderT (C.runContT (unPar userComp) cont) sched
+       newSess <- newHotVar False
+       let cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
+       RD.runReaderT (C.runContT (unPar userComp) cont) (sched{ sessionFinished=newSess})
+       when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
        -- By returning here we ARE reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread.
        readIORef ref
@@ -368,6 +378,7 @@ runPar userComp = unsafePerformIO $ do
                  then do when dbg$ printf " [%d] Entering scheduling loop.\n" cpu
                          runReaderWith sched $ rescheduleR errK
                          when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
+                         return ()
                  else do
                       let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
                                           res <- userComp
@@ -390,9 +401,9 @@ runPar userComp = unsafePerformIO $ do
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
-       takeMVar m -- Final value.
+--       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
---       busyTakeMVar " global wait " m -- Final value.                    
+       busyTakeMVar " global wait " m -- Final value.                    
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -402,6 +413,7 @@ sanityCheck allscheds = do
      b <- R.nullQ workpool
      when (not b) $ do 
          printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
+         return ()
   putStrLn "Sanity check complete."
 
 
@@ -413,8 +425,10 @@ makeScheds main = do
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
    killflag  <- newHotVar False
+   sessionFinished <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
-			     workpool=wp, scheds=allscheds, rng=rng
+			     workpool=wp, scheds=allscheds, rng=rng,
+                             sessionFinished=sessionFinished
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -480,10 +494,12 @@ put_ iv@(IVar v) !content = do
                Full _     -> error "multiple put"
                Blocked ks -> (Full content, ks)
 #ifdef DEBUG
-      sn <- makeStableName iv
-      printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
-	     (no sched) (show content) (hashStableName sn) (length ks)
-#endif
+      when (dbglvl >=  3) $ do 
+         sn <- makeStableName iv
+         printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
+                (no sched) (show content) (hashStableName sn) (length ks)
+         return ()
+#endif 
       return ks
    wakeUp sched ks content   
 
@@ -572,10 +588,11 @@ fork task =
       when dbg$ do 
        sched2 <- RD.ask 
        io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+       return ()
 
     False -> do 
       sch <- RD.ask
-      io$ when dbg$ printf " [%d] forking task...\n" (no sch)
+      when dbg$ io$ printf " [%d] forking task...\n" (no sch)
       io$ pushWork sch task
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
@@ -591,8 +608,14 @@ rescheduleR k = do
   mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do 
-                  k <- liftIO$ readIORef (killflag mysched) 
-		  unless k $ do		    
+                  k <- liftIO$ readIORef (killflag mysched)
+                  fin <- liftIO$ readIORef (sessionFinished mysched)
+		  if (k ||  fin) 
+                   then do when (dbglvl>=0) $ 
+                             liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
+                                            (no mysched) (show k) (show fin)
+                           return ()
+                   else do
 		     liftIO$ steal mysched
 #ifdef WAKEIDLE
 --                     io$ tryWakeIdle (idle mysched)
@@ -616,7 +639,7 @@ runReaderWith state m = RD.runReaderT m state
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
-  when dbg$ printf " [%d]  + stealing\n" my_no
+  when (dbglvl>=2)$ printf " [%d]  + stealing\n" my_no
   i <- getnext (-1 :: Int)
   go maxtries i
  where
@@ -646,7 +669,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          go maxtries i
 
     -- We need to return from this loop to check killflag and exit the scheduler if necessary.
-    go 0 i | _IDLING_ON == False = return ()
+    go 0 i | _IDLING_ON == False = yield
 
     ----------------------------------------
     go tries i
@@ -654,8 +677,9 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			go (tries-1) i'
 
       | otherwise     = do
+         -- We ONLY go through the global sched array to access 
          let schd = scheds!!i
-         when dbg$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
+         when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
 
 --         let dq = workpool schd :: WSDeque (Par ())
          let dq = workpool schd 

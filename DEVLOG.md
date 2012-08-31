@@ -306,6 +306,12 @@ Turning on busyTakeMVar seems to ELIMINATE the 200% behavior.  But
 this is odd.  Yes, the main thread should be waiting, fine.  But there
 should still be THREE worker threads, not TWO.
 
+The 200% must be from hitting some kind of blackhole to disable the worker?
+
+-----------------
+
+
+
 
 TEMP / SCRAP:
 --------------------------------------------------------------------------------

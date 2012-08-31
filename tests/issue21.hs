@@ -56,7 +56,7 @@ main = do
   putStrLn$"Beginning benchmark on: "++show tid
   
   let n = case args of 
---       []  -> 10 * 1000 * 1000
-       []  -> 1 * 1000 * 1000 
+       []  -> 10 * 1000 * 1000
+--       []  -> 1 * 1000 * 1000 
        [s] -> read s
   print $ length $ show $ fib n
