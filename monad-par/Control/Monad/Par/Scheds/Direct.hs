@@ -69,6 +69,31 @@ import qualified Prelude
 --------------------------------------------------------------------------------
 
 -- define DEBUG
+-- [2012.08.30] This shows a 10X improvement on nested parfib:
+-- define NESTED_SCHEDS
+#define PARPUTS
+#define FORKPARENT
+-- define IDLING_ON
+   -- Next, IF idling is on, should we do wakeups?:
+#define WAKEIDLE
+
+-------------------------------------------------------------------
+-- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
+-- that lives in this dangerous region:
+--------------------------------------------------------------------
+#ifdef PARPUTS
+_PARPUTS = True
+#else
+_PARPUTS = False
+#endif
+
+#ifdef FORKPARENT
+_FORKPARENT = True
+#else
+#warning "FORKPARENT POLICY NOT USED; THIS IS GENERALLY WORSE"
+_FORKPARENT = False
+#endif
+
 #ifdef DEBUG
 import System.Environment (getEnvironment)
 theEnv = unsafePerformIO $ getEnvironment
@@ -77,18 +102,6 @@ dbg = True
 dbg = False
 #endif
 
--- [2012.08.30] This shows a 10X improvement on nested parfib:
--- define NESTED_SCHEDS
-#define PARPUTS
-#ifdef PARPUTS
-_PARPUTS = True
-#else
-_PARPUTS = False
-#endif
-#define FORKPARENT
--- define IDLING_ON
--- Next, IF idling is on, should we do wakeups?:
-#define WAKEIDLE
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -304,7 +317,7 @@ runPar userComp = unsafePerformIO $ do
    tid <- myThreadId  
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
-    -- We create a thread on each CPU with forkOnIO.  The CPU on which
+    -- We create a thread on each CPU with forkOn.  The CPU on which
     -- the current thread is running will host the main thread; the
     -- other CPUs will host worker threads.
     --
@@ -341,7 +354,7 @@ runPar userComp = unsafePerformIO $ do
 
        m <- newEmptyMVar
        forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-            forkOnIO cpu $ do 
+            forkOn cpu $ do 
               tid <- myThreadId
               registerWorker tid sched
               if (cpu /= main_cpu)
@@ -532,31 +545,29 @@ wakeUp sched ks arg = loop ks
 -- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
-#ifdef FORKPARENT
-#warning "FORK PARENT POLICY USED"
-fork task = do 
-   sched <- RD.ask   
-   callCC$ \parent -> do
-      let wrapped = parent ()
-      -- Is it possible to slip in a new Sched here?
-      -- let wrapped = lift$ RD.runReaderT (parent ()) undefined
-      io$ pushWork sched wrapped
-      -- Then execute the child task and return to the scheduler when it is complete:
-      task 
-      -- If we get to this point we have finished the child task:
-      reschedule -- We reschedule to pop the cont we pushed.
-      io$ putStrLn " !!! ERROR: Should not reach this point #1"   
+fork task = 
+  case _FORKPARENT of 
+    True -> do 
+      sched <- RD.ask   
+      callCC$ \parent -> do
+         let wrapped = parent ()
+         -- Is it possible to slip in a new Sched here?
+         -- let wrapped = lift$ RD.runReaderT (parent ()) undefined
+         io$ pushWork sched wrapped
+         -- Then execute the child task and return to the scheduler when it is complete:
+         task 
+         -- If we get to this point we have finished the child task:
+         reschedule -- We reschedule to pop the cont we pushed.
+         io$ putStrLn " !!! ERROR: Should not reach this point #1"   
 
-   when dbg$ do 
-    sched2 <- RD.ask 
-    io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+      when dbg$ do 
+       sched2 <- RD.ask 
+       io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
 
-#else
-fork task = do
-   sch <- RD.ask
-   io$ when dbg$ printf " [%d] forking task...\n" (no sch)
-   io$ pushWork sch task
-#endif
+    False -> do 
+      sch <- RD.ask
+      io$ when dbg$ printf " [%d] forking task...\n" (no sch)
+      io$ pushWork sch task
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
 reschedule :: Par a 
@@ -774,7 +785,7 @@ busyTakeMVar msg mv = try 5000000
 --   MVar exceptions.
 forkIO_Suppress :: Int -> IO () -> IO ThreadId
 forkIO_Suppress whre action = 
-  forkOnIO whre $ 
+  forkOn whre $ 
            handle (\e -> 
 --                   case fromException (e::SomeException) :: IOException of
                     case (e::BlockedIndefinitelyOnMVar) of
