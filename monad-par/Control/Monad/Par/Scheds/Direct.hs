@@ -59,6 +59,8 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 #endif
 
+import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar)
+
 import Prelude hiding (null)
 import qualified Prelude
 
@@ -77,13 +79,15 @@ dbg = False
 
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- define NESTED_SCHEDS
+#define PARPUTS
 #ifdef PARPUTS
 _PARPUTS = True
 #else
 _PARPUTS = False
 #endif
 #define FORKPARENT
-#define IDLING_ON
+-- define IDLING_ON
+-- Next, IF idling is on, should we do wakeups?:
 #define WAKEIDLE
 
 --------------------------------------------------------------------------------
@@ -136,30 +140,36 @@ io = unsafeParIO -- shorthand used below
 -- Global State
 --------------------------------------------------------------------------------
 
--- This keeps track of ALL worker threads across all unrelated
+-- This keeps track of ALL worker threads across all unreated
 -- `runPar` instantiations.  This is used to detect nested invocations
 -- of `runPar` and avoid reinitialization.
 -- globalWorkerPool :: IORef (Data.IntMap ())
 globalWorkerPool :: IORef (M.Map ThreadId Sched)
 globalWorkerPool = unsafePerformIO $ newIORef M.empty
 
+{-# INLINE amINested #-}
+{-# INLINE registerWorker #-}
+{-# INLINE unregisterWorker #-}
 amINested :: ThreadId -> IO (Maybe Sched)
+registerWorker :: ThreadId -> Sched -> IO ()
+unregisterWorker :: ThreadId -> IO ()
+#ifdef NESTED_SCHEDS
 amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
   return (M.lookup tid wp)
-
-registerWorker :: ThreadId -> Sched -> IO ()
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
-
-unregisterWorker :: ThreadId -> IO ()
 unregisterWorker tid = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.delete tid mp, ())
-
+#else 
+amINested      _     = return Nothing
+registerWorker _ _   = return ()
+unregisterWorker tid = return ()
+#endif
 
 --------------------------------------------------------------------------------
 -- Helpers #1:  Atomic Variables
@@ -263,12 +273,10 @@ pushWork Sched { workpool, idle, no, isMain } task = do
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
-#ifdef IDLING_ON
-#ifdef WAKEIDLE
+#if  defined(IDLING_ON) && defined(WAKEIDLE)
   --when isMain$    -- Experimenting with reducing contention by doing this only from a single thread.
                     -- TODO: We need to have a proper binary wakeup-tree.
   tryWakeIdle idle
-#endif
 #endif
 
 tryWakeIdle idle = do
@@ -315,7 +323,6 @@ runPar userComp = unsafePerformIO $ do
 #endif
    maybSched <- amINested tid
    case maybSched of 
-#ifdef NESTED_SCHEDS
      Just (sched@Sched{scheds}) -> do 
        when dbg$ printf " [%s] Engaging trivial strategy for embedding nested work....\n" (show tid)
        -- Here the current thread is ALREADY a worker.  All we need to
@@ -330,9 +337,6 @@ runPar userComp = unsafePerformIO $ do
        -- are already inside the rescheduleR loop on this thread.
        readIORef ref
      Nothing -> do
-#else 
-     _       -> do
-#endif
        allscheds <- makeScheds main_cpu
 
        m <- newEmptyMVar
@@ -367,6 +371,7 @@ runPar userComp = unsafePerformIO $ do
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
        takeMVar m -- Final value.
+--       busyTakeMVar " glob " m -- Final value.                    
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -446,8 +451,8 @@ unsafePeek iv@(IVar v) = do
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 --   In this scheduler, puts immediately execute woken work in the current thread.
 put_ iv@(IVar v) !content = do
-   sched <- RD.ask 
-   io$ do 
+   sched <- RD.ask
+   ks <- io$ do 
       ks <- atomicModifyIORef v $ \e -> case e of
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
@@ -457,8 +462,8 @@ put_ iv@(IVar v) !content = do
       printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      wakeUp sched ks content
-
+      return ks
+   wakeUp sched ks content   
 
 -- | NOTE unsafeTryPut is NOT exposed directly through this module.  (So
 -- this module remains SAFE in the Safe Haskell sense.)  It can only
@@ -467,8 +472,8 @@ put_ iv@(IVar v) !content = do
 unsafeTryPut iv@(IVar v) !content = do
    -- Head strict rather than fully strict.
    sched <- RD.ask 
-   io$ do 
-      (ks,res) <- atomicModifyIORef v $ \e -> case e of
+   (ks,res) <- io$ do 
+      pr@(ks,res) <- atomicModifyIORef v $ \e -> case e of
 		   Empty      -> (Full content, ([], content))
 		   Full x     -> (Full x, ([], x))
 		   Blocked ks -> (Full content, (ks, content))
@@ -477,26 +482,51 @@ unsafeTryPut iv@(IVar v) !content = do
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length ks)
 #endif
-      wakeUp sched ks content
-      return res
+      return pr
+   wakeUp sched ks content
+   return res
 
 -- | When an IVar is filled in, continuations wake up.
 {-# INLINE wakeUp #-}
-wakeUp :: Sched -> [a -> IO ()]-> a -> IO ()
-wakeUp sched ks arg = do
-   -- FIXME -- without strict firewalls keeping ivars from moving
-   -- between runPar sessions, if we allow nested scheduler use
-   -- we could potentially wake up work belonging to a different
-   -- runPar and thus bring it into our worker and delay our own
-   -- continuation until its completion.
-   if _PARPUTS then 
-     error "FINISHME" 
-    else 
-     -- This version sacrifices a parallelism opportunity and
-     -- imposes additional serialization.
-     mapM_ ($arg) ks
-   return ()
+wakeUp :: Sched -> [a -> IO ()]-> a -> Par ()
+wakeUp sched ks arg = loop ks
+ where
+   loop [] = return ()
+   loop (kont:rest) = do
+     -- FIXME -- without strict firewalls keeping ivars from moving
+     -- between runPar sessions, if we allow nested scheduler use
+     -- we could potentially wake up work belonging to a different
+     -- runPar and thus bring it into our worker and delay our own
+     -- continuation until its completion.
+     if _PARPUTS then
+       -- We do NOT force the putting thread to postpone its continuation.
+       do spawn_$ pMap kont rest
+          return ()
+       -- case rest of
+       --   [] -> spawn_$ io$ kont arg
+       --   _  -> spawn_$ do spawn_$ io$ kont arg
+       --                    io$ parchain rest
+       -- error$"FINISHME - wake "++show (length ks)++" conts"
+      else 
+       -- This version sacrifices a parallelism opportunity and
+       -- imposes additional serialization.
+       --
+       -- [2012.08.31] WARNING -- this serialzation CAN cause deadlock.
+       -- This "optimization" should not be on the table.
+       -- mapM_ ($arg) ks
+       do io$ kont arg
+          loop rest 
+     return ()
 
+   pMap kont [] = io$ kont arg
+   pMap kont (more:rest) =
+     do spawn_$ io$ kont arg
+        pMap more rest
+
+   -- parchain [kont] = kont arg
+   -- parchain (kont:rest) = do spawn$ io$ kont arg
+   --                           parchain rest
+                              
 
 ------------------------------------------------------------
 -- TODO: Continuation (parent) stealing version.
@@ -594,6 +624,11 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          when dbg$ printf " [%d]  | woken up\n" my_no
 			 i <- getnext (-1::Int)
                          go maxtries i
+#else
+    -- We still need to make sure that we yield (or at least allocate)
+    -- within the stealing spinloop.
+    go 0 i = do yield
+                go maxtries i 
 #endif
     ----------------------------------------
     go tries i
@@ -712,3 +747,37 @@ instance Applicative Par where
    pure  = return
 -- </boilerplate>
 --------------------------------------------------------------------------------
+
+
+-- DEBUGGING TOOLs
+--------------------------------------------------------------------------------
+
+-- | For debugging purposes.  This can help us figure out (but an ugly
+--   process of elimination) which MVar reads are leading to a "Thread
+--   blocked indefinitely" exception.
+busyTakeMVar :: String -> MVar a -> IO a
+busyTakeMVar msg mv = try 5000000
+ where 
+ try 0 = do 
+   tid <- myThreadId
+--   B.putStrLn (B.pack$ show tid ++ "! ")
+   putStr (show tid ++ msg)
+   try 1 
+ try n = do
+   x <- tryTakeMVar mv
+   case x of 
+     Just y  -> return y
+     Nothing -> try (n-1)
+   
+
+-- | Fork a thread but ALSO set up an error handler that suppresses
+--   MVar exceptions.
+forkIO_Suppress :: Int -> IO () -> IO ThreadId
+forkIO_Suppress whre action = 
+  forkOnIO whre $ 
+           handle (\e -> 
+--                   case fromException (e::SomeException) :: IOException of
+                    case (e::BlockedIndefinitelyOnMVar) of
+                     _ -> return ()
+		  )
+           action

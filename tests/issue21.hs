@@ -21,8 +21,8 @@ import PARSCHED
 #else
 -- This bug was reported for the Trace scheduler:
 -- import Control.Monad.Par.Scheds.Trace
-import Control.Monad.Par
--- import Control.Monad.Par.Scheds.Direct
+-- import Control.Monad.Par
+import Control.Monad.Par.Scheds.Direct
 -- import Control.Monad.Par.Meta.SMP (runPar, spawn, get)
 #endif
 
