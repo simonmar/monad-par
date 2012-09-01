@@ -43,8 +43,7 @@ import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName
 import qualified Control.Monad.Par.Class  as PC
 import qualified Control.Monad.Par.Unsafe as UN
-import Control.DeepSeq
-import qualified Data.Map as M
+import Control.import qualified Data.Map as M
 
 -- import Data.Concurrent.Deque.Class as DQ
 #ifdef REACTOR_DEQUE
@@ -148,11 +147,21 @@ data Sched = Sched
       idle     :: HotVar [MVar Bool],
       scheds   :: [Sched],   -- A global list of schedulers.
 
+
+      ------ Nested Support -------
+
+      -- In the nested scheme, each sched is working only at a SINGLE
+      -- pedigree.  The contract is that the workpool associated with
+      -- this sched may only ever produce work of this pedigree.  Thus
+      -- nested scheduling avoids forking extra threads, but it does
+      -- not avoid creating a new Sched for a deeper runPar session.
+      pedigree :: Pedigree,
+
       -- For nested support, our scheduler may be working on behalf of
       -- a REAL haskell continuation that we need to return to.  In
       -- that case we need to know WHEN to stop rescheduling and
       -- return to that genuine continuation.
-      sessionFinished :: Maybe (HotVar Bool)
+      nestedFinished :: Maybe (HotVar Bool)
      }
 
 newtype IVar a = IVar (IORef (IVarContents a))
@@ -187,7 +196,7 @@ amINested tid = do
   wp <- readIORef globalWorkerPool
   case M.lookup tid wp of
     Nothing -> return Nothing
-    Just Sched{sessionFinished=Nothing, no} -> do
+    Just Sched{nestedFinished=Nothing, no} -> do
       when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" no
       return Nothing
     oth -> return oth
@@ -202,6 +211,31 @@ amINested      _     = return Nothing
 registerWorker _ _   = return ()
 unregisterWorker tid = return ()
 #endif
+
+--------------------------------------------------------------------------------
+-- Helpers #0: Pedigrees
+--------------------------------------------------------------------------------
+
+-- | The Pedigree distinguishes where a runPar instance is in the tree of
+-- nested runPar instances.  This type can be just a counter, or it
+-- can include a list/set of "parent" runPar ids.
+type Pedigree = Int
+
+-- | Is it safe help out by stealing work of a given pedigree, or does
+--   it raise the potential for deadlock?
+canWork :: Pedigree -> Pedigree -> Bool
+canWork myID     -- ^ Our pedigree
+        targetID -- ^ Potential target pedigree
+  = targetID >= myID
+
+-- | The Pedigree of the very first "runPar".
+rootPedigree :: Pedigree
+rootPedigree = 0
+
+-- | Extend a pedigree to get a child pedigree.
+extendPedigree :: Pedigree -> Pedigree
+extendPedigree p = p + 1
+
 
 --------------------------------------------------------------------------------
 -- Helpers #1:  Atomic Variables
@@ -356,7 +390,7 @@ runPar userComp = unsafePerformIO $ do
 #endif
    maybSched <- amINested tid
    case maybSched of 
-     Just (sched@Sched{scheds}) -> do 
+     Just (sched@Sched{scheds, pedigree}) -> do 
        when (dbglvl>=1)$ printf " [%d %s] Engaging trivial strategy for embedding nested work....\n" (no sched) (show tid)
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
@@ -364,9 +398,16 @@ runPar userComp = unsafePerformIO $ do
 
        -- Here we have an extra IORef... ugly.
        ref <- newIORef (error "this should never be touched")
-       newSess <- newHotVar False
-       let cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
-       RD.runReaderT (C.runContT (unPar userComp) cont) (sched{ sessionFinished=Just newSess})
+       newBool <- newHotVar False
+       let cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newBool True
+           freshSched = sched {
+                          pedigree = extendPedigree pedigree, 
+                          nestedFinished= Just newBool }
+
+       -- Overwrite our own sched in the global array so theives can access the new one:
+       -- FINISHME -- wait, this is problematic...
+       
+       RD.runReaderT (C.runContT (unPar userComp) cont) freshSched
        when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
        -- By returning here we ARE reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread.
@@ -432,7 +473,7 @@ makeScheds main = do
    killflag  <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=Nothing
+                             nestedFinished=Nothing
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -613,12 +654,12 @@ rescheduleR k = do
   case mtask of
     Nothing -> do 
                   k <- liftIO$ readIORef (killflag mysched)
-                  fin <- liftIO$ case sessionFinished mysched of
+                  fin <- liftIO$ case nestedFinished mysched of
                                    Nothing -> return False
                                    Just r  -> readIORef r
 		  if (k || fin) 
                    then do when (dbglvl>=0) $ 
-                             liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
+                             liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, nestedFinished=%s\n"
                                             (no mysched) (show k) (show fin)
                            return ()
                    else do
@@ -683,23 +724,20 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			go (tries-1) i'
 
       | otherwise     = do
-         -- We ONLY go through the global sched array to access 
-         let schd = scheds!!i
-         when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
+         let victim = scheds!!i
+         when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no victim)
 
---         let dq = workpool schd :: WSDeque (Par ())
-         let dq = workpool schd 
-         r <- R.tryPopR dq
+         r <- R.tryPopR (workpool victim)
 
          case r of
            Just task  -> do
               when dbg$ do sn <- makeStableName task
-			   printf " [%d]  | stole work (unit %d) from cpu %d\n" my_no (hashStableName sn) (no schd)
+			   printf " [%d]  | stole work (unit %d) from cpu %d\n" my_no (hashStableName sn) (no victim)
 	      runReaderWith mysched $ 
 		C.runContT (unPar task)
 		 (\_ -> do
 		   when dbg$ do sn <- liftIO$ makeStableName task
-		                liftIO$ printf " [%d]  | DONE running stolen work (unit %d) from %d\n" my_no (hashStableName sn) (no schd)
+		                liftIO$ printf " [%d]  | DONE running stolen work (unit %d) from %d\n" my_no (hashStableName sn) (no victim)
 		   return ())
 
            Nothing -> do i' <- getnext i

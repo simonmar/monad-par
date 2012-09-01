@@ -308,7 +308,14 @@ should still be THREE worker threads, not TWO.
 
 The 200% must be from hitting some kind of blackhole to disable the worker?
 
------------------
+
+< Testing one-level-deep nesting >
+----------------------------------
+
+This seems to work without deadlock / livelock.  That would be
+consistent with the hypothesis that it is loop in nested runPars /
+steals.
+
 
 
 
