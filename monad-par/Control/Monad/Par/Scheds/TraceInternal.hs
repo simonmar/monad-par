@@ -457,7 +457,7 @@ globalThreadShutdown = do
 
 -- [Notes on threadCapability]
 --
--- We create a thread on each CPU with forkOnIO.  Ideally, the CPU on 
+-- We create a thread on each CPU with forkOn.  Ideally, the CPU on 
 -- which the current thread is running will host the main thread; the 
 -- other CPUs will host worker threads.
 --
@@ -510,7 +510,7 @@ runPar_internal _doSync x = unsafePerformIO $ do
         rref <- newIORef Empty
         atomicModifyIORef statusRef $ addExtIdler (ExtIdle uid m)
         forM_ (elems states) $ \(state@Sched{no=cpu}) -> do
-          forkOnIO cpu $ do
+          forkOn cpu $ do
 --          forkIO_Suppress cpu $ do
             myTId <- myThreadId
             --printf "cpu %d setting threadId=%s\n" cpu (show myTId)
@@ -651,7 +651,7 @@ busyTakeMVar mv = try 5000000
 --   MVar exceptions.
 forkIO_Suppress :: Int -> IO () -> IO ThreadId
 forkIO_Suppress whre action = 
-  forkOnIO whre $ 
+  forkOn whre $ 
            handle (\e -> 
 --                   case fromException (e::SomeException) :: IOException of
                     case (e::BlockedIndefinitelyOnMVar) of

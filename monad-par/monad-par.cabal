@@ -100,6 +100,7 @@ Library
                , containers
                , parallel >= 3.1
                , mtl >= 2.0.1.0
+               , vector >= 0.9
 
   ghc-options: -O2
   Other-modules:
