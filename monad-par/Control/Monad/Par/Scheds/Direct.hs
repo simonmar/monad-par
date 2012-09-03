@@ -37,6 +37,7 @@ import "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
 -- import qualified Data.Array as A
 import qualified Data.Vector as V
+import qualified Data.Vector.Mutable as MV
 import qualified Data.Sequence as Seq
 import System.Random.MWC as Random
 import System.IO.Unsafe (unsafePerformIO)
@@ -148,7 +149,7 @@ data Sched = Sched
       idle     :: HotVar [MVar Bool],
 --      scheds   :: [Sched],   -- A global list of schedulers.
       -- A pointer to the global vector of schedulers.  It changes to /grow/.
-      schedPool :: HotVar (V.Vector Sched),
+      schedPool :: HotVar (MV.IOVector Sched),
 
       ------ Nested Support -------
 
@@ -395,10 +396,9 @@ runPar userComp = unsafePerformIO $ do
      Just sched -> runNestedPar sched tid userComp
      Nothing -> do
        allscheds <- makeScheds main_cpu
-
        m <- newEmptyMVar
-       forM_ [0 .. V.length allscheds] $ \cpu ->
-            let sched = allscheds V.! cpu in
+       forM_ [0 .. (MV.length allscheds)] $ \cpu -> do
+            sched <- MV.read allscheds cpu 
             forkOn cpu $ do 
               tid <- myThreadId
               registerWorker tid sched
@@ -414,12 +414,12 @@ runPar userComp = unsafePerformIO $ do
                                           when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
 
                                           -- Sanity check our work queues:
-                                          when dbg $ io$ sanityCheck (V.toList allscheds)
+--                                          when dbg $ io$ sanityCheck (MV.toList allscheds)
                                           io$ putMVar m res
 
                       RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
-                      when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
-                                   sanityCheck (V.toList allscheds)
+--                      when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
+--                                   sanityCheck (MV.toList allscheds)
                       -- Not currently requiring that other scheduler threads have exited before we 
                       -- (the main thread) exit.  But we do signal here that they should terminate:
                       writeIORef (killflag sched) True
@@ -436,7 +436,7 @@ runPar userComp = unsafePerformIO $ do
 
 {-# INLINE runNestedPar #-}
 runNestedPar :: Sched -> ThreadId -> Par a -> IO a
-runNestedPar (sched@Sched{pedigree}) tid userComp =
+runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
  do 
     when (dbglvl>=1)$ printf " [%d %s] Engaging embedding nested work....\n" (no sched) (show tid)
     -- Here the current thread is ALREADY a worker.  We want to
@@ -457,8 +457,9 @@ runNestedPar (sched@Sched{pedigree}) tid userComp =
     -- How these are combined constitutes a significant design choice.
         -- (OPTION 1) - IF the current Sched has run dry, we can put ourselves in its place.
         replaceCurrent = do
-            -- V.write schedPool (no sched) freshSched
-            error "Undefined"
+            pool <- readHotVar schedPool
+            MV.write pool (no sched) freshSched
+            error "unfinished... write me"
         -- (OPTION 2) - We can WAIT, doing work until the current Sched runs dry and OPTION 1 applies.
         waitForParent  = do
             isdry <- nullQ (workpool sched)
@@ -513,15 +514,16 @@ sanityCheck allscheds = do
 
 
 -- Create the default scheduler(s) state:
-makeScheds :: Int -> IO (V.Vector Sched)
+makeScheds :: Int -> IO (MV.IOVector Sched)
 makeScheds main = do
    when dbg$ printf "[initialization] Creating %d worker threads\n" numCapabilities
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
    killflag  <- newHotVar False
-   schedPool <- newHotVar V.empty
-   let allscheds = V.fromList
+   empty     <- MV.new 0
+   schedPool <- newHotVar empty -- (V.thaw V.empty)
+   allscheds <- V.thaw $ V.fromList
                    [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, rng=rng,
                              schedPool= schedPool,
@@ -783,7 +785,7 @@ steal mysched@Sched{ idle, rng, no=my_no, schedPool } = do
 
       | otherwise     = do
          allscheds <- readHotVar schedPool -- It's ok if this changes out from under us.    
-         let victim = allscheds V.! i      -- The worst that happens is we miss out on the latest work.
+         victim <- MV.read allscheds  i    -- The worst that happens is we miss out on the latest work.
 
          if canWork (pedigree mysched) (pedigree victim) then do           
             when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no victim)
