@@ -199,14 +199,14 @@ amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
-  return Nothing
-  -- case M.lookup tid wp of
-  --   Nothing -> return Nothing
-  --   x@(Just Sched{nestedFinished=Nothing, no}) -> do
-  --     return x
-  --   Just s -> do 
-  --     when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" (no s)
-  --     return Nothing
+  case M.lookup tid wp of
+    Nothing -> return Nothing
+    x@(Just Sched{nestedFinished=Nothing, no}) -> do
+      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: First nest... allowing..\n" no
+      return x
+    Just s -> do 
+      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" (no s)
+      return Nothing
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
@@ -433,16 +433,16 @@ runPar userComp = unsafePerformIO $ do
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
-       takeMVar m -- Final value.
+--       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
---       busyTakeMVar " global wait " m -- Final value.                    
+       busyTakeMVar " global wait " m -- Final value.                    
 
 
 {-# INLINE runNestedPar #-}
 runNestedPar :: Sched -> ThreadId -> Par a -> IO a
-runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
+runNestedPar (sched@Sched{no,pedigree=ped,schedPool}) tid userComp =
  do 
-    when (dbglvl>=0)$ printf " [%d %s] Engaging embedding nested work....\n" (no sched) (show tid)
+    when (dbglvl>=0)$ printf " [%d %s] Engaging embedding nested work....\n" no  (show tid)
     -- Here the current thread is ALREADY a worker.  We want to
     -- plug the new computation into the current pool of workers.
     -- HOWEVER, this is a complicated business due to the potential
@@ -453,7 +453,7 @@ runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
     -- Here we have an extra IORef to communicate the answer... ugly.
     ref <- newIORef (error "this should never be touched")
     newBool <- newHotVar False
-    let freshSched = sched { pedigree = extendPedigree pedigree, 
+    let freshSched = sched { pedigree = extendPedigree ped, 
                              nestedFinished= Just newBool }
 
     -- NEXT: there are THREE options for HOW to schedule the nested work
@@ -463,15 +463,16 @@ runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
         replaceSched newSched = do
             -- There are no data races here, because we are only
             -- entitled to change our OWN (this thread's) entry:
-            old <- MV.read schedPool (no sched)
-            MV.write schedPool (no sched) newSched
+            old <- MV.read schedPool no
+            MV.write schedPool no newSched
             return old
             
         -- (OPTION 2) - We can WAIT, doing work until the current Sched runs dry and OPTION 1 applies.
         waitForParent  = do
             -- Work until we run dry locally.
             isdry <- nullQ (workpool sched)
-            unless isdry $ do 
+            unless isdry $ do
+               when (dbglvl>=0) $ printf " [%d] Nested runPar.  Current Sched not dry, waiting on it...\n" no
                runOne sched  -- Steal and run one work item.  May take arbitrarily long.
                waitForParent
 
@@ -482,12 +483,12 @@ runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
         cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newBool True
         -- When we're ready, this actually runs 
         engageNested = do RD.runReaderT (C.runContT (unPar userComp) cont) freshSched
-                          when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
+                          when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" no (show tid)
 
     -- Here's our current policy:
     waitForParent                   -- Procrastinate the nested runPar.
     old <- replaceSched freshSched  -- Pop out old pedigree-tagged Sched
-    printf "SWAPPED OUT SCHEDS...\n"
+    printf "SWAPPED OUT SCHEDS... pedOld %s pedNew %s\n" (show$ pedigree old) (show$ pedigree freshSched)
     engageNested                    -- Work until the nested runPar is finished
     replaceSched old                -- Restore old Sched
         
