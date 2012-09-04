@@ -147,9 +147,11 @@ data Sched = Sched
       ---- Global data: ----
       killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
---      scheds   :: [Sched],   -- A global list of schedulers.
+
       -- A pointer to the global vector of schedulers.  It changes to /grow/.
-      schedPool :: HotVar (MV.IOVector Sched),
+      -- schedPool :: HotVar (MV.IOVector Sched),
+      -- NIX that [2012.09.03] keeping it fixed size for now:
+      schedPool :: MV.IOVector Sched,
 
       ------ Nested Support -------
 
@@ -197,12 +199,14 @@ amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
-  case M.lookup tid wp of
-    Nothing -> return Nothing
-    Just Sched{nestedFinished=Nothing, no} -> do
-      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" no
-      return Nothing
-    oth -> return oth
+  return Nothing
+  -- case M.lookup tid wp of
+  --   Nothing -> return Nothing
+  --   x@(Just Sched{nestedFinished=Nothing, no}) -> do
+  --     return x
+  --   Just s -> do 
+  --     when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" (no s)
+  --     return Nothing
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
@@ -397,7 +401,7 @@ runPar userComp = unsafePerformIO $ do
      Nothing -> do
        allscheds <- makeScheds main_cpu
        m <- newEmptyMVar
-       forM_ [0 .. (MV.length allscheds)] $ \cpu -> do
+       forM_ [0 .. (MV.length allscheds) - 1 ] $ \cpu -> do
             sched <- MV.read allscheds cpu 
             forkOn cpu $ do 
               tid <- myThreadId
@@ -438,7 +442,7 @@ runPar userComp = unsafePerformIO $ do
 runNestedPar :: Sched -> ThreadId -> Par a -> IO a
 runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
  do 
-    when (dbglvl>=1)$ printf " [%d %s] Engaging embedding nested work....\n" (no sched) (show tid)
+    when (dbglvl>=0)$ printf " [%d %s] Engaging embedding nested work....\n" (no sched) (show tid)
     -- Here the current thread is ALREADY a worker.  We want to
     -- plug the new computation into the current pool of workers.
     -- HOWEVER, this is a complicated business due to the potential
@@ -456,17 +460,19 @@ runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
     --------------------------------------------------------------------
     -- How these are combined constitutes a significant design choice.
         -- (OPTION 1) - IF the current Sched has run dry, we can put ourselves in its place.
-        replaceCurrent = do
-            pool <- readHotVar schedPool
-            MV.write pool (no sched) freshSched
-            error "unfinished... write me"
+        replaceSched newSched = do
+            -- There are no data races here, because we are only
+            -- entitled to change our OWN (this thread's) entry:
+            old <- MV.read schedPool (no sched)
+            MV.write schedPool (no sched) newSched
+            return old
+            
         -- (OPTION 2) - We can WAIT, doing work until the current Sched runs dry and OPTION 1 applies.
         waitForParent  = do
+            -- Work until we run dry locally.
             isdry <- nullQ (workpool sched)
-            if isdry then return () else do 
---               rescheduleR -- Do one work item.
---               RD.runReaderT (runOne sched) freshSched
-               runOne sched
+            unless isdry $ do 
+               runOne sched  -- Steal and run one work item.  May take arbitrarily long.
                waitForParent
 
         -- (OPTION 3) - We can INCREASE the number of active steal targets, replacing the global array.
@@ -479,9 +485,11 @@ runNestedPar (sched@Sched{pedigree,schedPool}) tid userComp =
                           when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
 
     -- Here's our current policy:
-    waitForParent
-    replaceCurrent
-    engageNested
+    waitForParent                   -- Procrastinate the nested runPar.
+    old <- replaceSched freshSched  -- Pop out old pedigree-tagged Sched
+    printf "SWAPPED OUT SCHEDS...\n"
+    engageNested                    -- Work until the nested runPar is finished
+    replaceSched old                -- Restore old Sched
         
     -- By returning here we ARE reengaging the scheduler, since we
     -- are ALREADY inside the rescheduleR loop on this thread:
@@ -516,22 +524,21 @@ sanityCheck allscheds = do
 -- Create the default scheduler(s) state:
 makeScheds :: Int -> IO (MV.IOVector Sched)
 makeScheds main = do
-   when dbg$ printf "[initialization] Creating %d worker threads\n" numCapabilities
-   workpools <- replicateM numCapabilities $ R.newQ
-   rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
-   idle      <- newHotVar []   
+   let numWorkers = numCapabilities
+   when dbg$ printf "[initialization] Creating %d worker threads\n" numWorkers
+   workpools <- replicateM numWorkers $ R.newQ
+   rngs      <- replicateM numWorkers $ Random.create >>= newHotVar 
+   idle      <- newHotVar []
    killflag  <- newHotVar False
-   empty     <- MV.new 0
-   schedPool <- newHotVar empty -- (V.thaw V.empty)
-   allscheds <- V.thaw $ V.fromList
-                   [ Sched { no=x, idle, killflag, isMain= (x==main),
-			     workpool=wp, rng=rng,
-                             schedPool= schedPool,
-                             pedigree= rootPedigree,
-                             nestedFinished= Nothing
-			   }
-                   | (x,wp,rng) <- zip3 [0..] workpools rngs]
-   writeHotVarRaw schedPool allscheds
+   allscheds <- MV.new numWorkers
+   forM_ (zip3 [0..] workpools rngs) $ \ (x,wp,rng) -> 
+     MV.write allscheds x $
+       Sched { no=x, idle, killflag, isMain= (x==main),
+               workpool=wp, rng=rng,
+               schedPool= allscheds,
+               pedigree= rootPedigree,
+               nestedFinished= Nothing
+             }
    return allscheds
 
 
@@ -784,9 +791,7 @@ steal mysched@Sched{ idle, rng, no=my_no, schedPool } = do
 			go (tries-1) i'
 
       | otherwise     = do
-         allscheds <- readHotVar schedPool -- It's ok if this changes out from under us.    
-         victim <- MV.read allscheds  i    -- The worst that happens is we miss out on the latest work.
-
+         victim <- MV.read schedPool i
          if canWork (pedigree mysched) (pedigree victim) then do           
             when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no victim)
             r <- R.tryPopR (workpool victim)
