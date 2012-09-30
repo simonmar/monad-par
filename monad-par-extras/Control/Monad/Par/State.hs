@@ -4,7 +4,9 @@
 
 -- | This module provides a notion of (Splittable) State that is
 --   compatible with any Par monad.
-
+--
+--   This module provides instances that make StateT-transformed
+--   monads into valid Par monads.
 
 module Control.Monad.Par.State 
   (
@@ -22,7 +24,7 @@ import qualified Control.Monad.Trans.State.Lazy as SL
 --- Make Par computations with state work.
 --- (TODO: move these instances to a different module.)
 
--- | A type in `SplittableState` is meant to be added as to a Par monad
+-- | A type in `SplittableState` is meant to be added to a Par monad
 --   using StateT.  It works like any other state except at `fork`
 --   points, where the runtime system splits the state using `splitState`.
 -- 
@@ -30,6 +32,11 @@ import qualified Control.Monad.Trans.State.Lazy as SL
 --   include (1) routing a splittable random number generator through
 --   a parallel computation, and (2) keeping a tree-index that locates
 --   the current computation within the binary tree of `fork`s.
+--   Also, it is possible to simply duplicate the state at all fork points,
+--   enabling "thread local" copies of the state.
+--
+--   The limitation of this approach is that the splitting method is
+--   fixed, and the same at all `fork` points.  
 class SplittableState a where
   splitState :: a -> (a,a)
 
