@@ -68,6 +68,7 @@ install-all:
 mega-install:
 	${CABAL_INSTALL} ${ALL_PKGS} 
 
+# This one is CUDA SPECIFIC:
 mega-install-gpu:
 	${CABAL_INSTALL} -fcuda ${ALL_GPU_PKGS} 
 
