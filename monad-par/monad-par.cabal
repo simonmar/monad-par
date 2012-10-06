@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3
+Version:             0.3.1
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -16,7 +16,7 @@ Synopsis:            A library for parallel programming based on a monad
 
 --  0.3      : Factored/reorganized modules and packages.  
 --             *This* package is the original, core monad-par.
-
+--  0.3.1    : fix for ghc 7.6.1, expose Par.IO
 
 Description:         This library offers an alternative parallel programming
                      API to that provided by the @parallel@ package.
@@ -76,6 +76,7 @@ Library
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
+                 , Control.Monad.Par.IO
 
                  -- This is the default scheduler:
                  , Control.Monad.Par.Scheds.Trace
@@ -85,7 +86,8 @@ Library
                  , Control.Monad.Par.Scheds.Direct
 
                  -- This scheduler uses sparks rather than IO threads.
-                 -- It only supports Futures, not full IVars:
+                 -- It only supports Futures, not full IVars.  Fork
+                 -- becomes lighter weight.
                  , Control.Monad.Par.Scheds.Sparks
 
   Build-depends: base >= 4 && < 5
@@ -113,8 +115,10 @@ Library
                -- Internal logging framework:
                -- Control.Monad.Par.Logging,
 
-               -- Serial Elision is currently experimental:
+               -- Serial Elision scheduling is currently experimental:
                -- Control.Monad.Par.Scheds.SerialElision
+
+               Control.Monad.Par.Scheds.DirectInternal
 
                ------------------------------------------------------------
                --                   Data Structures                      -- 

@@ -12,7 +12,8 @@ module Control.Monad.Par.Scheds.TraceInternal (
    Trace(..), Sched(..), Par(..),
    IVar(..), IVarContents(..),
    sched,
-   runPar, runParAsync, runParAsyncHelper,
+   runPar, runParIO, runParAsync,
+   -- runParAsyncHelper,
    new, newFull, newFull_, get, put_, put,
    pollIVar, yield,
  ) where
@@ -477,8 +478,8 @@ globalThreadShutdown = do
 
 
 {-# INLINE runPar_internal #-}
-runPar_internal :: Bool -> Par a -> a
-runPar_internal _doSync x = unsafePerformIO $ do
+runPar_internal :: Bool -> Par a -> IO a
+runPar_internal _doSync x = do
         -- Set up the schedulers
     myTId <- myThreadId
     tIds <- replicateM numCapabilities $ newIORef myTId
@@ -585,13 +586,18 @@ runPar_internal _doSync x = unsafePerformIO $ do
 
 -- | The main way to run a Par computation
 runPar :: Par a -> a
-runPar = runPar_internal True
+runPar = unsafePerformIO . runParIO
+
+-- | A version that avoids an internal `unsafePerformIO` for calling
+--   contexts that are already in the `IO` monad.
+runParIO :: Par a -> IO a
+runParIO = runPar_internal True
 
 -- | An asynchronous version in which the main thread of control in a
 -- Par computation can return while forked computations still run in
 -- the background.  
 runParAsync :: Par a -> a
-runParAsync = runPar_internal False
+runParAsync = unsafePerformIO . runPar_internal False
 
 -- | An alternative version in which the consumer of the result has
 --   the option to "help" run the Par computation if results it is

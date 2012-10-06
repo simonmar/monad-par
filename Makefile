@@ -49,7 +49,7 @@ ifeq ($(CABAL),)
 endif
 
 CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
-  ${CABAL_ARGS}
+  --with-haddock=${HADDOCK} ${CABAL_ARGS} 
 
 # --------------------------------------------------------------------------------
 # Installation
@@ -57,6 +57,9 @@ CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
 
 install: install-all
 
+# Example of how to reinstall:
+reinstall:
+	CABAL_ARGS="--force-reinstalls" ${MAKE} install
 
 # Issue a single big cabal command to install everything.
 install-with-tests:
@@ -69,7 +72,7 @@ mega-install:
 	${CABAL_INSTALL} ${ALL_PKGS} 
 
 # This one is CUDA SPECIFIC:
-mega-install-gpu:
+mega-install-cuda:
 	${CABAL_INSTALL} -fcuda ${ALL_GPU_PKGS} 
 
 # For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:

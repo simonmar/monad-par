@@ -87,7 +87,7 @@ module Control.Monad.Par
  (
   -- * The Par Monad
   Par, 
-  runPar, 
+  runPar, runParIO,
 
   fork,
   -- | forks a computation to happen in parallel.  The forked

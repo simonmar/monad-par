@@ -310,6 +310,40 @@ The 200% must be from hitting some kind of blackhole to disable the worker?
 
 -----------------
 
+[2012.10.06] {Strange GHC bug?}
+
+I got into a bad state with ghc-7.4.1 where I would try to import my
+module, and it would appear to succeed, but nothing would be bound.
+
+But then it looks like I could import any old (capitalized) nonsense
+string and it would also appear to succeed!!  
+
+    Prelude> import Control.Monad.Par.aoetu
+    <interactive>:1:8: parse error on input `Control.Monad.Par.aoetu'
+    Prelude> import Control.Monad.Par.I
+    Prelude> import Control.Monad.Par.IO
+    Prelude> import Control.Monad.Par.A
+    Prelude> import Control.Monad.Par.BB
+    Prelude> import Control.Monad.Par.BBBBB
+
+Strange.  Is it because I just installed a new GHC alongside and am
+now using this old one by appending the extension?
+
+Note, this works even for top-level nonsense modules:
+
+    Prelude> import ENOTHU
+
+This problem is unique to my 7.4.1 install.  It doesn't happen under
+7.0 or 7.6.
+
+-------------
+
+Also, don't forget to list "OtherModules" to avoid this:
+
+    Failed to load interface for `Control.Monad.Par.Scheds.DirectInternal'
+    There are files missing in the `monad-par-0.3' package,
+    try running 'ghc-pkg check'.
+    Use -v to see a list of the files searched for.
 
 
 

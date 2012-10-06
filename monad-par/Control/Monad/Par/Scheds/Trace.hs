@@ -11,7 +11,7 @@
  -}
 
 module Control.Monad.Par.Scheds.Trace (
-    Par, runPar, fork,
+    Par, runPar, runParIO, fork,
     IVar, new, newFull, newFull_, get, put, put_,
     spawn, spawn_, spawnP 
   ) where
