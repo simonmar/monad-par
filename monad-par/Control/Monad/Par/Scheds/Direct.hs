@@ -38,7 +38,7 @@ import qualified "mtl" Control.Monad.Reader as RD
 -- import qualified Data.Array as A
 -- import qualified Data.Vector as A
 import qualified Data.Sequence as Seq
-import System.Random.MWC as Random
+import qualified System.Random.MWC as Random
 import System.IO.Unsafe (unsafePerformIO)
 import System.Mem.StableName
 import qualified Control.Monad.Par.Class  as PC
@@ -59,7 +59,7 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 #endif
 
-import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar, SomeException, IOException)
+import qualified Control.Exception as E
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -140,7 +140,7 @@ data Sched = Sched
 #else
       workpool :: WSDeque (Par ()),
 #endif
-      rng      :: HotVar GenIO, -- Random number gen for work stealing.
+      rng      :: HotVar Random.GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
       ---- Global data: ----
@@ -323,7 +323,7 @@ tryWakeIdle idle = do
                              (i:is) -> (is, putMVar i False))
     r -- wake an idle worker up by putting an MVar.
 
-rand :: HotVar GenIO -> IO Int
+rand :: HotVar Random.GenIO -> IO Int
 rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 
 --------------------------------------------------------------------------------
@@ -803,7 +803,7 @@ instance Applicative Par where
 dbgTakeMVar :: String -> MVar a -> IO a
 dbgTakeMVar msg mv = 
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
-  catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
+  E.catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
  where   
    doDebugStuff = do putStrLn$"This takeMVar blocked indefinitely!: "++msg
                      error "failed"
@@ -831,11 +831,10 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
 forkIO_Suppress :: Int -> IO () -> IO ThreadId
 forkIO_Suppress whre action = 
   forkOn whre $ 
-           handle (\e -> 
---                   case fromException (e::SomeException) :: Maybe IOException of
-                    case (e::BlockedIndefinitelyOnMVar) of
-                     _ -> do 
-                             putStrLn$"CAUGHT child thread exception: "++show e 
-                             return ()
-		  )
+           E.handle (\e -> 
+                      case (e :: E.BlockedIndefinitelyOnMVar) of
+                       _ -> do 
+                               putStrLn$"CAUGHT child thread exception: "++show e 
+                               return ()
+		    )
            action
