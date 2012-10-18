@@ -8,8 +8,6 @@ import Data.STRef
 import Unsafe.Coerce (unsafeCoerce)
 import Debug.Trace (trace)
 
--- data MyST s a = MyST State (ST s a)
-
 newtype MyST s a = MyST ((StateT Status (ST s)) a)
 --  deriving (MonadState Status)
 
@@ -36,8 +34,8 @@ instance Monad (MyST s) where
 runMyST :: forall a . ((forall ss . MyST ss a) -> a)
 runMyST (MyST m) = runST (unsafeCoerce st)
  where 
---   st :: ST s a 
---   st :: Int
+--   st :: ST s2 a 
+--   st :: ST ss a
    st = evalStateT m Open
 
 
