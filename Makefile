@@ -8,29 +8,28 @@
 # Set up some Variables
 # --------------------------------------------------------------------------------
 
+# The packages unique to this repository, not including third-party
+# dependencies (submodules).
 OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
-# This is experimental:
-# abstract-par-offchip/
-
-# This isn't really meant to be distributed:
+# Direct CUDA support isn't really meant to be distributed:
 # meta-par-cuda/
 
-DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ \
-  Deques/ChaseLev/ Deques/MegaDeque/ 
+# Third party dependency: concurrent data structures
+DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ 
+#  Deques/ChaseLev/ Deques/MegaDeque/ 
 
+# Third party dependency: network-transport layer
 NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
-  distributed-process/network-transport \
-  distributed-process/network-transport-pipes/
+  distributed-process/network-transport 
+#  distributed-process/network-transport-pipes/
 
+# Third party dependency: Accelerate
 ACC_PKGS= accelerate/ accelerate/accelerate-io/ \
 	  abstract-par-accelerate/ meta-par-accelerate/
+# All of the above can work CPU-only.  The following really requires CUDA:
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
 
-ALL_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
-ALL_NETWORK_PKGS = ${ALL_PKGS} ${NETWORK_PKGS}
-ALL_GPU_PKGS = ${ALL_PKGS} ${ACC_GPU_PKGS}
-
-ALL_VERSION_PKGS= ${OUR_PKGS} Deques/AbstractDeque/
+MAIN_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
 
 ifeq ($(GHC),)
   GHC=`which ghc`
@@ -41,7 +40,8 @@ ifeq ($(GHC_PKG),)
 endif
 
 ifeq ($(HADDOCK),)
-  HADDOCK= "$(HOME)/.cabal/bin/haddock"
+  HADDOCK=haddock
+#  HADDOCK= "$(HOME)/.cabal/bin/haddock"
 endif
 
 ifeq ($(CABAL),)
@@ -52,28 +52,29 @@ CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
   --with-haddock=${HADDOCK} ${CABAL_ARGS} 
 
 # --------------------------------------------------------------------------------
-# Installation
+# Installation 
 # --------------------------------------------------------------------------------
 
+# The main entrypoint assumes that you already have third party
+# dependencies installed, and installs the core packages only:
 install: install-all
 
 # Example of how to reinstall:
 reinstall:
 	CABAL_ARGS="--force-reinstalls" ${MAKE} install
 
-# Issue a single big cabal command to install everything.
-install-with-tests:
-	${CABAL_INSTALL} ${OUR_PKGS} --enable-tests
-
 install-all:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
+dist-install: 
+	${CABAL_INSTALL} ${MAIN_PKGS} ${NETWORK_PKGS}
+
 mega-install:
-	${CABAL_INSTALL} ${ALL_PKGS} 
+	${CABAL_INSTALL} ${MAIN_PKGS} 
 
 # This one is CUDA SPECIFIC:
 mega-install-cuda:
-	${CABAL_INSTALL} -fcuda ${ALL_GPU_PKGS} 
+	${CABAL_INSTALL} -fcuda ${MAIN_PKGS} ${ACC_GPU_PKGS}
 
 # For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:
 jenkins-all-versions:
@@ -109,10 +110,11 @@ uninstall:
 # Testing 
 # --------------------------------------------------------------------------------
 
+# The short way.  Install everything and test at the same time.
 test:
 	$(MAKE) mega-install CABAL_ARGS='--enable-tests --disable-documentation'
 
-# Running a full test uses cabal-dev to sandbox the build.
+# The longer way.  Run a full test uses cabal-dev to sandbox the build.
 validate: 
 	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='$(CABAL_ARGS) --disable-library-profiling --enable-tests --disable-documentation --force-reinstalls'
 	(cd examples; $(MAKE) validate)
@@ -126,7 +128,7 @@ validate:
 
 
 # --------------------------------------------------------------------------------
-# Documentation 
+# Build the Documentation 
 # --------------------------------------------------------------------------------
 
 doc:
@@ -140,6 +142,9 @@ doc:
 	mv ./Deques/*/dist/doc/html/* docs/
 	mv ./accelerate/*/dist/doc/html/* docs/
 
+# Ryan specific:
+# This publishes docs on the interwebs.
+# 
 # TODO: If we also moved over all the otherd docs from the global and
 # user DBs we could create a complete documentation collection on this
 # website and no longer depend on hackage:
@@ -151,5 +156,5 @@ install-doc:
 
 # --------------------------------------------------------------------------------
 
-clean:
+
 
