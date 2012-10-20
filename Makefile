@@ -24,8 +24,8 @@ NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
 #  distributed-process/network-transport-pipes/
 
 # Third party dependency: Accelerate
-ACC_PKGS= accelerate/ accelerate/accelerate-io/ \
-	  abstract-par-accelerate/ meta-par-accelerate/
+ACC_PKGS= accelerate/ abstract-par-accelerate/ meta-par-accelerate/
+# accelerate/accelerate-io/
 # All of the above can work CPU-only.  The following really requires CUDA:
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
 
@@ -57,13 +57,13 @@ CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
 
 # The main entrypoint assumes that you already have third party
 # dependencies installed, and installs the core packages only:
-install: install-all
+install: install-ours
 
 # Example of how to reinstall:
 reinstall:
 	CABAL_ARGS="--force-reinstalls" ${MAKE} install
 
-install-all:
+install-ours:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
 dist-install: 
