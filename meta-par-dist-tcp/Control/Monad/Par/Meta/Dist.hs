@@ -39,13 +39,12 @@ import Control.Exception (catch, throw, SomeException)
 
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
-import qualified Network.Transport.Pipes as PT
 
 import System.Random (randomIO)
 import System.IO (stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import RPC.Reg (RemoteCallMetaData)
+import Remote.Reg (RemoteCallMetaData)
 import Text.Printf
 
 --------------------------------------------------------------------------------
@@ -57,18 +56,18 @@ import Text.Printf
 --   determine that on its own.
 data WhichTransport = 
     TCP 
-  | Pipes 
+--  | Pipes 
 --  | MPI 
   | Custom (Rem.InitMode -> IO T.Transport)
 
 instance Show WhichTransport where
   show TCP = "TCP"
-  show Pipes = "Pipes"
+--  show Pipes = "Pipes"
   show (Custom _) = "<CustomTransport>"
 
 readTransport :: String -> WhichTransport
 readTransport "TCP"   = TCP
-readTransport "Pipes" = Pipes
+--readTransport "Pipes" = Pipes
 readTransport x       = error $ printf "Meta.Dist: unknown transport %s" x
 
 --------------------------------------------------------------------------------
@@ -171,22 +170,18 @@ pickTrans :: WhichTransport -> Rem.InitMode -> IO T.Transport
 pickTrans trans = 
      case trans of 
        TCP   -> initTCP
-       Pipes -> initPipes
+--       Pipes -> initPipes
 --       MPI   ->
        Custom fn -> fn
 
 initTCP :: Rem.InitMode -> IO T.Transport
 initTCP mode = do 
-    host <- Rem.hostName        
+    host <- Rem.hostName
 --    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
     case mode of 
       Rem.Slave   -> do port <- breakSymmetry
-                        TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show port)
-      (Rem.Master _) -> TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show control_port)
-
-
-initPipes :: Rem.InitMode -> IO T.Transport
-initPipes _ = PT.mkTransport
+                        TCP.createTransport $ host (show port) TCP.defaultTCPParameters
+      (Rem.Master _) -> TCP.createTransport $ host (show control_port) TCP.defaultTCPParameters
 
 -- TODO: Make this configurable:
 control_port :: Int

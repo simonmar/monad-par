@@ -42,11 +42,11 @@ Library
                 , deepseq >= 1.2
                 , mtl
                 , network-transport
-                , network-transport-pipes
+                , network-transport-tcp
                 , process >= 1.1
                 , syb >= 0.3
                 , unix >= 2.5
-                , RPC
+                , remote
                 , random 
                 , abstract-par
                 , meta-par

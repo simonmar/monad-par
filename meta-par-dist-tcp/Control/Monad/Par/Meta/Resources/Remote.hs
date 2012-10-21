@@ -73,9 +73,10 @@ import Control.Monad.Par.Meta.Resources.Debugging
 import Control.Monad.Par.Meta (forkWithExceptions, Sched(Sched,no,ivarUID),
 			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..), GlobalState)
 import qualified Network.Transport     as T
-import RPC.Closure  (Closure(Closure))
-import RPC.Encoding (Payload, Serializable, serialDecodePure)
-import qualified RPC.Reg as Reg
+import qualified Network.Transport.TCP as TT
+import Remote.Closure  (Closure(Closure))
+import Remote.Encoding (Payload, Serializable, serialDecodePure)
+import qualified Remote.Reg as Reg
 import GHC.Conc (numCapabilities)
 
 ----------------------------------------------------------------------------------------------------
@@ -200,7 +201,7 @@ longQueue = unsafePerformIO $ R.newQ
 {-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
 type PeerName = BS.ByteString
-peerTable :: HotVar (V.Vector (Maybe (PeerName, T.SourceEnd)))
+peerTable :: HotVar (V.Vector (Maybe (PeerName, T.EndPoint)))
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
 
 {-# NOINLINE machineList #-}
@@ -389,7 +390,7 @@ closeAllConnections = do
   V.forM_ pt $ \ entry -> 
     case entry of 
       Nothing -> return ()
-      Just (_,targ) -> T.closeSourceEnd targ
+      Just (_,targ) -> T.closeEndPoint targ
   trans <- readIORef myTransport
   T.closeTransport trans
     
@@ -417,25 +418,28 @@ initPeerTable ms = do
 
 -- | Connect to a node if there is not already a connection.  Return
 --   the name and active connection.
-connectNode :: Int -> IO (PeerName, T.SourceEnd)
+connectNode :: Int -> IO (PeerName, T.Connection)
 connectNode ind = do
   pt <- readHotVar peerTable
   let entry = pt V.! ind
-  case entry of 
+  (_, c) <- case entry of 
     Just x  -> return x
     Nothing -> do 
       ml <- readIORef machineList
       let name  = ml !! ind
-          file = mkAddrFile name ind
+      file = mkAddrFile name ind
 
-      toPeer <- waitReadAndConnect ind file
-      let entry = (name, toPeer)
+      let entry = (name, waitAndRead ind file)
       modifyHotVar_ peerTable (\pt -> pt V.// [(ind,Just entry)])
       return entry
 
--- | Wait until a file appears, read an addr from it, and connect.
-waitReadAndConnect :: Int -> FilePath -> IO T.SourceEnd
-waitReadAndConnect _ file = do 
+  conn <- T.connect c
+  dbgTaggedMsg 2 "     ... Connected."
+  return conn
+
+-- | Wait until a file appears, and read an endpoint address from it.
+waitAndRead :: Int -> FilePath -> IO T.EndPoint
+waitAndRead _ file = do 
       dbgTaggedMsg 2$ BS.pack $ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
       let 
@@ -448,12 +452,9 @@ waitReadAndConnect _ file = do
 		   threadDelay (10*1000) -- Wait between file system checks.
 		   loop False
       bstr <- loop True
-      addr <- case T.deserialize transport bstr of 
- 	        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
-		Just a  -> return a
-      conn <- T.connect addr
-      dbgTaggedMsg 2 "     ... Connected."
-      return conn
+      case bstr of 
+        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
+        Just addr  -> return addr
 
 extendPeerTable :: Int -> (PeerName, T.SourceEnd) -> IO ()
 extendPeerTable id entry = 
@@ -754,7 +755,7 @@ waitForShutdown token = do
    return ()
 
 -- The master tells all workers to quit.
-masterShutdown :: Token -> T.TargetEnd -> IO ()
+masterShutdown :: Token -> T.EndPoint -> IO ()
 #ifdef SHUTDOWNACK
 masterShutdown token targetEnd = do
 #else
@@ -842,8 +843,6 @@ defaultSteal = WS ws
       (_,str) <- measureIVarTable
       dbgTaggedMsg 4$ ""+++ showNodeID myid+++" Attempting steal from Node ID "
                       +++showNodeID ind+++"  "+++ str
---     (_,conn) <- connectNode ind 
---     T.send conn [encode$ StealRequest myid]
       sendTo ind (encode$ StealRequest myid)
 
       -- We have nothing to return immediately, but hopefully work will come back later.
@@ -900,7 +899,7 @@ longSpawn (local, clo) = do
 --------------------------------------------------------------------------------
 
 -- | Receive steal requests from other nodes.  This runs in a loop indefinitely.
-receiveDaemon :: T.TargetEnd -> HotVar GlobalState -> IO ()
+receiveDaemon :: T.EndPoint -> HotVar GlobalState -> IO ()
 receiveDaemon targetEnd schedMap = 
   do myid <- readIORef myNodeID
      rcvLoop myid
