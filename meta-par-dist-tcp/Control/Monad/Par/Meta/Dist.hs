@@ -39,7 +39,10 @@ import Control.Exception (catch, throw, SomeException)
 
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TCP
+#define USE_PIPES
+#ifdef USE_PIPES
 import qualified Network.Transport.Pipes as PT
+#endif
 
 import System.Random (randomIO)
 import System.IO (stderr)
@@ -56,8 +59,8 @@ import Text.Printf
 --   nothing about WHICH slave is being instantiated and must
 --   determine that on its own.
 data WhichTransport = 
-    TCP 
-  | Pipes 
+    TCP
+  | Pipes
 --  | MPI 
   | Custom (Rem.InitMode -> IO T.Transport)
 
@@ -171,7 +174,11 @@ pickTrans :: WhichTransport -> Rem.InitMode -> IO T.Transport
 pickTrans trans = 
      case trans of 
        TCP   -> initTCP
+#ifdef USE_PIPES
        Pipes -> initPipes
+#else
+       Pipes -> error "pickTrans: meta-par-dist-tcp not compiled with support for Pipes transport" 
+#endif
 --       MPI   ->
        Custom fn -> fn
 
@@ -184,9 +191,10 @@ initTCP mode = do
                         TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show port)
       (Rem.Master _) -> TCP.mkTransport $ TCP.TCPConfig T.defaultHints host (show control_port)
 
-
+#ifdef USE_PIPES
 initPipes :: Rem.InitMode -> IO T.Transport
 initPipes _ = PT.mkTransport
+#endif
 
 -- TODO: Make this configurable:
 control_port :: Int

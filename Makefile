@@ -66,6 +66,7 @@ reinstall:
 install-ours:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
+# Install everything you need for distributed meta-par.
 dist-install: 
 	${CABAL_INSTALL} ${MAIN_PKGS} ${NETWORK_PKGS}
 
