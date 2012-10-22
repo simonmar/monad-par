@@ -56,18 +56,18 @@ import Text.Printf
 --   determine that on its own.
 data WhichTransport = 
     TCP 
---  | Pipes 
+  | Pipes 
 --  | MPI 
   | Custom (Rem.InitMode -> IO T.Transport)
 
 instance Show WhichTransport where
   show TCP = "TCP"
---  show Pipes = "Pipes"
+  show Pipes = "Pipes"
   show (Custom _) = "<CustomTransport>"
 
 readTransport :: String -> WhichTransport
 readTransport "TCP"   = TCP
---readTransport "Pipes" = Pipes
+readTransport "Pipes" = Pipes
 readTransport x       = error $ printf "Meta.Dist: unknown transport %s" x
 
 --------------------------------------------------------------------------------
@@ -170,7 +170,7 @@ pickTrans :: WhichTransport -> Rem.InitMode -> IO T.Transport
 pickTrans trans = 
      case trans of 
        TCP   -> initTCP
---       Pipes -> initPipes
+       Pipes -> initPipes
 --       MPI   ->
        Custom fn -> fn
 
@@ -184,6 +184,9 @@ initTCP mode = do
                         return trans
       (Rem.Master _) -> do Right trans <- TCP.createTransport host (show control_port) TCP.defaultTCPParameters
                            return trans
+
+initPipes :: Rem.InitMode -> IO T.Transport
+initPipes _ = error $ "Meta.Dist: Pipes transport not implemented"
 
 -- TODO: Make this configurable:
 control_port :: Int
