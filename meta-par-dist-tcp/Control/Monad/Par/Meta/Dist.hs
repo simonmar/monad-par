@@ -180,8 +180,10 @@ initTCP mode = do
 --    TCP.mkTransport $ TCP.TCPConfig T.defaultHints (BS.unpack host) control_port
     case mode of 
       Rem.Slave   -> do port <- breakSymmetry
-                        TCP.createTransport $ host (show port) TCP.defaultTCPParameters
-      (Rem.Master _) -> TCP.createTransport $ host (show control_port) TCP.defaultTCPParameters
+                        Right trans <- TCP.createTransport host (show port) TCP.defaultTCPParameters
+                        return trans
+      (Rem.Master _) -> do Right trans <- TCP.createTransport host (show control_port) TCP.defaultTCPParameters
+                           return trans
 
 -- TODO: Make this configurable:
 control_port :: Int

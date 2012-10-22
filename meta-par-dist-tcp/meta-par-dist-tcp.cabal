@@ -33,6 +33,7 @@ Library
 
   Build-depends:  
                   base >= 4 && < 5
+                , binary
                 , bytestring >= 0.9
                 , network
                 , directory >= 1.1

@@ -56,6 +56,7 @@ import Data.Monoid
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 
+import qualified Data.Binary as B
 import Data.Serialize (encode, decode, Serialize)
 import qualified Data.Serialize as Ser
 -- import Data.Serialize.Derive (deriveGet, derivePut)
@@ -75,7 +76,8 @@ import Control.Monad.Par.Meta (forkWithExceptions, Sched(Sched,no,ivarUID),
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TT
 import Remote.Closure  (Closure(Closure))
-import Remote.Encoding (Payload, Serializable, serialDecodePure)
+import Remote.Encoding (Payload, Serializable)
+import qualified Remote.Encoding as RE
 import qualified Remote.Reg as Reg
 import GHC.Conc (numCapabilities)
 
@@ -106,6 +108,9 @@ showNodeID n = "<Node"+++ sho n+++">"
 
 sho :: Show a => a -> BS.ByteString
 sho = BS.pack . show
+
+instance Show Payload where
+  show pl = show (RE.getPayloadType pl) ++ show (RE.getPayloadContent pl)
 
 -- Control messages are for starting the system up and communicating
 -- between slaves and the master.  
@@ -201,7 +206,7 @@ longQueue = unsafePerformIO $ R.newQ
 {-# NOINLINE peerTable #-}
 -- Each peer is either connected, or not connected yet.
 type PeerName = BS.ByteString
-peerTable :: HotVar (V.Vector (Maybe (PeerName, T.EndPoint)))
+peerTable :: HotVar (V.Vector (Maybe (PeerName, T.Connection)))
 peerTable = unsafePerformIO $ newHotVar (error "global peerTable uninitialized")
 
 {-# NOINLINE machineList #-}
@@ -289,7 +294,7 @@ hostName = trim <$>
 sendTo :: NodeID -> BS.ByteString -> IO ()
 sendTo ndid msg = do
     (_,conn) <- connectNode ndid
-    T.send conn [msg]
+    void$ T.send conn [msg]
 
 -- | We don't want anyone to try to use a file that isn't completely written.
 --   Note, this needs further thought for use with NFS...
@@ -390,10 +395,10 @@ closeAllConnections = do
   V.forM_ pt $ \ entry -> 
     case entry of 
       Nothing -> return ()
-      Just (_,targ) -> T.closeEndPoint targ
+      Just (_,targ) -> T.close targ
   trans <- readIORef myTransport
   T.closeTransport trans
-    
+
 -----------------------------------------------------------------------------------
 -- Initialize & Establish workers.
 -----------------------------------------------------------------------------------
@@ -422,26 +427,24 @@ connectNode :: Int -> IO (PeerName, T.Connection)
 connectNode ind = do
   pt <- readHotVar peerTable
   let entry = pt V.! ind
-  (_, c) <- case entry of 
+  case entry of 
     Just x  -> return x
     Nothing -> do 
       ml <- readIORef machineList
       let name  = ml !! ind
-      file = mkAddrFile name ind
+          file = mkAddrFile name ind
 
-      let entry = (name, waitAndRead ind file)
+      toPeer <- waitReadAndConnect ind file
+      let entry = (name, toPeer)
       modifyHotVar_ peerTable (\pt -> pt V.// [(ind,Just entry)])
       return entry
 
-  conn <- T.connect c
-  dbgTaggedMsg 2 "     ... Connected."
-  return conn
-
--- | Wait until a file appears, and read an endpoint address from it.
-waitAndRead :: Int -> FilePath -> IO T.EndPoint
-waitAndRead _ file = do 
+-- | Wait until a file appears, read and connect to the endpoint address.
+waitReadAndConnect :: Int -> FilePath -> IO T.Connection
+waitReadAndConnect _ file = do 
       dbgTaggedMsg 2$ BS.pack $ "    Establishing connection, reading file: "++file
       transport <- readIORef myTransport
+      Right endpoint <- T.newEndPoint transport
       let 
           loop firstTime = do
 	  b <- doesFileExist file 
@@ -452,11 +455,17 @@ waitAndRead _ file = do
 		   threadDelay (10*1000) -- Wait between file system checks.
 		   loop False
       bstr <- loop True
-      case bstr of 
-        Nothing -> fail$ " [distmeta] Garbage addr in file: "++ file
-        Just addr  -> return addr
+      let addr = T.EndPointAddress bstr
+      x <- T.connect endpoint addr T.ReliableOrdered T.defaultConnectHints
+      let conn = case x of 
+              Right conn -> conn
+              Left err -> error$ "Error connecting: "++show err
+      
+      dbgTaggedMsg 2 "     ... Connected."
+      return conn
 
-extendPeerTable :: Int -> (PeerName, T.SourceEnd) -> IO ()
+
+extendPeerTable :: Int -> (PeerName, T.Connection) -> IO ()
 extendPeerTable id entry = 
   modifyHotVar_ peerTable (V.modify (\v -> MV.write v id (Just entry)))
 
@@ -526,18 +535,22 @@ sharedInit metadata initTransport (Master machineList) = St st
      dbgTaggedMsg 3 "RPC metadata initialized."
      ----------------------------------------
 
+     te <- T.newEndPoint transport
+     let targetEnd = case te of
+           Right targetEnd -> targetEnd
+           Left err -> error$ "Error getting endpoint: "++show err
+         sourceAddr = T.address targetEnd
 
-     (sourceAddr, targetEnd) <- T.newConnection transport
-     -- Hygiene: Clear files storing slave addresses:
+    -- Hygiene: Clear files storing slave addresses:
      forM_ (zip [0::Int ..] machineList) $ \ (ind,machine) -> do
         let file = mkAddrFile machine ind
         b <- doesFileExist file
         when b $ removeFile file
 
      -- Write a file with our address enabling slaves to find us:
-     atomicWriteFile master_addr_file       $ T.serialize sourceAddr
+     atomicWriteFile master_addr_file       $ T.endPointAddressToByteString sourceAddr
      -- We are also a worker, so we write the file under our own name as well:
-     atomicWriteFile (mkAddrFile host myid) $ T.serialize sourceAddr
+     atomicWriteFile (mkAddrFile host myid) $ T.endPointAddressToByteString sourceAddr
 
      -- Remember how to talk to ourselves (as a worker):
      -- extendPeerTable myid (host, sourceAddr)
@@ -550,37 +563,37 @@ sharedInit metadata initTransport (Master machineList) = St st
      let
          slaveConnectLoop 0    _                = return ()
 	 slaveConnectLoop iter alreadyConnected = do
-          strs <- T.receive targetEnd 
+          T.Received _ strs <- T.receive targetEnd
           let str = BS.concat strs
               msg = decodeMsg str
           case msg of
             AnnounceSlave{name,toAddr} -> do 
+              let sourceAddr = T.EndPointAddress toAddr
 	      dbgTaggedMsg 3$ "Master: register new slave, name: "+++ name
 	      dbgTaggedMsg 4$ "  Full message received from slave: "+++ sho str
 
-	      -- Deserialize each of the sourceEnds received by the slaves:
-	      case T.deserialize transport toAddr of
-		Nothing         -> fail "Garbage message from slave!"
-		Just sourceAddr -> do 
-		  srcEnd <- T.connect sourceAddr
-		  let (id, alreadyConnected') = updateConnected name alreadyConnected machineList
-		  -- Convention: send slaves the machine list, and tell it what its ID is:
-		  T.send srcEnd [encode$ MachineListMsg (myid,host) id machineList]
+              x <- T.connect targetEnd sourceAddr T.ReliableOrdered T.defaultConnectHints
+              let srcConn = case x of 
+                    Right srcConn -> srcConn
+                    Left err -> error$ "Error connecting: "++show err
+              let (id, alreadyConnected') = updateConnected name alreadyConnected machineList
+              -- Convention: send slaves the machine list, and tell it what its ID is:
+              T.send srcConn [encode$ MachineListMsg (myid,host) id machineList]
 
-		  dbgTaggedMsg 4$ "Sent machine list to slave "+++showNodeID id+++": "+++ BS.unwords machineList
+              dbgTaggedMsg 4$ "Sent machine list to slave "+++showNodeID id+++": "+++ BS.unwords machineList
 
-		  -- Write the file to communicate that the machine is
-		  -- online and set up a way to contact it:
-		  let filename = mkAddrFile name id
+              -- Write the file to communicate that the machine is
+              -- online and set up a way to contact it:
+              let filename = mkAddrFile name id
 
-		  atomicWriteFile filename toAddr
-		  dbgTaggedMsg 3$ BS.pack $ "  Wrote file to signify slave online: " ++ filename
+              atomicWriteFile filename toAddr
+              dbgTaggedMsg 3$ BS.pack $ "  Wrote file to signify slave online: " ++ filename
 
-		  -- Keep track of the connection for future communications:
-		  dbgTaggedMsg 4$ "  Extending peerTable with node ID "+++ sho id
-		  extendPeerTable id (name, srcEnd)
+              -- Keep track of the connection for future communications:
+              dbgTaggedMsg 4$ "  Extending peerTable with node ID "+++ sho id
+              extendPeerTable id (name, srcConn)
 
-		  slaveConnectLoop (iter-1) alreadyConnected' 
+              slaveConnectLoop (iter-1) alreadyConnected' 
 
             othermsg -> errorExit$ "Received unexpected message when expecting AnnounceSlave: "++show othermsg            
      ----------------------------------------
@@ -598,8 +611,8 @@ sharedInit metadata initTransport (Master machineList) = St st
        dbgTaggedMsg 2 "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
          unless (ndid == myid) $ do 
-          msg <- decodeMsg <$> BS.concat <$> T.receive targetEnd 
-          case msg of 
+          T.Received _ msg <- T.receive targetEnd
+          case decodeMsg (BS.concat msg) of 
    	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", "
 	                           ++ (BS.unpack name) ++ ": peers connected."
 	     msg -> errorExit$ "Expected message when expecting ConnectAllPeers:"++ show msg
@@ -646,9 +659,13 @@ sharedInit metadata initTransport Slave = St st
      writeIORef taggedmsg_global_mode "_S"
 
      transport <- readIORef myTransport
-     (mySourceAddr, myInbound) <- T.newConnection transport
+     x <- T.newEndPoint transport
+     let myInbound = case x of
+           Right myInbound -> myInbound
+           Left err -> error$ "Error getting endpoint address: "++show err
+         mySourceAddr = T.address myInbound
 
-     dbgTaggedMsg 3$ "  Source addr created: " +++ sho (T.serialize mySourceAddr)
+     dbgTaggedMsg 3$ "  Source addr created: " +++ sho (T.endPointAddressToByteString mySourceAddr)
 
      let 
          waitMasterFile = do  
@@ -661,28 +678,28 @@ sharedInit metadata initTransport Slave = St st
          ----------------------------------------
          doMasterConnection = do
              dbgTaggedMsg 3$ BS.pack $ "Found master's address in file: "++ master_addr_file
-             bstr <- BS.readFile master_addr_file
-	     case T.deserialize transport bstr of 
-	       Nothing -> fail$ " [distmeta] Garbage message in master file: "++ master_addr_file
-   	       Just masterAddr -> do 
-		 toMaster <- T.connect masterAddr
-		 -- Convention: connect by sending name and reverse connection:
-		 T.send toMaster [encode$ AnnounceSlave host (T.serialize mySourceAddr)]
+             masterAddr <- BS.readFile master_addr_file
+             x <- T.connect myInbound (T.EndPointAddress masterAddr) T.ReliableOrdered T.defaultConnectHints
+             let toMaster = case x of 
+                   Right toMaster -> toMaster
+                   Left err -> error$ "Error connecting: "++show err
+             -- Convention: connect by sending name and reverse connection:
+             T.send toMaster [encode$ AnnounceSlave host (T.endPointAddressToByteString mySourceAddr)]
 
-                 dbgTaggedMsg 3 "Sent name and addr to master "
-	         _machines_bss <- T.receive myInbound
-                 let MachineListMsg (masterId,masterName) myid machines = decodeMsg (BS.concat _machines_bss)
-                 dbgTaggedMsg 2$ "Received machine list from master: "+++ BS.unwords machines
-		 initPeerTable machines
-		 writeIORef myNodeID myid
-                 writeIORef masterID masterId
-                 -- Since we already have a connection to the master we store this for later:
-		 extendPeerTable masterId (masterName, toMaster)
+             dbgTaggedMsg 3 "Sent name and addr to master "
+             T.Received _ _machines_bss <- T.receive myInbound
+             let MachineListMsg (masterId,masterName) myid machines = decodeMsg (BS.concat _machines_bss)
+             dbgTaggedMsg 2$ "Received machine list from master: "+++ BS.unwords machines
+             initPeerTable machines
+             writeIORef myNodeID myid
+             writeIORef masterID masterId
+             -- Since we already have a connection to the master we store this for later:
+             extendPeerTable masterId (masterName, toMaster)
 
-                 -- Further we already have our OWN connection, so we put this in the table for consistency:
---		 extendPeerTable myid (host,myInbound)
+             -- Further we already have our OWN connection, so we put this in the table for consistency:
+             -- extendPeerTable myid (host,myInbound)
 
-                 return (masterId, machines)
+             return (masterId, machines)
          ----------------------------------------
          establishALLConections (masterId, machines) = do
 	     dbgTaggedMsg 2 "  Proactively connecting to all peers..."
@@ -697,7 +714,7 @@ sharedInit metadata initTransport Slave = St st
          ----------------------------------------
          waitBarrier = do 
 	     -- Don't proceed till we get the go-message from the Master:
-	     msg <- T.receive myInbound
+	     T.Received _ msg <- T.receive myInbound
 	     case decodeMsg (BS.concat msg) of 
 	       StartStealing -> dbgTaggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
 	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg              
@@ -870,7 +887,7 @@ longSpawn (local, clo) = do
     -- This should be guaranteed to be unique:
     let ivarid = numCapabilities * cntr + no
 
-    let ivarCont payl = case serialDecodePure payl of 
+    let ivarCont payl = case RE.serialDecodePure payl of 
 			  Just x  -> put_ iv x
 			  Nothing -> errorExitPure$ "Could not decode payload: "++ show payl
 
@@ -911,14 +928,14 @@ receiveDaemon targetEnd schedMap =
    dbgTaggedMsg 4$ "[rcvdmn] About to do blocking rcv of next msg... "+++ outstanding
 
    -- Do a blocking receive to process the next message:
-   bss  <- if False
-	   then Control.Exception.catch 
-                      (T.receive targetEnd)
-		      (\ (_::SomeException) -> do
-		       printErr$ "Exception while attempting to receive message in receive loop."
-		       exitSuccess
-		      )
-	   else T.receive targetEnd
+   T.Received _ bss <- if False
+                       then Control.Exception.catch 
+                            (T.receive targetEnd)
+                            (\ (_::SomeException) -> do
+                                printErr$ "Exception while attempting to receive message in receive loop."
+                                exitSuccess
+                            )
+                       else T.receive targetEnd
    dbgTaggedMsg 4$ "[rcvdmn] Received "+++ sho (BS.length (BS.concat bss)) +++" byte message..."
 
    case decodeMsg (BS.concat bss) of 
@@ -1013,8 +1030,7 @@ longSpawn  :: (NFData a, Serializable a)
 
 #endif
 
-
-#if 0 
+#if 0
 -- Option 1: Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
 instance Serialize Message where
@@ -1048,16 +1064,16 @@ instance Serialize Message where
  put ShutDownACK       =    Ser.put (6::TagTy)
  put (StealRequest id) = do Ser.put (7::TagTy)
 			    Ser.put id
- put (StealResponse id (iv,pay)) = 
+ put (StealResponse id (iv, pay)) = 
                          do Ser.put (8::TagTy)
 			    Ser.put id
 			    Ser.put iv
-			    Ser.put pay
+			    Ser.put (B.encode pay)
  put (WorkFinished nd iv pay) = 
                          do Ser.put (9::TagTy)
 			    Ser.put nd
 			    Ser.put iv
-			    Ser.put pay
+			    Ser.put (B.encode pay)
  get = do tag <- Ser.get 
           case tag :: TagTy of 
 	    1 -> do name   <- Ser.get 
@@ -1076,10 +1092,10 @@ instance Serialize Message where
 	    8 -> do id <- Ser.get
 		    iv <- Ser.get
 		    pay <- Ser.get
-		    return (StealResponse id (iv,pay))
+		    return (StealResponse id (iv, B.decode pay))
 	    9 -> do nd <- Ser.get
 		    iv <- Ser.get
 		    pay <- Ser.get
-		    return (WorkFinished nd iv pay)
+		    return (WorkFinished nd iv $ B.decode pay)
             _ -> errorExitPure$ "Remote.hs: Corrupt message: tag header = "++show tag
 #endif      
