@@ -23,8 +23,6 @@ fi
 set -x
 $GHC $OBJ \
         -i../../../monad-par \
-        -i../../../distributed-process/network-transport-pipes/src/ \
-        -i../../../distributed-process/network-transport/src/ \
         -i../../../meta-par \
         -i../../../meta-par-dist \
         -i../../../meta-par-dist-tcp \
