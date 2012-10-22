@@ -291,6 +291,16 @@ sendTo ndid msg = do
     (_,conn) <- connectNode ndid
     void$ T.send conn [msg]
 
+-- | Receive from a specified node in the peerTable:
+receiveFrom :: T.EndPoint -> IO [BS.ByteString]
+receiveFrom endpoint = do
+  event <- T.receive endpoint
+  case event of
+    T.Received _ payload -> return payload
+    T.ConnectionClosed _ -> error "ERROR: receive on a closed connection"
+    T.EndPointClosed -> error "ERROR: receive on a closed endpoint"
+    _ -> receiveFrom endpoint
+
 -- | We don't want anyone to try to use a file that isn't completely written.
 --   Note, this needs further thought for use with NFS...
 atomicWriteFile :: FilePath -> BS.ByteString -> IO ()
@@ -558,7 +568,7 @@ sharedInit metadata initTransport (Master machineList) = St st
      let
          slaveConnectLoop 0    _                = return ()
 	 slaveConnectLoop iter alreadyConnected = do
-          T.Received _ strs <- T.receive targetEnd
+          strs <- receiveFrom targetEnd
           let str = BS.concat strs
               msg = decodeMsg str
           case msg of
@@ -606,7 +616,7 @@ sharedInit metadata initTransport (Master machineList) = St st
        dbgTaggedMsg 2 "  Waiting for slaves to bring up all N^2 mutual connections..."
        forM_ (zip [0..] machineList) $ \ (ndid,name) -> 
          unless (ndid == myid) $ do 
-          T.Received _ msg <- T.receive targetEnd
+          msg <- receiveFrom targetEnd
           case decodeMsg (BS.concat msg) of 
    	     ConnectedAllPeers -> putStrLn$ "  "++ show ndid ++ ", "
 	                           ++ (BS.unpack name) ++ ": peers connected."
@@ -682,7 +692,7 @@ sharedInit metadata initTransport Slave = St st
              T.send toMaster [encode$ AnnounceSlave host (T.endPointAddressToByteString mySourceAddr)]
 
              dbgTaggedMsg 3 "Sent name and addr to master "
-             T.Received _ _machines_bss <- T.receive myInbound
+             _machines_bss <- receiveFrom myInbound
              let MachineListMsg (masterId,masterName) myid machines = decodeMsg (BS.concat _machines_bss)
              dbgTaggedMsg 2$ "Received machine list from master: "+++ BS.unwords machines
              initPeerTable machines
@@ -709,7 +719,7 @@ sharedInit metadata initTransport Slave = St st
          ----------------------------------------
          waitBarrier = do 
 	     -- Don't proceed till we get the go-message from the Master:
-	     T.Received _ msg <- T.receive myInbound
+	     msg <- receiveFrom myInbound
 	     case decodeMsg (BS.concat msg) of 
 	       StartStealing -> dbgTaggedMsg 1$ "Received 'Go' message from master.  BEGIN STEALING."
 	       msg           -> errorExit$ "Expecting StartStealing message, received: "++ show msg              
@@ -783,7 +793,7 @@ masterShutdown token _ = do
 #ifdef SHUTDOWNACK
    dbgTaggedMsg 1$ "Waiting for ACKs that all slaves shut down..."
    let loop 0 = return ()
-       loop n = do msg <- T.receive targetEnd
+       loop n = do msg <- receiveFrom targetEnd
 		   case decodeMsg (BS.concat msg) of
 		     ShutDownACK -> loop (n-1)
 		     other -> do 
@@ -923,14 +933,7 @@ receiveDaemon targetEnd schedMap =
    dbgTaggedMsg 4$ "[rcvdmn] About to do blocking rcv of next msg... "+++ outstanding
 
    -- Do a blocking receive to process the next message:
-   T.Received _ bss <- if False
-                       then Control.Exception.catch 
-                            (T.receive targetEnd)
-                            (\ (_::SomeException) -> do
-                                printErr$ "Exception while attempting to receive message in receive loop."
-                                exitSuccess
-                            )
-                       else T.receive targetEnd
+   bss <- receiveFrom targetEnd
    dbgTaggedMsg 4$ "[rcvdmn] Received "+++ sho (BS.length (BS.concat bss)) +++" byte message..."
 
    case decodeMsg (BS.concat bss) of 
