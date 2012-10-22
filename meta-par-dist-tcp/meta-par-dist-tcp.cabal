@@ -33,7 +33,6 @@ Library
 
   Build-depends:  
                   base >= 4 && < 5
-                , binary
                 , bytestring >= 0.9
                 , network
                 , directory >= 1.1
@@ -47,7 +46,7 @@ Library
                 , process >= 1.1
                 , syb >= 0.3
                 , unix >= 2.5
-                , remote
+                , RPC
                 , random 
                 , abstract-par
                 , meta-par

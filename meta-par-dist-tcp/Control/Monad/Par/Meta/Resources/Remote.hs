@@ -56,7 +56,6 @@ import Data.Monoid
 import qualified Data.Vector as V
 import qualified Data.Vector.Mutable as MV
 
-import qualified Data.Binary as B
 import Data.Serialize (encode, decode, Serialize)
 import qualified Data.Serialize as Ser
 -- import Data.Serialize.Derive (deriveGet, derivePut)
@@ -75,10 +74,9 @@ import Control.Monad.Par.Meta (forkWithExceptions, Sched(Sched,no,ivarUID),
 			       IVar, Par, Startup(..), WorkSearch(WS), Resource(..), GlobalState)
 import qualified Network.Transport     as T
 import qualified Network.Transport.TCP as TT
-import Remote.Closure  (Closure(Closure))
-import Remote.Encoding (Payload, Serializable)
-import qualified Remote.Encoding as RE
-import qualified Remote.Reg as Reg
+import RPC.Closure  (Closure(Closure))
+import RPC.Encoding (Payload, Serializable, serialDecodePure)
+import qualified RPC.Reg as Reg
 import GHC.Conc (numCapabilities)
 
 ----------------------------------------------------------------------------------------------------
@@ -108,9 +106,6 @@ showNodeID n = "<Node"+++ sho n+++">"
 
 sho :: Show a => a -> BS.ByteString
 sho = BS.pack . show
-
-instance Show Payload where
-  show pl = show (RE.getPayloadType pl) ++ show (RE.getPayloadContent pl)
 
 -- Control messages are for starting the system up and communicating
 -- between slaves and the master.  
@@ -887,7 +882,7 @@ longSpawn (local, clo) = do
     -- This should be guaranteed to be unique:
     let ivarid = numCapabilities * cntr + no
 
-    let ivarCont payl = case RE.serialDecodePure payl of 
+    let ivarCont payl = case serialDecodePure payl of 
 			  Just x  -> put_ iv x
 			  Nothing -> errorExitPure$ "Could not decode payload: "++ show payl
 
@@ -1030,6 +1025,7 @@ longSpawn  :: (NFData a, Serializable a)
 
 #endif
 
+
 #if 0
 -- Option 1: Use the GHC Generics mechanism to derive these:
 -- (default methods would make this easier)
@@ -1068,12 +1064,12 @@ instance Serialize Message where
                          do Ser.put (8::TagTy)
 			    Ser.put id
 			    Ser.put iv
-			    Ser.put (B.encode pay)
+			    Ser.put pay
  put (WorkFinished nd iv pay) = 
                          do Ser.put (9::TagTy)
 			    Ser.put nd
 			    Ser.put iv
-			    Ser.put (B.encode pay)
+			    Ser.put pay
  get = do tag <- Ser.get 
           case tag :: TagTy of 
 	    1 -> do name   <- Ser.get 
@@ -1092,10 +1088,10 @@ instance Serialize Message where
 	    8 -> do id <- Ser.get
 		    iv <- Ser.get
 		    pay <- Ser.get
-		    return (StealResponse id (iv, B.decode pay))
+		    return (StealResponse id (iv,pay))
 	    9 -> do nd <- Ser.get
 		    iv <- Ser.get
 		    pay <- Ser.get
-		    return (WorkFinished nd iv $ B.decode pay)
+		    return (WorkFinished nd iv pay)
             _ -> errorExitPure$ "Remote.hs: Corrupt message: tag header = "++show tag
 #endif      

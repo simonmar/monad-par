@@ -44,7 +44,7 @@ import System.Random (randomIO)
 import System.IO (stderr)
 import System.IO.Unsafe (unsafePerformIO)
 import System.Posix.Process (getProcessID)
-import Remote.Reg (RemoteCallMetaData)
+import RPC.Reg (RemoteCallMetaData)
 import Text.Printf
 
 --------------------------------------------------------------------------------
