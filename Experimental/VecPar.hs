@@ -1,40 +1,60 @@
 
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE RankNTypes #-}
 
 module VecPar
-       (
-         vecFork, getTheVec, initTheVec, 
-         liftST
-       )
+       -- (
+       --   forkWithVec, getTheVec, initTheVec, 
+       --   liftST,
+
+       --   p1
+       -- )
        where
 
 import Control.Monad
-import Control.Monad.Par (Par,IVar)
+import Control.Monad.Par.IO (ParIO,IVar)
 import qualified Control.Monad.Par.Class as PC
 -- import Control.Monad.Trans
--- import qualified Control.Monad.Trans.State.Strict as S
 -- import qualified Control.Monad.Trans.State.Lazy as SL
+import qualified Control.Monad.Trans.State.Strict as S
 import Control.Monad.ST
 import Data.STRef
+import Data.Vector.Mutable
+-- import GHC.IO (unsafeSTToIO)
 
-newtype ParVec s a = ParVec ()
+import Prelude hiding (read)
 
+newtype ParVec s elt a = ParVec ((S.StateT (STVector s elt) ParIO) a)
+ deriving Monad
+
+
+getTheVec :: ParVec s elt (STVector s elt)
 getTheVec  = undefined
+
+initTheVec :: Int -> ParVec s elt ()
 initTheVec = undefined
-forkPartition = undefined
+
+forkWithVec :: Int
+            -> (forall sleft  . ParVec sleft elt a)
+            -> (forall sright . ParVec sright elt b)
+            -> ParVec s elt (a,b)
+forkWithVec lef rig = do
+  return undefined
+-- this implementation will contain one 'fork' and one 'get'
 
 
-liftST :: ST s a -> ParVec s a
-liftST = undefined
+liftST :: ST s a -> ParVec s elt a
+liftST st = undefined
+  where
+    io = unsafeSTToIO st
 
 
-vecFork = undefined
-
-instance Monad (ParVec s) where
+-- instance Monad (ParVec s) where
   
-instance PC.ParFuture IVar (ParVec s) where
+instance PC.ParFuture IVar (ParVec s elt) where
 
-instance PC.ParIVar IVar (ParVec s) where
+instance PC.ParIVar IVar (ParVec s elt) where
 
 
 --------------------------------------------------------------------------------
@@ -42,8 +62,28 @@ instance PC.ParIVar IVar (ParVec s) where
 p1 :: ST s String
 p1 = do
   r <- newSTRef "hi"
-
   writeSTRef r "hello"
-
   readSTRef r
+
+
+p2 :: ParVec s Float String
+p2 = do
+  r <- liftST$ newSTRef "hi"
+  initTheVec 10
+  v <- getTheVec
+
+  elem <- liftST$ read v 5
+
+  forkWithVec 5
+     (do v1 <- getTheVec
+         liftST$ write v1 2 33.3)
+     (do v2 <- getTheVec
+--          liftST$ read v 25  -- BAD!
+         liftST$ write v2 2 44.4)
+     
+  x <- liftST$ read v 2
+  y <- liftST$ read v 7
+
+  liftST$ writeSTRef r "hello"
+  liftST$ readSTRef r
 
