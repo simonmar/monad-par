@@ -22,8 +22,9 @@ import Control.Monad.ST
 import Data.STRef
 import Data.Vector.Mutable
 -- import GHC.IO (unsafeSTToIO)
+import Control.Monad.Trans (lift)
 
-import Prelude hiding (read)
+import Prelude hiding (read, length)
 
 newtype ParVec s elt a = ParVec ((S.StateT (STVector s elt) ParIO) a)
  deriving Monad
@@ -39,7 +40,20 @@ forkWithVec :: Int
             -> (forall sleft  . ParVec sleft elt a)
             -> (forall sright . ParVec sright elt b)
             -> ParVec s elt (a,b)
-forkWithVec lef rig = do
+forkWithVec mid (ParVec lef) (ParVec rig) = ParVec $ do
+  v <- S.get
+  let a = slice 0 mid v
+      b = slice mid (length v - mid) v
+  S.put a
+  lef
+  -- TODO: Move at least lef, and possibly lef & rig into the following 'lift':
+  lift ((do PC.spawn_ (return ())
+            return ()) :: ParIO ())
+  S.put b
+  rig
+  lift (PC.get undefined) -- READ THE IVAR HERE
+          
+  S.put v
   return undefined
 -- this implementation will contain one 'fork' and one 'get'
 
