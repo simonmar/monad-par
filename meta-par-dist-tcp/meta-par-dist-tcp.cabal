@@ -19,6 +19,10 @@ Category:            Parallelism
 Build-type:          Simple
 Cabal-version:       >=1.8
 
+Flag pipes
+  Description: Enable support for the pipes transport as well as TCP.
+  Default:     True
+
 Library
   Exposed-modules: 
                  -- This is a complete scheduler for distributed (but
@@ -30,6 +34,7 @@ Library
   Other-modules:
                  -- This is the underlying resource exposed 
                  Control.Monad.Par.Meta.Resources.Remote
+  ghc-options:    -Wall
 
   Build-depends:  
                   base >= 4 && < 5
@@ -41,18 +46,21 @@ Library
                 , transformers
                 , deepseq >= 1.2
                 , mtl
-                , network-transport
-                , network-transport-pipes
                 , process >= 1.1
                 , syb >= 0.3
                 , unix >= 2.5
-                , RPC
                 , random 
-                , abstract-par
-                , meta-par
                 , cereal
                 , vector
                 , split
+                , abstract-par
+                , meta-par
+                , network-transport
                 , abstract-deque
+                , RPC
+--                , network-transport-tcp
 
-  ghc-options:    -Wall
+  if flag(pipes) {
+    build-depends: network-transport-pipes
+    cpp-options:  -DUSE_PIPES
+  }
