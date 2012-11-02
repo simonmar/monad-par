@@ -20,8 +20,8 @@ DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/
 
 # Third party dependency: network-transport layer
 NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
-  distributed-process/network-transport 
-#  distributed-process/network-transport-pipes/
+  distributed-process/network-transport \
+  distributed-process/network-transport-pipes/
 
 # Third party dependency: Accelerate
 ACC_PKGS= accelerate/ abstract-par-accelerate/ meta-par-accelerate/
@@ -46,6 +46,10 @@ endif
 
 ifeq ($(CABAL),)
   CABAL= cabal
+endif
+
+ifeq ($(CABAL_ARGS),)
+	CABAL_ARGS=--force-reinstalls
 endif
 
 CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
