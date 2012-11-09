@@ -54,16 +54,13 @@ runParVec (ParVec st) = unsafePerformIO io
            (a,_) <- runParIO x
            return a
 
--- | getParVec just uses the 'get' function from
--- Control.Monad.Trans.State.Strict to get the current value of the
--- state within the monad.  Here the thing we want to get back is the
--- state of the vector itself, so we instantiate 'a' with its type,
--- (STVector s elt).
+-- | getParVec is a ParVec computation that results in the current
+-- value of the state, which is of type 'STVector s elt'.
 getParVec :: ParVec s elt (STVector s elt)
-getParVec  = ParVec S.get
+getParVec = ParVec S.get
 
--- | initParVec creates a new mutable vector and returns a ParVec with
--- that new mutable vector in it.
+-- | initParVec creates a new mutable vector and returns a ParVec
+-- computation with that new mutable vector's state as its state.
 initParVec :: Int -> ParVec s elt ()
 initParVec size = do
   vec <- liftST $ MV.new size
