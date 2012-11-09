@@ -37,8 +37,11 @@ threshold = 1
 data VecTree = Leaf (V.Vector Int)
 	     | MkNode VecTree VecTree
 
+#if 0
 instance V.Unbox a => NFData (V.Vector a) where
   rnf v = rnf (V.length v)
+#endif
+
 instance NFData VecTree where
   rnf (Leaf v) = rnf v
   rnf (MkNode v1 v2) = rnf v1 `seq` rnf v2

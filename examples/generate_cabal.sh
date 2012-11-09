@@ -9,7 +9,7 @@ build-type:          Simple
 cabal-version:       >=1.8
 EOF
 
-COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector == 0.9.* "
+COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10 "
 
 function boilerplate() {
 cat >> monad-par-examples.cabal <<EOF
