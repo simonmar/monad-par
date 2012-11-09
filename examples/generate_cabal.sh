@@ -258,7 +258,7 @@ executable kmeans
   hs-source-dirs:    src/kmeans
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
-                     array, bytestring, cereal, cereal-vector, mwc-random, 
+                     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
                      parallel, time, transformers, vector
 EOF
 boilerplate 
