@@ -6,16 +6,43 @@ This directory contains a collection of programs using the Par monad.
 It is called "examples" but it also serves as most of our tests and
 benchmarks as well.
 
-Building examples:
+QUICK START
+===========
+
+The easy way to get started is to simply run:
+
+    make
+    make test
+
+This will compile all the examples, and then run each of them using the settings:
+
+    SHORTRUN=1 THREADS="1"
+    
+This will produce a fair bit of profiling output.
+
+DETAILS
+=======
+
+Each benchmark/test program requires a cabal file. The
+'generate_cabal.sh' script creates these files for you.
 
     ./generate_cabal.sh
+    
+Once generated 'cabal install' will compile each benchmark.
+
     cabal install
+    
+The benchmarks are now ready to be run.
 
-Make deps will install package dependencies that aren't already
-installed by monad-par itself.
+BENCHMARK SCRIPT
+================
 
-BENCHMARKING
-=============================
+To build the benchmark script the haskell shell scripting module 'HSH'
+is required. Some say this is a dangerous module, so you may want to
+install it using cabal-dev.
+
+TESTING / BENCHMARKING
+======================
 
 This directory provides benchmarking.  Ranging from the simple:
 

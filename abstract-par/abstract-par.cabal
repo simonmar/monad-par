@@ -1,5 +1,5 @@
 Name:                abstract-par
-Version:             0.3.1
+Version:             0.3.3
 Synopsis:            Type classes generalizing the functionality of the 'monad-par' library.
 
 
