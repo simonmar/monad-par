@@ -71,15 +71,18 @@ install-ours:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
 # Install everything you need for distributed meta-par.
-dist-install: 
+dist-install:  check-submodules
 	${CABAL_INSTALL} ${MAIN_PKGS} ${NETWORK_PKGS}
 
-mega-install:
+mega-install:  check-submodules
 	${CABAL_INSTALL} ${MAIN_PKGS} 
 
 # This one is CUDA SPECIFIC:
-mega-install-cuda:
+mega-install-cuda: check-submodules
 	${CABAL_INSTALL} -fcuda ${MAIN_PKGS} ${ACC_GPU_PKGS}
+
+check-submodules:
+	@if [ ! -f ./Deques/README.md ]; then echo "!!ERROR: submodule missing.  You need to run 'git submodule update --init --recursive'! "; exit 1; fi 
 
 # For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:
 jenkins-all-versions:
