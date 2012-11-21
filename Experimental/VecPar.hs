@@ -28,7 +28,7 @@ import Control.Monad.Trans (lift)
 import Prelude hiding (read, length)
 
 -- | The ParVec monad.  It uses the StateT monad transformer to layer
--- a state of type (STVector s elt), on top of an inner monad, ParIO.
+-- a state of type (STVector s elt) on top of an inner monad, ParIO.
 -- Its third parameter, 'a', is the type inside the ParVec
 -- computation, and the 'elt' parameter is the element type of the
 -- vector.  The 's' parameter is what's known as a "phantom type".
@@ -39,10 +39,10 @@ newtype ParVec s elt a = ParVec ((S.StateT (STVector s elt) ParIO) a)
 -- bound by the inner forall quantifier.
 runParVec :: forall a elt . (forall s . ParVec s elt a) -> a
 -- Here we're just using the ParVec value constructor tag to
--- destructure the argument to runParVect.  The result is
+-- destructure the argument to runParVec.  The 'st' in (ParVec st) is
+-- of the type ((S.StateT (STVector s elt) ParIO) a).  The
 -- unsafePerformIO lets us get the needed 'a' out of an IO
--- computation.  The 'st' in (ParVec st) is of the type ((S.StateT
--- (STVector s elt) ParIO) a).
+-- computation.
 runParVec (ParVec st) = unsafePerformIO io
  where
    -- Create a new mutable vector of length 0 and do a runStateT with
