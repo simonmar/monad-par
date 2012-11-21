@@ -129,12 +129,15 @@ p2 = do
 
   forkWithVec 5
      (do v1 <- getParVec
---         liftST$ write v1 9 0 -- BAD! out of bounds
+         -- We can't protect against this sort of out-of-bounds error
+         -- at compile time -- for that we'd need dependent types.
+         -- liftST$ write v1 9 0 -- BAD! out of bounds
          liftST$ write v1 2 33.3
      )
      (do v2 <- getParVec
---         liftST$ read v 2  -- BAD!
---         liftST$ readSTRef r
+         -- This, we actually *can* protect against at compile time.
+         -- liftST$ read v 2  -- BAD!
+         -- liftST$ readSTRef r
          liftST$ write v2 2 44.4)
      
   x <- liftST$ read v 2
