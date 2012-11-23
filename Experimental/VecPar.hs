@@ -79,18 +79,15 @@ forkWithVec :: forall elt a b s .
             -> (forall sr . ParVec sr elt b)
             -> ParVec s elt (a,b)
 forkWithVec mid (ParVec lef) (ParVec rig) = ParVec $ do
-  v <- S.get
-  let a = slice 0 mid v
-      b = slice mid (length v - mid) v
-  lv <- lift$ PC.spawn_$ S.evalStateT lef a 
-  S.put b
-  b' <- rig
-  a' <- lift$ PC.get lv
-  -- This 'S.put v' is necessary to make sure that the whole vector
-  -- (not just the slices) is available again -- v has already been updated
-  -- by the updates to the slices.
-  S.put v
-  return (a',b')
+  vec <- S.get
+  let lvec = slice 0 mid vec
+      rvec = slice mid (length v - mid) vec
+  lv <- lift$ PC.spawn_$ S.evalStateT lef lvec
+  S.put rvec
+  rx <- rig                     -- Do the R one on this thread.
+  lx <- lift$ PC.get lv         -- Wait for the forked thread to finish.
+  S.put vec                     -- Put the whole vec back in place.
+  return (lx,rx)
 
 
 liftST :: ST s a -> ParVec s elt a
