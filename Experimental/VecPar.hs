@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types #-}
 
@@ -18,10 +19,12 @@ import qualified Control.Monad.Par.Class as PC
 -- import Control.Monad.Trans
 -- import qualified Control.Monad.Trans.State.Lazy as SL
 import qualified Control.Monad.Trans.State.Strict as S
-import Control.Monad.ST
+import Control.Monad.ST (ST)
+import Control.Monad.ST.Unsafe (unsafeSTToIO)
 import Data.STRef
-import Data.Vector.Mutable as MV 
-import System.IO.Unsafe
+import Data.Vector.Mutable as MV
+import Data.Vector       (freeze)
+import System.IO.Unsafe  (unsafePerformIO)
 -- import GHC.IO (unsafeSTToIO)
 import Control.Monad.Trans (lift)
 import Prelude hiding (read, length)
@@ -70,29 +73,24 @@ initParVec size = do
 -- then divides up that state between the two other computations.
 -- Writes to those two computations actually mutate the original
 -- vector.
-forkWithVec :: Int
-            -> (forall sleft  . ParVec sleft elt a)
-            -> (forall sright . ParVec sright elt b)
+forkWithVec :: forall elt a b s .
+               Int
+            -> (forall sl . ParVec sl elt a)
+            -> (forall sr . ParVec sr elt b)
             -> ParVec s elt (a,b)
 forkWithVec mid (ParVec lef) (ParVec rig) = ParVec $ do
   v <- S.get
   let a = slice 0 mid v
       b = slice mid (length v - mid) v
-  S.put a
-  lef
-  -- TODO: Move at least lef, and possibly lef & rig into the following 'lift':
-  lift ((do PC.spawn_ (return ())
-            return ()) :: ParIO ())
+  lv <- lift$ PC.spawn_$ S.evalStateT lef a 
   S.put b
-  rig
---  lift (PC.get undefined) -- READ THE IVAR HERE
-          
+  b' <- rig
+  a' <- lift$ PC.get lv
   -- This 'S.put v' is necessary to make sure that the whole vector
-  -- (not just the slices) is available -- v has already been updated
+  -- (not just the slices) is available again -- v has already been updated
   -- by the updates to the slices.
   S.put v
-  return undefined
--- this implementation will contain one 'fork' and one 'get'
+  return (a',b')
 
 
 liftST :: ST s a -> ParVec s elt a
@@ -125,7 +123,7 @@ p2 = do
   initParVec 10
   v <- getParVec
 
-  elem <- liftST$ read v 5
+  liftST$ set v 0
 
   forkWithVec 5
      (do v1 <- getParVec
@@ -139,13 +137,15 @@ p2 = do
          -- liftST$ read v 2  -- BAD!
          -- liftST$ readSTRef r
          liftST$ write v2 2 44.4)
-     
-  x <- liftST$ read v 2
-  y <- liftST$ read v 7
+
+  z <- liftST$ freeze v
 
   liftST$ writeSTRef r "hello "
   hello <- liftST$ readSTRef r
 
-  return$ hello ++ show (x,y)
-  
+--  return$ hello ++ show (x,y)
+  return$ hello ++ show z
 
+
+t1 = unsafeSTToIO p1
+t2 = runParVec p2
