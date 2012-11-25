@@ -1,10 +1,10 @@
 {-
 
 $ cabal install -O2 monad-par-0.3
-$ ghc -O2 -threaded -rtsopts -with-rtsopts -N issue21.hs
-$ ./issue21 10000000
+$ ghc -O2 -threaded -rtsopts -with-rtsopts -N issue21.hs -o issue21.exe
+$ ./issue21.exe 10000000
 2089877
-$ ./issue21 10000000
+$ ./issue21.exe 10000000
 issue21: <<loop>>issue21: issue21: issue21: thread blocked indefinitely in an MVar operation
 <<loop>>
 

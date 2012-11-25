@@ -45,18 +45,9 @@ import Control.Monad.Par.Scheds.DirectInternal (Par(..), Sched(..), HotVar,
 import Control.DeepSeq
 import qualified Data.Map as M
 
--- import Data.Concurrent.Deque.Class as DQ
-#ifdef REACTOR_DEQUE
--- These performed ABYSMALLY:
-import Data.Concurrent.Deque.ChaseLev
-import Data.Concurrent.Deque.ChaseLev.DequeInstance
-import qualified Data.Concurrent.Deque.ReactorDeque as R
-import Data.Array.IO
-#else
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
-#endif
 
 import qualified Control.Exception as E
 
