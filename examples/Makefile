@@ -27,10 +27,7 @@ test: benchmark.run
 linValidate: benchmark.run
 	SHORTRUN=1 THREADS="1" ./benchmark.run +RTS -N
 
-# HSH has ugly dependencies... let's install it locally for now.
 benchmark.run: benchmark.hs
-	if [ `which cabal-dev` == "" ]; then echo "ERROR!  Need cabal-dev installed."; exit 1; fi
-	cabal-dev install HSH --disable-library-profiling
 	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
 
 #================================================================================
