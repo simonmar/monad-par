@@ -30,18 +30,19 @@ module Control.Monad.Par.Scheds.Direct (
 
 import Control.Applicative
 import Control.Concurrent hiding (yield)
-import Data.IORef
-import Text.Printf
-import GHC.Conc
-import "mtl" Control.Monad.Cont as C
+import Data.IORef         (IORef,newIORef,readIORef,writeIORef,atomicModifyIORef)
+import Text.Printf        (printf)
+import GHC.Conc           (numCapabilities,yield)
+import           "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
-import qualified System.Random.MWC as Random
-import System.IO.Unsafe (unsafePerformIO)
-import System.Mem.StableName
-import qualified Control.Monad.Par.Class  as PC
-import qualified Control.Monad.Par.Unsafe as UN
-import Control.Monad.Par.Scheds.DirectInternal (Par(..), Sched(..), HotVar, 
-                                                newHotVar, readHotVar, modifyHotVar, writeHotVarRaw)
+import qualified       System.Random.MWC as Random
+import                 System.IO.Unsafe (unsafePerformIO)
+import                 System.Mem.StableName (makeStableName, hashStableName)
+import qualified       Control.Monad.Par.Class  as PC
+import qualified       Control.Monad.Par.Unsafe as UN
+import                 Control.Monad.Par.Scheds.DirectInternal
+                       (Par(..), Sched(..), HotVar, 
+                        newHotVar, readHotVar, modifyHotVar, writeHotVarRaw)
 import Control.DeepSeq
 import qualified Data.Map as M
 
