@@ -70,7 +70,7 @@ executable mergesort
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras,
                      mwc-random,
-                     QuickCheck, split, time, transformers, vector, vector-algorithms
+                     QuickCheck, split >= 0.2, time, transformers, vector, vector-algorithms
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
      || flag(sparks) || flag(meta-smp) || flag(meta-numa))
     buildable:       False

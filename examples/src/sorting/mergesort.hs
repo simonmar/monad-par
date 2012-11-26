@@ -23,7 +23,7 @@ import System.Environment
 import Control.Exception
 import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
 
-import Data.List.Split (chunk)
+import Data.List.Split (chunksOf)
 import Data.List (intersperse)
 
 import Data.Word (Word32)
@@ -381,7 +381,7 @@ commaint n | n < 0 = "-" ++ commaint (-n)
 commaint n = 
    reverse $ concat $
    intersperse "," $ 
-   chunk 3 $ reverse (show n)
+   chunksOf 3 $ reverse (show n)
 
 
 -- copyOffset :: (PrimMonad m, MVector v e)
