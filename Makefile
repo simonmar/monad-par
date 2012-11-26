@@ -165,4 +165,5 @@ install-doc:
 # --------------------------------------------------------------------------------
 
 
-
+trigger-jenkins:
+	wget tester-lin.soic.indiana.edu:8080/job/monad-par_QUICKtest_github/build?token=gogomonadparbuild
