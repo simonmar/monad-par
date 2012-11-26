@@ -17,6 +17,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3      : Factored/reorganized modules and packages.  
 --             *This* package is the original, core monad-par.
 --  0.3.1    : fix for ghc 7.6.1, expose Par.IO
+--  0.3.4    : switch to direct scheduler as default
 
 Description:         This library offers an alternative parallel programming
                      API to that provided by the @parallel@ package.
