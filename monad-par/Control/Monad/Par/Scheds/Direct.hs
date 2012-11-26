@@ -59,9 +59,9 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
--- define DEBUG
+#define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
--- define NESTED_SCHEDS
+#define NESTED_SCHEDS
 #define PARPUTS
 #define FORKPARENT
 #define IDLING_ON
@@ -74,9 +74,8 @@ import qualified Prelude
 -- conditionals and trust dead-code-elimination.
 --------------------------------------------------------------------
 
-dbg    :: Bool
-dbglvl :: Int
 #ifdef DEBUG
+import Debug.Trace        (trace)
 import System.Environment (getEnvironment)
 theEnv = unsafePerformIO $ getEnvironment
 dbg = True
@@ -85,6 +84,8 @@ dbglvl = 1
 dbg = False
 dbglvl = 0
 #endif
+dbg    :: Bool
+dbglvl :: Int
 
 _PARPUTS :: Bool
 #ifdef PARPUTS
@@ -107,6 +108,7 @@ _IDLING_ON = True
 #else
 _IDLING_ON = False
 #endif
+
 
 --------------------------------------------------------------------------------
 -- Core type definitions
@@ -142,6 +144,7 @@ amINested :: ThreadId -> IO (Maybe Sched)
 registerWorker :: ThreadId -> Sched -> IO ()
 unregisterWorker :: ThreadId -> IO ()
 #ifdef NESTED_SCHEDS
+-- | If the current threadID is ALREADY a worker, return the corresponding Sched structure.
 amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
@@ -235,7 +238,7 @@ runParIO userComp = do
    maybSched <- amINested tid
    case maybSched of 
      Just (sched) -> do 
-       when (dbglvl>=1)$ printf " [%d %s] Engaging trivial strategy for embedding nested work....\n" (no sched) (show tid)
+       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session....\n" (no sched) (show tid)
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
 --       runReaderWith sched $ rescheduleR errK
@@ -243,7 +246,10 @@ runParIO userComp = do
        -- Here we have an extra IORef... ugly.
        ref <- newIORef (error "this should never be touched")
        newSess <- newHotVar False
-       let kont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
+       let kont ans = liftIO$ do when (dbglvl>=1) $ do
+                                   tid2 <- myThreadId
+                                   printf " [%d %s] Continuation for nested session called, finishing it up...\n" (no sched) (show tid2)
+                                 writeIORef ref ans; writeHotVarRaw newSess True
        RD.runReaderT (C.runContT (unPar userComp) kont) (sched{ sessionFinished=newSess})
        when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
        -- By returning here we ARE reengaging the scheduler, since we
@@ -258,15 +264,16 @@ runParIO userComp = do
               tid2 <- myThreadId
               registerWorker tid2 sched
               if (cpu /= main_cpu)
-                 then do when dbg$ printf " [%d] Entering scheduling loop.\n" cpu
+                 then do when dbg$ printf " [%d %s] Entering scheduling loop.\n" cpu (show tid2)
                          runReaderWith sched $ rescheduleR errK
                          when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
                          return ()
                  else do
-                      let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
+                      let userComp'  = do when dbg$ io$ printf " [%d %s] Starting Par computation on main thread.\n" main_cpu (show tid2)
                                           res <- userComp
                                           finalSched <- RD.ask 
-                                          when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
+                                          when dbg$ io$ do tid3 <- myThreadId
+                                                           printf " [%d %s] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched) (show tid3)
 
                                           -- Sanity check our work queues:
                                           when dbg $ io$ sanityCheck allscheds
@@ -276,7 +283,7 @@ runParIO userComp = do
                       when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
                                    sanityCheck allscheds
                       -- Not currently requiring that other scheduler threads have exited before we 
-                      -- (the main thread) exit.  But we do signal here that they should terminate:
+                      -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
                       writeIORef (killflag sched) True
               unregisterWorker tid 
 
@@ -284,10 +291,12 @@ runParIO userComp = do
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
+       ----------------------------------------
+       --              DEBUGGING             -- 
 --       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
        busyTakeMVar " global wait " m -- Final value.                    
-
+       ----------------------------------------
 
 -- Make sure there is no work left in any deque after exiting.
 sanityCheck :: [Sched] -> IO ()
@@ -295,15 +304,16 @@ sanityCheck allscheds = do
   forM_ allscheds $ \ Sched{no, workpool} -> do
      b <- R.nullQ workpool
      when (not b) $ do 
-         printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
+         () <- printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
          return ()
   putStrLn "Sanity check complete."
 
 
 -- Create the default scheduler(s) state:
 makeScheds :: Int -> IO [Sched]
-makeScheds main = do
-   when dbg$ printf "[initialization] Creating %d worker threads\n" numCapabilities
+makeScheds main = do   
+   when dbg$ do tid <- myThreadId
+                printf "[initialization] Creating %d worker threads, currently on %s\n" numCapabilities (show tid)
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
@@ -332,16 +342,16 @@ new  = io$ do r <- newIORef Empty
 -- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
-get (IVar v) =  do 
+get (IVar vr) =  do 
   callCC $ \kont -> 
     do
-       e  <- io$ readIORef v
+       e  <- io$ readIORef vr
        case e of
 	  Full a -> return a
 	  _ -> do
             sch <- RD.ask
 #  ifdef DEBUG
-            sn <- io$ makeStableName iv
+            sn <- io$ makeStableName vr  -- Should probably do the MutVar inside...
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!") 
 #else
             let resched = 
@@ -349,7 +359,7 @@ get (IVar v) =  do
 			  reschedule
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
-	    r <- io$ atomicModifyIORef v $ \x -> case x of
+	    r <- io$ atomicModifyIORef vr $ \x -> case x of
 		      Empty      -> (Blocked [pushWork sch . kont], resched)
 		      Full a     -> (Full a, return a)
 		      Blocked ks -> (Blocked (pushWork sch . kont:ks), resched)
@@ -370,16 +380,16 @@ unsafePeek (IVar v) = do
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 --   In this scheduler, puts immediately execute woken work in the current thread.
-put_ (IVar v) !content = do
+put_ (IVar vr) !content = do
    sched <- RD.ask
    ks <- io$ do 
-      ks <- atomicModifyIORef v $ \e -> case e of
+      ks <- atomicModifyIORef vr $ \e -> case e of
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
                Blocked ks -> (Full content, ks)
 #ifdef DEBUG
       when (dbglvl >=  3) $ do 
-         sn <- makeStableName iv
+         sn <- makeStableName vr
          printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
                 (no sched) (show content) (hashStableName sn) (length ks)
          return ()
@@ -391,19 +401,18 @@ put_ (IVar v) !content = do
 -- this module remains SAFE in the Safe Haskell sense.)  It can only
 -- be accessed by importing Control.Monad.Par.Unsafe.
 {-# INLINE unsafeTryPut #-}
-unsafeTryPut :: IVar b -> b -> Par b
-unsafeTryPut (IVar v) !content = do
+unsafeTryPut (IVar vr) !content = do
    -- Head strict rather than fully strict.
    sched <- RD.ask 
    (ks,res) <- io$ do 
-      pr <- atomicModifyIORef v $ \e -> case e of
+      pr <- atomicModifyIORef vr $ \e -> case e of
 		   Empty      -> (Full content, ([], content))
 		   Full x     -> (Full x, ([], x))
 		   Blocked ks -> (Full content, (ks, content))
 #ifdef DEBUG
-      sn <- makeStableName iv
+      sn <- makeStableName vr
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
-	     (no sched) (show content) (hashStableName sn) (length ks)
+	     (no sched) (show content) (hashStableName sn) (length (fst pr))
 #endif
       return pr
    wakeUp sched ks content
@@ -484,7 +493,7 @@ fork task =
 reschedule :: Par a 
 reschedule = Par $ C.ContT rescheduleR
 
--- Reschedule ignores its continuation.
+-- Reschedule *ignores* its continuation.
 -- It runs the scheduler loop indefinitely, until it observers killflag==True
 rescheduleR :: ignoredCont -> ROnly ()
 rescheduleR _k = do
@@ -639,6 +648,7 @@ runPar :: Show a => Par a -> a
 runParIO :: Show a => Par a -> IO a 
 newFull :: (Show a, NFData a) => a -> Par (IVar a)
 newFull_ ::  Show a => a -> Par (IVar a)
+unsafeTryPut :: Show b => IVar b -> b -> Par b
 #else
 spawn  :: NFData a => Par a -> Par (IVar a)
 spawn_ :: Par a -> Par (IVar a)
@@ -651,8 +661,9 @@ runPar :: Par a -> a
 runParIO :: Par a -> IO a 
 newFull :: NFData a => a -> Par (IVar a)
 newFull_ ::  a -> Par (IVar a)
+unsafeTryPut :: IVar b -> b -> Par b
 
-
+-- We can't make proper instances with the extra Show constraints:
 instance PC.ParFuture IVar Par  where
   get    = get
   spawn  = spawn
@@ -682,6 +693,7 @@ instance Applicative Par where
 --------------------------------------------------------------------------------
 
 
+--------------------------------------------------------------------------------
 -- DEBUGGING TOOLs
 --------------------------------------------------------------------------------
 

@@ -2,9 +2,9 @@
     GeneralizedNewtypeDeriving 
  #-}
 
--- | Type definiiton and some helpers.  This is used mainly by
+-- | Type definiton and some helpers.  This is used mainly by
 -- Direct.hs but can also be used by other modules that want access to
--- the internals of the scheduler (i.e. the private type constructor).
+-- the internals of the scheduler (i.e. the private `Par` type constructor).
 
 module Control.Monad.Par.Scheds.DirectInternal where
 
@@ -51,10 +51,13 @@ data Sched = Sched
       isMain :: Bool, -- Are we the main/master thread? 
 
       ---- Global data: ----
-      killflag :: HotVar Bool,
       idle     :: HotVar [MVar Bool],
       scheds   :: [Sched],   -- A global list of schedulers.
 
+      -- A flag written ONLY by the master thread that starts the Par
+      -- computation.  When set to True, signals that workers should quit it.
+      killflag :: HotVar Bool,
+      
       -- For nested support, our scheduler may be working on behalf of
       -- a REAL haskell continuation that we need to return to.  In
       -- that case we need to know WHEN to stop rescheduling and

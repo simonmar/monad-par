@@ -189,7 +189,7 @@ It may be some spurious NFS problem.
 
 
 [2012.08.31] {Debugging the notorious Issue21}
-------------------------------------------------------------
+----------------------------------------------
 
 I'm doing this in the context of Direct right now.  Hmm, I thought 
 before that disabling Idling disabled the bug.  Seems not so presently.
@@ -308,9 +308,28 @@ should still be THREE worker threads, not TWO.
 
 The 200% must be from hitting some kind of blackhole to disable the worker?
 
------------------
+
+[2012.11.26] {More debugging for Issue 21}
+------------------------------------------
+
+Alright, my new nested support in Direct.hs is still failing on
+issue21, though the "shallow nesting" hack seems to work.
+
+Coming back to the code now after an absence I am especially
+suspicious of this business with sessionFinished -- using a single
+boolean variable flag, and then allocating a fresh one for nested
+sessions?  I don't trust the protocol aruond that.  Might we need
+something like a mutable dictionary allocated at the outset instead?
+
+If I do an "issue21.exe +RTS -N3" exection, then right now I see more
+instances of the "existing worker" (start of nested session) message,
+than of the "RETURN from nested" message (30 vs. 27).
+
+I don't *think* that's just a matter of continuations not getting called.
+
 
 [2012.10.06] {Strange GHC bug?}
+-------------------------------
 
 I got into a bad state with ghc-7.4.1 where I would try to import my
 module, and it would appear to succeed, but nothing would be bound.
@@ -347,9 +366,11 @@ Also, don't forget to list "OtherModules" to avoid this:
 
 
 
+
+
+
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
-
 
 
 
