@@ -45,6 +45,7 @@ import                 Control.Monad.Par.Scheds.DirectInternal
                         newHotVar, readHotVar, modifyHotVar, writeHotVarRaw)
 import Control.DeepSeq
 import qualified Data.Map as M
+import qualified Data.Set as S
 
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
@@ -61,12 +62,12 @@ import qualified Prelude
 
 #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
-#define NESTED_SCHEDS
+-- #define NESTED_SCHEDS
 #define PARPUTS
-#define FORKPARENT
-#define IDLING_ON
+-- #define FORKPARENT
+-- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
-#define WAKEIDLE
+-- #define WAKEIDLE
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
@@ -136,6 +137,7 @@ io = unsafeParIO -- shorthand used below
 -- globalWorkerPool :: IORef (Data.IntMap ())
 globalWorkerPool :: IORef (M.Map ThreadId Sched)
 globalWorkerPool = unsafePerformIO $ newIORef M.empty
+-- TODO! Make this semi-local! (not shared between "top-level" runPars)
 
 {-# INLINE amINested #-}
 {-# INLINE registerWorker #-}
@@ -179,7 +181,6 @@ popWork Sched{ workpool, no } = do
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched { workpool, idle, no, isMain } task = do
---  modifyHotVar_ workpool (`pushL` task)
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
@@ -237,57 +238,77 @@ runParIO userComp = do
 #endif
    maybSched <- amINested tid
    case maybSched of 
-     Just (sched) -> do 
-       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session....\n" (no sched) (show tid)
+     Just (sched) -> do
+       sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))
+       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) sid
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
 --       runReaderWith sched $ rescheduleR errK
 
        -- Here we have an extra IORef... ugly.
        ref <- newIORef (error "this should never be touched")
+
+       _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
        newSess <- newHotVar False
        let kont ans = liftIO$ do when (dbglvl>=1) $ do
                                    tid2 <- myThreadId
-                                   printf " [%d %s] Continuation for nested session called, finishing it up...\n" (no sched) (show tid2)
-                                 writeIORef ref ans; writeHotVarRaw newSess True
-       RD.runReaderT (C.runContT (unPar userComp) kont) (sched{ sessionFinished=newSess})
-       when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
-       -- By returning here we ARE reengaging the scheduler, since we
-       -- are already inside the rescheduleR loop on this thread.
+                                   printf " [%d %s] Continuation for nested session called, finishing it up (%d)...\n" (no sched) (show tid2) sid
+                                 writeIORef ref ans
+                                 writeHotVarRaw newSess True
+                                 modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
+                                 
+       runReaderWith (sched{ sessionFinished=newSess}) (C.runContT (unPar userComp) kont) 
+       when (dbglvl>=1)$ do
+         active <- readHotVar (activeSessions sched)
+         printf " [%d %s] RETURN from nested runContT (%d) active set %s\n" (no sched) (show tid) sid (show active)
+       -- By returning here we ARE implicitly reengaging the scheduler, since we
+       -- are already inside the rescheduleR loop on this thread
+       -- (before runParIO was called in a nested fashion).
        readIORef ref
      Nothing -> do
        allscheds <- makeScheds main_cpu
 
-       m <- newEmptyMVar
-       forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-            forkOn cpu $ do 
+       mfin <- newEmptyMVar
+       doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
+            workerDone <- newEmptyMVar 
+            _ <- forkOn cpu $ do 
               tid2 <- myThreadId
               registerWorker tid2 sched
               if (cpu /= main_cpu)
                  then do when dbg$ printf " [%d %s] Entering scheduling loop.\n" cpu (show tid2)
                          runReaderWith sched $ rescheduleR errK
                          when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
+                         putMVar workerDone cpu
                          return ()
                  else do
                       let userComp'  = do when dbg$ io$ printf " [%d %s] Starting Par computation on main thread.\n" main_cpu (show tid2)
                                           res <- userComp
                                           finalSched <- RD.ask 
                                           when dbg$ io$ do tid3 <- myThreadId
-                                                           printf " [%d %s] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched) (show tid3)
+                                                           printf " [%d %s] Out of Par computation on main thread.  Writing MVar...\n"
+                                                                  (no finalSched) (show tid3)
 
                                           -- Sanity check our work queues:
                                           when dbg $ io$ sanityCheck allscheds
-                                          io$ putMVar m res
+                                          io$ putMVar mfin res
 
-                      RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
+                      runReaderWith sched (C.runContT (unPar userComp') trivialCont)
                       when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
                                    sanityCheck allscheds
                       -- Not currently requiring that other scheduler threads have exited before we 
                       -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
                       writeIORef (killflag sched) True
-              unregisterWorker tid 
+              unregisterWorker tid
 
-       when dbg$ do putStrLn " *** Reading final MVar on main thread."   
+            return workerDone
+#if 1
+       when dbg$ putStrLn " *** Originator thread: waiting for workers to complete."
+       forM_ doneFlags $ \ mv -> do 
+         n <- readMVar mv
+         when dbg$ printf "   *   Worker %d completed\n" n
+#endif
+
+       when dbg$ do putStrLn " *** Reading final MVar on originator thread."   
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
@@ -295,7 +316,7 @@ runParIO userComp = do
        --              DEBUGGING             -- 
 --       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
-       busyTakeMVar " global wait " m -- Final value.                    
+       busyTakeMVar " The global wait. " mfin -- Final value.                    
        ----------------------------------------
 
 -- Make sure there is no work left in any deque after exiting.
@@ -319,9 +340,14 @@ makeScheds main = do
    idle      <- newHotVar []   
    killflag  <- newHotVar False
    sessionFinished <- newHotVar False
+
+   activeSessions  <- newHotVar S.empty
+   sessionCounter  <- newHotVar 1000
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=sessionFinished
+                             sessionFinished=sessionFinished,
+                             activeSessions=activeSessions,
+                             sessionCounter=sessionCounter
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -356,12 +382,12 @@ get (IVar vr) =  do
 #else
             let resched = 
 #  endif
-			  reschedule
+			  reschedule -- Invariant: kont must not be lost.
             -- Because we continue on the same processor the Sched stays the same:
-            -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
+            -- TODO: Try NOT using monadic values as first class.  Check for performance effect:
 	    r <- io$ atomicModifyIORef vr $ \x -> case x of
 		      Empty      -> (Blocked [pushWork sch . kont], resched)
-		      Full a     -> (Full a, return a)
+		      Full a     -> (Full a, return a) -- kont is implicit here.
 		      Blocked ks -> (Blocked (pushWork sch . kont:ks), resched)
 	    r
 
@@ -470,18 +496,16 @@ fork task =
       sched <- RD.ask   
       callCC$ \parent -> do
          let wrapped = parent ()
-         -- Is it possible to slip in a new Sched here?
-         -- let wrapped = lift$ RD.runReaderT (parent ()) undefined
          io$ pushWork sched wrapped
          -- Then execute the child task and return to the scheduler when it is complete:
          task 
          -- If we get to this point we have finished the child task:
          reschedule -- We reschedule to pop the cont we pushed.
-         io$ putStrLn " !!! ERROR: Should not reach this point #1"   
+         io$ putStrLn " !!! ERROR: Should never reach this point #1" 
 
       when dbg$ do 
        sched2 <- RD.ask 
-       io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+       io$ printf "  -  called parent continuation... was on worker [%d] now on worker [%d]\n" (no sched) (no sched2)
        return ()
 
     False -> do 
@@ -494,7 +518,7 @@ reschedule :: Par a
 reschedule = Par $ C.ContT rescheduleR
 
 -- Reschedule *ignores* its continuation.
--- It runs the scheduler loop indefinitely, until it observers killflag==True
+-- It runs the scheduler loop indefinitely, until it observes killflag==True
 rescheduleR :: ignoredCont -> ROnly ()
 rescheduleR _k = do
   mysched <- RD.ask 
@@ -522,13 +546,10 @@ rescheduleR _k = do
        let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
        fn (\ () -> do 
+--           error "DEBUGME -- Why is this not happening??"
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
 	   rescheduleR errK)
-
-{-# INLINE runReaderWith #-}
-runReaderWith :: r -> RD.ReaderT r m a -> m a
-runReaderWith state m = RD.runReaderT m state
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
@@ -594,6 +615,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
            Nothing -> do i' <- getnext i
 			 go (tries-1) i'
 
+-- | The continuation which should not be called.
 errK :: t
 errK = error "this closure shouldn't be used"
 
@@ -691,6 +713,12 @@ instance Applicative Par where
    pure  = return
 -- </boilerplate>
 --------------------------------------------------------------------------------
+
+
+{-# INLINE runReaderWith #-}
+-- | Arguments flipped for convenience.
+runReaderWith :: r -> RD.ReaderT r m a -> m a
+runReaderWith state m = RD.runReaderT m state
 
 
 --------------------------------------------------------------------------------

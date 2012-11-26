@@ -328,6 +328,50 @@ than of the "RETURN from nested" message (30 vs. 27).
 I don't *think* that's just a matter of continuations not getting called.
 
 
+ HMM... it is indeed dropping a continuation.  We get these two
+messages and not the one in the middle:
+
+     [2 ThreadId 6] Starting Par computation on main thread.
+     *** Out of entire runContT user computation on main thread.
+
+That means that work died in the middle of userComp'.
+
+
+What about idling?  Seems obvious... but turning nesting on and idling
+OFF seems to make the problem go away.  Are the extra continuations
+dying because nested sessions are started on worker threads that then
+go idle?
+
+NO!  Scratch that... it took dozens of iterations but it DID hit the
+bug even with idling off.  UGH.  The triad of
+existing/Continuation/RETURN messages actually MATCH in this run (30
+of each).  So that's not a reliable diagnostic either.
+
+But it DOES drop the top-level continuation midway through userComp'
+(and therefore the call to trivialCont).
+
+Ok, well next I'm going to log into several machines with cssh and
+stress test the non-nested version.
+
+  * Confirmed: the problem crops up w/ nested even with DEBUG off.
+  * Non-nested no-idling: many runs with and without debug... no
+    observation of the bug yet (~80 runs x 16 machines).
+
+
+[2012.11.26] {Totally new kind of problem for Direct.hs}
+--------------------------------------------------------
+
+This a new leg of the same debugging saga.  Ok, so if I make the
+runPar originator thread explictly wait on all workers... that breaks
+things right off the bat even WITHOUT nesting enabled (<<loop>>,
+indefinitely blocked on MVar exceptions).  Why!?
+
+
+
+
+
+
+
 [2012.10.06] {Strange GHC bug?}
 -------------------------------
 

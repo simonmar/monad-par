@@ -23,7 +23,8 @@ import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
-
+import qualified Data.Set as S
+import Data.Word (Word64)
 
 -- Our monad stack looks like this:
 --      ---------
@@ -41,6 +42,7 @@ newtype Par a = Par { unPar :: C.ContT () ROnly a }
     deriving (Monad, MonadCont, RD.MonadReader Sched)
 type ROnly = RD.ReaderT Sched IO
 
+type SessionID = Word64
 
 data Sched = Sched 
     { 
@@ -50,19 +52,30 @@ data Sched = Sched
       rng      :: HotVar Random.GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
-      ---- Global data: ----
-      idle     :: HotVar [MVar Bool],
-      scheds   :: [Sched],   -- A global list of schedulers.
 
-      -- A flag written ONLY by the master thread that starts the Par
-      -- computation.  When set to True, signals that workers should quit it.
-      killflag :: HotVar Bool,
+      ---- Per session / per worker ----
       
       -- For nested support, our scheduler may be working on behalf of
       -- a REAL haskell continuation that we need to return to.  In
       -- that case we need to know WHEN to stop rescheduling and
-      -- return to that genuine continuation.
-      sessionFinished :: HotVar Bool      
+      -- return to that genuine continuation.  This variable will be
+      -- reallocated on each nested runPar invocation and will signal
+      -- the completion of that session to a specific waiting thread.
+      sessionFinished :: HotVar Bool,
+      
+      ---- Global data: ----
+      idle     :: HotVar [MVar Bool], -- waiting idle workers
+      scheds   :: [Sched],            -- A global list of schedulers.
+
+      -- A flag written ONLY by the master thread that starts the Par
+      -- computation.  When set to True, signals that ALL workers should lay off.
+      killflag :: HotVar Bool,
+      
+      -- Any thread that enters runPar (original or nested) registers
+      -- itself in this global list.  When the list becomes null,
+      -- worker threads may shut down or at least go idle.
+      activeSessions :: HotVar (S.Set SessionID),
+      sessionCounter :: HotVar SessionID
      }
 
 
