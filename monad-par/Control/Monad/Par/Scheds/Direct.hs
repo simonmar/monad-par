@@ -146,12 +146,7 @@ amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
-  case M.lookup tid wp of
-    Nothing -> return Nothing
-    Just Sched{sessionFinished=Nothing, no} -> do
-      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" no
-      return Nothing
-    oth -> return oth
+  return (M.lookup tid wp)
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
@@ -249,7 +244,7 @@ runParIO userComp = do
        ref <- newIORef (error "this should never be touched")
        newSess <- newHotVar False
        let kont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
-       RD.runReaderT (C.runContT (unPar userComp) kont) (sched{ sessionFinished=Just newSess})
+       RD.runReaderT (C.runContT (unPar userComp) kont) (sched{ sessionFinished=newSess})
        when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
        -- By returning here we ARE reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread.
@@ -289,9 +284,9 @@ runParIO userComp = do
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
-       takeMVar m -- Final value.
+--       takeMVar m -- Final value.
 --       dbgTakeMVar "global waiting thread" m -- Final value.
---       busyTakeMVar " global wait " m -- Final value.                    
+       busyTakeMVar " global wait " m -- Final value.                    
 
 
 -- Make sure there is no work left in any deque after exiting.
@@ -313,9 +308,10 @@ makeScheds main = do
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
    killflag  <- newHotVar False
+   sessionFinished <- newHotVar False
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=Nothing
+                             sessionFinished=sessionFinished
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -498,10 +494,8 @@ rescheduleR _k = do
   case mtask of
     Nothing -> do 
                   k <- liftIO$ readIORef (killflag mysched)
-                  fin <- liftIO$ case sessionFinished mysched of
-                                   Nothing -> return False
-                                   Just r  -> readIORef r
-		  if (k || fin) 
+                  fin <- liftIO$ readIORef (sessionFinished mysched)
+		  if (k ||  fin) 
                    then do when (dbglvl >= 1) $ 
                              liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
                                             (no mysched) (show k) (show fin)

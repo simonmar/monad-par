@@ -46,11 +46,7 @@ data Sched = Sched
     { 
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
-#ifdef REACTOR_DEQUE
-      workpool :: R.Deque IOArray (Par ()),
-#else
       workpool :: WSDeque (Par ()),
-#endif
       rng      :: HotVar Random.GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
@@ -63,7 +59,7 @@ data Sched = Sched
       -- a REAL haskell continuation that we need to return to.  In
       -- that case we need to know WHEN to stop rescheduling and
       -- return to that genuine continuation.
-      sessionFinished :: Maybe (HotVar Bool)
+      sessionFinished :: HotVar Bool      
      }
 
 
