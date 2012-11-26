@@ -502,7 +502,7 @@ rescheduleR _k = do
                                    Nothing -> return False
                                    Just r  -> readIORef r
 		  if (k || fin) 
-                   then do when (dbglvl>=0) $ 
+                   then do when (dbglvl >= 1) $ 
                              liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
                                             (no mysched) (show k) (show fin)
                            return ()
