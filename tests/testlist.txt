@@ -1,0 +1,10 @@
+# See ../examples/README.md for format description.
+#
+# This is a list that drives building tests in different configurations.
+#
+# Version: tests 1.0
+# 
+# CHANGELOG:
+#   1.0 - initial version
+
+issue21  nested 

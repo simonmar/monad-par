@@ -11,46 +11,43 @@ QUICK START
 
 The easy way to get started is to simply run:
 
-    make
     make test
 
-This will compile all the examples, and then run each of them using the settings:
+This will produce a lot of output.  It installs dependencies, then
+builds and runs all examples in a "quick" configuration and in
+parallel.
 
-    SHORTRUN=1 THREADS="1"
-    
-This will produce a fair bit of profiling output.
 
-DETAILS
-=======
+MORE DETAILS
+============
 
-Each benchmark/test program requires a cabal file. The
-'generate_cabal.sh' script creates these files for you.
+Each benchmark/test can be built directly or through a cabal file.
+'generate_cabal.sh' script creates the cabal file for you:
 
     ./generate_cabal.sh
     
-Once generated 'cabal install' will compile each benchmark.
+Once generated, 'cabal install' will compile and install all
+benchmarks (globally):
 
     cabal install
-    
+
+
 The benchmarks are now ready to be run.
 
 BENCHMARK SCRIPT
 ================
 
-To build the benchmark script the haskell shell scripting module 'HSH'
-is required. Some say this is a dangerous module, so you may want to
-install it using cabal-dev.
+This directory provides benchmarking.  We used to run the script
+"benchmark.hs" from source, but now it is highly encouraged to compile
+it (and the Makefile does so).
 
-TESTING / BENCHMARKING
-======================
+Benchmarking can range from the simple:
 
-This directory provides benchmarking.  Ranging from the simple:
-
-    SHORTRUN=1 THREADS="1" ./benchmark.hs
+    SHORTRUN=1 THREADS="1" ./benchmark.run
 
 To the more involved:
 
-    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.hs
+    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.run
 
 Both of the above will populate a file named results_$HOSTNAME.dat.
 Typically that will be followed by the following call to file the
@@ -66,7 +63,7 @@ The bechmarking configurations are stored in simple text files.  There
 are three of them currently [2011.10.13] checked in which are tuned
 for different sized runs:
 
-  * benchlist.txt -- desktop version, e.g. 4 core workstation
+  * benchlist.txt        -- desktop version, e.g. 4 core workstation
   * benchlist_server.txt -- big multicore, e.g. 16-32 core server
   * benchlist_laptop.txt -- ~dual processor mobile processor
 
@@ -94,7 +91,8 @@ It is important that new benchmarks conform to all the conventions.
 Here is the recipe:
 
   * Add your benchmark here (single .hs file) or in a subdirectory.
-  * If the latter, give it a Makefile (supporting "all" and "clean").
+  * Add an entry to generate_cabal.sh, listing the benchmark and its
+    dependencies.  
   * Add the benchmark and its input parameters to benchlist.txt, as
     well as the _laptop and _server variants.
   * Make sure the benchmark runs with no arguments.  This is "test"

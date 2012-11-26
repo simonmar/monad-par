@@ -22,13 +22,17 @@ import PARSCHED
 -- This bug was reported for the Trace scheduler:
 -- import Control.Monad.Par.Scheds.Trace
 -- import Control.Monad.Par
+
 import Control.Monad.Par.Scheds.Direct
+
+-- This is ALSO failing for Adam's meta-par scheduler!
 -- import Control.Monad.Par.Meta.SMP (runPar, spawn, get)
 #endif
 
 import System.Environment (getArgs)
 import Control.DeepSeq
-import GHC.Conc (myThreadId)
+import GHC.Conc (myThreadId, numCapabilities)
+import System.IO (hPutStrLn,stderr)
 
 data M = M !Integer !Integer !Integer !Integer
  deriving Show
@@ -53,10 +57,10 @@ main :: IO ()
 main = do
   args <- getArgs
   tid <- myThreadId
-  putStrLn$"Beginning benchmark on: "++show tid
+  hPutStrLn stderr$"Beginning benchmark on: "++show tid ++ ", numCapabilities "++show numCapabilities
   
-  let n = case args of 
+  let n = case args of
+       -- Default to 10M to trigger the bug. 
        []  -> 10 * 1000 * 1000
---       []  -> 1 * 1000 * 1000 
        [s] -> read s
   print $ length $ show $ fib n

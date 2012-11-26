@@ -2,16 +2,23 @@
 # This is just here as a reminder of what to run, or for people whose
 # fingers are in the habit of typing "make".
 
-# Run "make install-all" in the parent directory before using the below:
+# Run "make install" in the parent directory before using the below:
 
-all: install
-install:
-	./generate_cabal.sh
-	cabal install
+ifeq ($(GHC),)
+  GHC=`which ghc`
+endif 
+ifeq ($(CABAL),)
+  CABAL= cabal
+endif
+
+all: test
+
+install: monad-par-examples.cabal
+	$(CABAL) install --prefix=`pwd`
 
 clean:
-	cabal clean || echo 
 	rm -rf bin *.hi *.o *.exe
+	$(CABAL) clean || echo 
 
 distclean: clean
 	rm -f benchmark.run
@@ -19,19 +26,27 @@ distclean: clean
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
 # But right now it's SOO much faster than using cabal that it's nice to have around:
-test: benchmark.run
+test: benchmark.run deps
         # Building with no cabal should put the same executables in the same
         # places as building with cabal:
 	SHORTRUN=1 THREADS="1" ./benchmark.run --par --no-cabal +RTS -N
 
-linValidate: benchmark.run
-	SHORTRUN=1 THREADS="1" ./benchmark.run +RTS -N
-
 benchmark.run: benchmark.hs
 	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
 
+monad-par-examples.cabal:
+	./generate_cabal.sh
+
+deps: monad-par-examples.cabal
+	$(CABAL) install --only-dependencies
+
+
 #================================================================================
-# Hacks to build on Windows:
+# Validation / regression testing:
+
+# "Validation" uses cabal-dev for isolation:
+CBLDEV=	cabal-dev install -s $(MAINDEVDIR)
+BIN="../cabal-dev/bin/"
 
 # BAD way to check for Windows:
 ifeq ($(SYSTEMROOT),)
@@ -42,14 +57,24 @@ else
   MAINDEVDIR=..\\cabal-dev
 endif
 
-validate: 
-	./generate_cabal.sh
-	cabal install --only-dependencies
+validate: monad-par-examples.cabal deps
 	$(MAKE) $(BUILDCMD)
 
-CBLDEV=	cabal-dev install -s $(MAINDEVDIR)
-BIN="../cabal-dev/bin/"
-# SUFFIX=""
+# This is just like a regular test but with cabal-dev.
+linValidate: 
+	$(MAKE) CABAL=$(CBLDEV) test
+
+# --------------------------------------------------
+# Hacks to build on Windows:
+
+# We don' yet have the benchmark script running on Windows.  So we do
+# things a bit more manually.
+winValidate: allvers
+	cabal-dev install -s ../cabal-dev/ -fdirect
+	$(MAKE) winhelper SUFFIX="_Trace_threaded.exe"
+	$(MAKE) winhelper SUFFIX="_Direct_threaded.exe"
+	$(MAKE) winhelper SUFFIX="_SMP_threaded.exe"
+        # No way to run Sparks version with this little hack.
 
 tracevers:
 	$(CBLDEV) -ftrace    --program-suffix=_Trace_threaded.exe 
@@ -71,14 +96,6 @@ allvers: tracevers directvers smpvers sparksvers
 # 	$(CBLDEV) --only-dependencies
 # 	$(MAKE) -j allvers
 
-# We don' yet have the benchmark script running on Windows.  So we do
-# things a bit more manually.
-winValidate: allvers
-	cabal-dev install -s ../cabal-dev/ -fdirect
-	$(MAKE) winhelper SUFFIX="_Trace_threaded.exe"
-	$(MAKE) winhelper SUFFIX="_Direct_threaded.exe"
-	$(MAKE) winhelper SUFFIX="_SMP_threaded.exe"
-        # No way to run Sparks version with this little hack.
 
 # TEMP: A cheap way to run everything for a quick test without having to
 # rely on the benchmark script.
