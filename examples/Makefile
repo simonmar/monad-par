@@ -63,8 +63,10 @@ validate: monad-par-examples.cabal deps
 # This is just like a regular test but with cabal-dev.
 #linValidate: 
 #	$(MAKE) CABAL=$(CBLDEV) test
+
 # OR... we could build through cabal and forgo parallelism:
-linValidate: benchmark.run deps
+linValidate: benchmark.run monad-par-examples.cabal
+	$(MAKE) CABAL=$(CBLDEV) deps
 	SHORTRUN=1 THREADS="1" ./benchmark.run 
 
 # --------------------------------------------------
