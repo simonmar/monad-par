@@ -61,8 +61,11 @@ validate: monad-par-examples.cabal deps
 	$(MAKE) $(BUILDCMD)
 
 # This is just like a regular test but with cabal-dev.
-linValidate: 
-	$(MAKE) CABAL=$(CBLDEV) test
+#linValidate: 
+#	$(MAKE) CABAL=$(CBLDEV) test
+# OR... we could build through cabal and forgo parallelism:
+linValidate: benchmark.run deps
+	SHORTRUN=1 THREADS="1" ./benchmark.run 
 
 # --------------------------------------------------
 # Hacks to build on Windows:

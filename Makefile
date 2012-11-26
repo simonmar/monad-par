@@ -29,8 +29,6 @@ ACC_PKGS= accelerate/ abstract-par-accelerate/ meta-par-accelerate/
 # All of the above can work CPU-only.  The following really requires CUDA:
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
 
-MAIN_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
-
 ifeq ($(GHC),)
   GHC=`which ghc`
 endif 
@@ -70,12 +68,14 @@ reinstall:
 install-ours:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
+# Install ours plus third-party queue and accelerate dependencies:
+MAIN_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
+mega-install:  check-submodules
+	${CABAL_INSTALL} ${MAIN_PKGS} 
+
 # Install everything you need for distributed meta-par.
 dist-install:  check-submodules
 	${CABAL_INSTALL} ${MAIN_PKGS} ${NETWORK_PKGS}
-
-mega-install:  check-submodules
-	${CABAL_INSTALL} ${MAIN_PKGS} 
 
 # This one is CUDA SPECIFIC:
 mega-install-cuda: check-submodules
