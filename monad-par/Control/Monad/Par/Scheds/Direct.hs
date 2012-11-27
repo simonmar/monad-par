@@ -256,11 +256,9 @@ runParIO userComp = do
        when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) sid
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
---       runReaderWith sched $ rescheduleR errK
 
        -- Here we have an extra IORef... ugly.
        ref <- newIORef (error "this should never be touched")
-
        _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
        newSess <- newHotVar False
        let kont ans = liftIO$ do when (dbglvl>=1) $ do
