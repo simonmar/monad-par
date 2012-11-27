@@ -62,7 +62,7 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
--- #define DEBUG
+#define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- #define NESTED_SCHEDS
 #define PARPUTS
@@ -314,11 +314,11 @@ runParIO userComp = do
             ------------------------------------------------------------END WORKER THREAD
 --            return as
             return workerDone
-#if 0
+#if 1
        when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
        forM_ doneFlags $ \ mv -> do 
---         n <- readMVar mv
-         n <- tryTakeMVar mv 
+         n <- readMVar mv
+--         n <- tryTakeMVar mv 
 --         n <- A.wait mv
          when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
 #endif
