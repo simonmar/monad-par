@@ -31,11 +31,12 @@ module Control.Monad.Par.Scheds.Direct (
 import Control.Applicative
 import Control.Concurrent hiding (yield)
 import Data.IORef         (IORef,newIORef,readIORef,writeIORef,atomicModifyIORef)
-import Text.Printf        (printf)
+import Text.Printf        (printf, hPrintf)
 import GHC.Conc           (numCapabilities,yield)
 import           "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
 import qualified       System.Random.MWC as Random
+import                 System.IO  (stderr)
 import                 System.IO.Unsafe (unsafePerformIO)
 import                 System.Mem.StableName (makeStableName, hashStableName)
 import qualified       Control.Monad.Par.Class  as PC
@@ -61,7 +62,7 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
-#define DEBUG
+-- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- #define NESTED_SCHEDS
 #define PARPUTS
@@ -269,18 +270,24 @@ runParIO userComp = do
        readIORef ref
      Nothing -> do
        allscheds <- makeScheds main_cpu
-
+       
+       tidorig <- myThreadId -- TODO: remove when done debugging
+       
        mfin <- newEmptyMVar
        doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
-            workerDone <- newEmptyMVar
+            workerDone <- newEmptyMVar            
+            ----------------------------------------
+            let wname = ("(worker of originator "++show tidorig++")")
+--            forkOn cpu $ do
+            forkWithExceptions (forkOn cpu) wname $ do                                    
 --            as <- A.asyncOn cpu $ do
-            as <- A.async $ do            
+--            as <- A.async $ do            
             ------------------------------------------------------------STRT WORKER THREAD              
               tid2 <- myThreadId
               registerWorker tid2 sched
               if (cpu /= main_cpu)
                  then do when dbg$ printf " [%d %s] Entering scheduling loop.\n" cpu (show tid2)
-                         runReaderWith sched $ rescheduleR errK
+                         runReaderWith sched $ rescheduleR (trivialCont wname)
                          when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
                          putMVar workerDone cpu
                          return ()
@@ -303,18 +310,17 @@ runParIO userComp = do
                       -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
 --                      writeIORef (killflag sched) True
               unregisterWorker tid
-              return cpu
+--              return cpu
             ------------------------------------------------------------END WORKER THREAD
-            return as
-
---            return workerDone
-       tidorig <- myThreadId
-#if 1
+--            return as
+            return workerDone
+#if 0
        when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
        forM_ doneFlags $ \ mv -> do 
 --         n <- readMVar mv
-         n <- A.wait mv
-         when dbg$ printf "   * [%s]  Worker %d completed\n" (show tidorig) n
+         n <- tryTakeMVar mv 
+--         n <- A.wait mv
+         when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
 #endif
 
        when dbg$ do printf " *** [%s] Reading final MVar on originator thread." (show tidorig)  
@@ -324,8 +330,8 @@ runParIO userComp = do
        ----------------------------------------
        --              DEBUGGING             -- 
 --       takeMVar mfin -- Final value.
---       dbgTakeMVar "global waiting thread" mfin -- Final value.
-       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
+       dbgTakeMVar "global waiting thread" mfin -- Final value.
+--       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
        ----------------------------------------
 
 -- Create the default scheduler(s) state:
@@ -550,7 +556,6 @@ rescheduleR kont = do
        let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
        fn (\ _ -> do 
-           error "DEBUGME -- Why is this not happening??"
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
 	   rescheduleR kont)
@@ -627,9 +632,10 @@ errK :: t
 errK = error "Error cont: this closure shouldn't be used"
 
 trivialCont :: String -> a -> ROnly ()
-trivialCont str _ = 
+trivialCont str _ = do 
 #ifdef DEBUG
-                trace (str ++" trivialCont evaluated!")
+--                trace (str ++" trivialCont evaluated!")
+                liftIO$ printf " !! trivialCont evaluated, msg: %s\n" str
 #endif
 		return ()
 
@@ -784,3 +790,19 @@ forkIO_Suppress whre action =
            action
 
 -- forkOnIt
+
+
+-- | Exceptions that walk up the fork tree of threads:
+forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
+forkWithExceptions forkit descr action = do 
+   parent <- myThreadId
+   forkit $ 
+      E.catch action
+	 (\ e -> 
+           case E.fromException e of 
+             Just E.ThreadKilled -> printf -- hPrintf stderr 
+                                    "ThreadKilled exception inside child thread (not propagating!): %s\n" (show descr)
+	     _  -> do printf -- hPrintf stderr
+                        "Exception inside child thread %s: %s\n" (show descr) (show e)
+                      E.throwTo parent (e :: E.SomeException)
+	 )

@@ -424,7 +424,38 @@ currently has a yield but not rescheduleR...
 
      (Adding a yield didn't fix things either...)
   
-  
+WEIRD COMBINATION
+-----------------
+
+I just switched a couple knobs back (forkOn, use MVars to signal
+currently has a yield but not rescheduleR.worker completion).
+
+Then I made the wait-for-workers feature *gentle*, it just tries to
+take those MVars to check if the workers are done.  This triggers a
+behavior that hasn't happened till now:
+
+  * issue21.exe: Error cont: this closure shouldn't be used
+  * issue21.exe: DEBUGME -- Why is this not happening??
+
+We weren't using the withAsync feature that would have killed the
+child threads before these happened.... so why weren't we reaching
+these continuations before but we are now?
+
+Nevertheless, it IS forkOn vs. async that was the trigger, even
+turning the gentler waiting strategy off has nothing to do with it.
+Was I somehow routing the exceptions to a different thread and
+actually losing them under the async method (precisely NOT what it's
+for)?
+
+Hmm... unlike async, my own forkWithExceptions seems to propagate them
+properly.  That results in a tidier, earlier death for the whole
+process.
+
+Ok, in that configuration, if I remove the two intentional errors
+(well, full disclosure, originally intentional, but semi-forgotten in
+all the other mess)... things seem to work, and run much faster.
+Direct.hs WITHOUT nesting can knock out issue21 on 10M in 1.3 seconds.
+Barely slower than sparks.
 
 
 [2012.10.06] {Strange GHC bug?}
