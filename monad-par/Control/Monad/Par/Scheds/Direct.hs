@@ -64,12 +64,14 @@ import qualified Prelude
 
 -- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
--- #define NESTED_SCHEDS
+#define NESTED_SCHEDS
 #define PARPUTS
 -- #define FORKPARENT
 -- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
 -- #define WAKEIDLE
+
+#define WAIT_FOR_WORKERS
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
@@ -111,6 +113,14 @@ _IDLING_ON = True
 #else
 _IDLING_ON = False
 #endif
+
+_WAIT_FOR_WORKERS :: Bool
+#ifdef WAIT_FOR_WORKERS
+_WAIT_FOR_WORKERS = True
+#else
+_WAIT_FOR_WORKERS = False
+#endif
+
 
 
 --------------------------------------------------------------------------------
@@ -314,16 +324,15 @@ runParIO userComp = do
             ------------------------------------------------------------END WORKER THREAD
 --            return as
             return (if cpu == main_cpu then Nothing else Just workerDone)
-#if 1
-       when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
-       forM_ (catMaybes doneFlags) $ \ mv -> do 
-         n <- readMVar mv
---         n <- tryTakeMVar mv 
---         n <- A.wait mv
-         when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
-#endif
 
-       when dbg$ do printf " *** [%s] Reading final MVar on originator thread.\n" (show tidorig)  
+       when _WAIT_FOR_WORKERS $ do 
+           when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
+           forM_ (catMaybes doneFlags) $ \ mv -> do 
+             n <- readMVar mv
+    --         n <- A.wait mv
+             when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
+
+       when dbg$ do printf " *** [%s] Reading final MVar on originator thread.\n" (show tidorig)
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
@@ -491,10 +500,11 @@ wakeUp _sched ks arg = loop ks
                               
 
 ------------------------------------------------------------
--- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
-fork task = 
+fork task =
+  -- Forking the "parent" means offering up the continuation of the
+  -- fork rather than the task argument for stealing:
   case _FORKPARENT of 
     True -> do 
       sched <- RD.ask   
@@ -505,7 +515,8 @@ fork task =
          task 
          -- If we get to this point we have finished the child task:
          longjmpSched -- We reschedule to pop the cont we pushed.
-         io$ putStrLn " !!! ERROR: Should never reach this point #1" 
+         -- TODO... OPTIMIZATION: we could also try the pop directly, and if it succeeds return normally....
+         io$ printf " !!! ERROR: Should never reach this point #1\n"
 
       when dbg$ do 
        sched2 <- RD.ask 
@@ -746,7 +757,7 @@ sanityCheck allscheds = do
      when (not b) $ do 
          () <- printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
          return ()
-  putStrLn "Sanity check complete."
+  printf "Sanity check complete.\n"
 
 
 -- | This tries to localize the blocked-indefinitely exception:
@@ -755,7 +766,7 @@ dbgTakeMVar msg mv =
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
   E.catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
  where   
-   doDebugStuff = do putStrLn$"This takeMVar blocked indefinitely!: "++msg
+   doDebugStuff = do printf "This takeMVar blocked indefinitely!: %s\n" msg
                      error "failed"
 
 -- | For debugging purposes.  This can help us figure out (but an ugly
