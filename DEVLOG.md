@@ -367,9 +367,64 @@ things right off the bat even WITHOUT nesting enabled (<<loop>>,
 indefinitely blocked on MVar exceptions).  Why!?
 
 
+[2012.11.27] {Continued debugging}
+----------------------------------
 
+My last hack yesterday was to make rescheduleR actually EXECUTE its
+continuation when its ready to exit.  (And I turned off the business
+with the originator waiting for all workers.)
 
+I also went in an hacked "forkOn" to "asyncOn" but I haven't done
+anything else with that yet.
 
+Ok, what's up with this.  After that hack the busyTakeMVar hack seems
+to be causing infinite loops on issue21 with:
+
+    debug:on, nested:off, forkparent:off, idling:off
+
+But why should that be!?  It includes a yield?  Is it simply that all
+the extra wasted cycles bring it to a crawl and it seems like its
+diverged (when without the busy wait with 100K input it takes 270ms)?
+
+But to emphasize that it DOES work without the busyTakeMVar, I stress
+tested it.  All these work:
+
+ * 16 machines * 100 reps with debug
+ * 16 machines * 50 reps with debug piped to /dev/null
+ * 16 machines * 100 reps without debug
+
+Then if we ALSO turn on the new "wait for workers to complete"
+thing...
+
+Ok, when I do that I immediately get "thread blocked indefinitely".
+
+If I wait on the Asyncs instead of the MVars... well that's just
+worse, then I don't get the exception and it just spins in reschedule.
+HERE'S THE WEIRD PART.  The killflag IS set and the DROP-out's do
+happen.  Yet it still spins.
+
+It loosk like some nested invocations are reaching the killflag and
+others are not, leaving their workers spinning.  In fact, exactly ONE
+"set killflag" message gets through....  And I already moved the set
+killflag UP into userComp'.
+
+It looks like we're losing real haskell continuations all over the
+place.  We're not getting this message:
+
+    Exited scheduling loop.  FINISHED
+
+Could this somehow be an effect of kill the originator threads waiting
+on MVars inside an unsafePerformIO?  Also (OOPS) runPar was not set to
+NOINLINE...  
+
+    (NOINLINE by itself didn't fix the problem)
+
+Could reschedule be a NAUGHTY loop with no allocation?  Steal
+currently has a yield but not rescheduleR...
+
+     (Adding a yield didn't fix things either...)
+  
+  
 
 
 [2012.10.06] {Strange GHC bug?}

@@ -52,6 +52,7 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 
 import qualified Control.Exception as E
+import qualified Control.Concurrent.Async as A
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -213,6 +214,7 @@ rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 instance NFData (IVar a) where
   rnf _ = ()
 
+{-# NOINLINE runPar #-}
 runPar = unsafePerformIO . runParIO
 
 runParIO userComp = do
@@ -270,8 +272,10 @@ runParIO userComp = do
 
        mfin <- newEmptyMVar
        doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
-            workerDone <- newEmptyMVar 
-            _ <- forkOn cpu $ do 
+            workerDone <- newEmptyMVar
+--            as <- A.asyncOn cpu $ do
+            as <- A.async $ do            
+            ------------------------------------------------------------STRT WORKER THREAD              
               tid2 <- myThreadId
               registerWorker tid2 sched
               if (cpu /= main_cpu)
@@ -284,51 +288,45 @@ runParIO userComp = do
                       let userComp'  = do when dbg$ io$ printf " [%d %s] Starting Par computation on main thread.\n" main_cpu (show tid2)
                                           res <- userComp
                                           finalSched <- RD.ask 
+                                          io$ writeIORef (killflag sched) True
                                           when dbg$ io$ do tid3 <- myThreadId
-                                                           printf " [%d %s] Out of Par computation on main thread.  Writing MVar...\n"
+                                                           printf " *** [%d %s] Out of Par on main thread. Set killflag; next write MVar !!\n"
                                                                   (no finalSched) (show tid3)
-
                                           -- Sanity check our work queues:
-                                          when dbg $ io$ sanityCheck allscheds
+--                                          when dbg $ io$ sanityCheck allscheds
                                           io$ putMVar mfin res
 
-                      runReaderWith sched (C.runContT (unPar userComp') trivialCont)
-                      when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
-                                   sanityCheck allscheds
+                      runReaderWith sched (C.runContT (unPar userComp') (trivialCont "main worker"))
+                      when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
+--                                   sanityCheck allscheds
                       -- Not currently requiring that other scheduler threads have exited before we 
                       -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
-                      writeIORef (killflag sched) True
+--                      writeIORef (killflag sched) True
               unregisterWorker tid
+              return cpu
+            ------------------------------------------------------------END WORKER THREAD
+            return as
 
-            return workerDone
+--            return workerDone
+       tidorig <- myThreadId
 #if 1
-       when dbg$ putStrLn " *** Originator thread: waiting for workers to complete."
+       when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
        forM_ doneFlags $ \ mv -> do 
-         n <- readMVar mv
-         when dbg$ printf "   *   Worker %d completed\n" n
+--         n <- readMVar mv
+         n <- A.wait mv
+         when dbg$ printf "   * [%s]  Worker %d completed\n" (show tidorig) n
 #endif
 
-       when dbg$ do putStrLn " *** Reading final MVar on originator thread."   
+       when dbg$ do printf " *** [%s] Reading final MVar on originator thread." (show tidorig)  
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
        ----------------------------------------
        --              DEBUGGING             -- 
---       takeMVar m -- Final value.
---       dbgTakeMVar "global waiting thread" m -- Final value.
-       busyTakeMVar " The global wait. " mfin -- Final value.                    
+--       takeMVar mfin -- Final value.
+--       dbgTakeMVar "global waiting thread" mfin -- Final value.
+       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
        ----------------------------------------
-
--- Make sure there is no work left in any deque after exiting.
-sanityCheck :: [Sched] -> IO ()
-sanityCheck allscheds = do
-  forM_ allscheds $ \ Sched{no, workpool} -> do
-     b <- R.nullQ workpool
-     when (not b) $ do 
-         () <- printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
-         return ()
-  putStrLn "Sanity check complete."
-
 
 -- Create the default scheduler(s) state:
 makeScheds :: Int -> IO [Sched]
@@ -382,7 +380,7 @@ get (IVar vr) =  do
 #else
             let resched = 
 #  endif
-			  reschedule -- Invariant: kont must not be lost.
+			  longjmpSched -- Invariant: kont must not be lost.
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monadic values as first class.  Check for performance effect:
 	    r <- io$ atomicModifyIORef vr $ \x -> case x of
@@ -500,7 +498,7 @@ fork task =
          -- Then execute the child task and return to the scheduler when it is complete:
          task 
          -- If we get to this point we have finished the child task:
-         reschedule -- We reschedule to pop the cont we pushed.
+         longjmpSched -- We reschedule to pop the cont we pushed.
          io$ putStrLn " !!! ERROR: Should never reach this point #1" 
 
       when dbg$ do 
@@ -514,45 +512,54 @@ fork task =
       io$ pushWork sch task
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
-reschedule :: Par a 
-reschedule = Par $ C.ContT rescheduleR
+longjmpSched :: Par a
+-- longjmpSched = Par $ C.ContT rescheduleR
+longjmpSched = Par $ C.ContT (\ _k -> rescheduleR (trivialCont "longjmpSched"))
 
--- Reschedule *ignores* its continuation.
--- It runs the scheduler loop indefinitely, until it observes killflag==True
-rescheduleR :: ignoredCont -> ROnly ()
-rescheduleR _k = do
+-- Reschedule the scheduler loop until it observes killflag==True, and
+-- then it finally invokes its continuation.
+rescheduleR :: (a -> ROnly ()) -> ROnly ()
+rescheduleR kont = do
   mysched <- RD.ask 
-  when dbg$ liftIO$ printf " [%d]  - Reschedule...\n" (no mysched)
+  when dbg$ liftIO$ do tid <- myThreadId
+                       k <- liftIO$ readIORef (killflag mysched)
+                       fin <- liftIO$ readIORef (sessionFinished mysched)
+                       printf " [%d %s]  - Reschedule... kill %s sessfin %s\n" (no mysched) (show tid) (show k) (show fin)
   mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do 
                   k <- liftIO$ readIORef (killflag mysched)
                   fin <- liftIO$ readIORef (sessionFinished mysched)
 		  if (k ||  fin) 
-                   then do when (dbglvl >= 1) $ 
-                             liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
-                                            (no mysched) (show k) (show fin)
-                           return ()
+                   then do when (dbglvl >= 1) $ liftIO $ do
+                             tid <- myThreadId
+                             printf " [%d %s]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n" 
+                                    (no mysched) (show tid) (show k) (show fin)
+                           kont (error "Direct.hs: The result value from rescheduleR should not be used.")
                    else do
 		     liftIO$ steal mysched
 #ifdef WAKEIDLE
 --                     io$ tryWakeIdle (idle mysched)
 #endif
-		     rescheduleR errK
+                     liftIO yield
+		     rescheduleR kont
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ do sn <- liftIO$ makeStableName task
 		     liftIO$ printf " [%d] popped work %d from own queue\n" (no mysched) (hashStableName sn)
        let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
-       fn (\ () -> do 
---           error "DEBUGME -- Why is this not happening??"
+       fn (\ _ -> do 
+           error "DEBUGME -- Why is this not happening??"
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
-	   rescheduleR errK)
+	   rescheduleR kont)
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
+-- 
+--   The current policy is to do a burst of of N tries without
+--   yielding or pausing inbetween.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
   when (dbglvl>=2)$ printf " [%d]  + stealing\n" my_no
@@ -617,12 +624,12 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
 -- | The continuation which should not be called.
 errK :: t
-errK = error "this closure shouldn't be used"
+errK = error "Error cont: this closure shouldn't be used"
 
-trivialCont :: a -> ROnly ()
-trivialCont _ = 
+trivialCont :: String -> a -> ROnly ()
+trivialCont str _ = 
 #ifdef DEBUG
-                trace "trivialCont evaluated!"
+                trace (str ++" trivialCont evaluated!")
 #endif
 		return ()
 
@@ -725,6 +732,18 @@ runReaderWith state m = RD.runReaderT m state
 -- DEBUGGING TOOLs
 --------------------------------------------------------------------------------
 
+-- Make sure there is no work left in any deque after exiting.
+sanityCheck :: [Sched] -> IO ()
+sanityCheck allscheds = do
+  forM_ allscheds $ \ Sched{no, workpool} -> do
+     b <- R.nullQ workpool
+     when (not b) $ do 
+         () <- printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
+         return ()
+  putStrLn "Sanity check complete."
+
+
+-- | This tries to localize the blocked-indefinitely exception:
 dbgTakeMVar :: String -> MVar a -> IO a
 dbgTakeMVar msg mv = 
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
@@ -741,8 +760,8 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
  where 
  try 0 = do 
    tid <- myThreadId
---   B.putStrLn (B.pack$ show tid ++ "! ")
-   putStrLn (show tid ++" not getting anywhere, msg: "++ msg)  -- After we've failed enough times, start complaining.
+   -- After we've failed enough times, start complaining:
+   printf "%s not getting anywhere, msg: %s\n" (show tid) msg  
    try (100 * 1000)
  try n = do
    x <- tryTakeMVar mv

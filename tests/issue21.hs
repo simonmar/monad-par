@@ -19,10 +19,11 @@ The Glorious Glasgow Haskell Compilation System, version 7.4.1
 #ifdef PARSCHED 
 import PARSCHED
 #else
--- This bug was reported for the Trace scheduler:
--- import Control.Monad.Par.Scheds.Trace
 -- import Control.Monad.Par
 
+-- This bug was reported for the Trace scheduler:
+-- import Control.Monad.Par.Scheds.Trace
+-- import Control.Monad.Par.Scheds.Sparks
 import Control.Monad.Par.Scheds.Direct
 
 -- This is ALSO failing for Adam's meta-par scheduler!

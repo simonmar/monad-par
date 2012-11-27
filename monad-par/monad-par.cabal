@@ -103,6 +103,7 @@ Library
                , containers
                , parallel >= 3.1
                , mtl >= 2.0.1.0
+               , async >= 2.0.1.0
 
   ghc-options: -O2
   Other-modules:
