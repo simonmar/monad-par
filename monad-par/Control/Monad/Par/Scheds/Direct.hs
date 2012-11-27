@@ -47,7 +47,7 @@ import                 Control.Monad.Par.Scheds.DirectInternal
 import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
-
+import Data.Maybe (catMaybes)
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
@@ -62,7 +62,7 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
-#define DEBUG
+-- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- #define NESTED_SCHEDS
 #define PARPUTS
@@ -313,17 +313,17 @@ runParIO userComp = do
 --              return cpu
             ------------------------------------------------------------END WORKER THREAD
 --            return as
-            return workerDone
+            return (if cpu == main_cpu then Nothing else Just workerDone)
 #if 1
        when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
-       forM_ doneFlags $ \ mv -> do 
+       forM_ (catMaybes doneFlags) $ \ mv -> do 
          n <- readMVar mv
 --         n <- tryTakeMVar mv 
 --         n <- A.wait mv
          when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
 #endif
 
-       when dbg$ do printf " *** [%s] Reading final MVar on originator thread." (show tidorig)  
+       when dbg$ do printf " *** [%s] Reading final MVar on originator thread.\n" (show tidorig)  
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.

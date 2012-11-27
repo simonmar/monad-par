@@ -458,6 +458,11 @@ Direct.hs WITHOUT nesting can knock out issue21 on 10M in 1.3 seconds.
 Barely slower than sparks.
 
 
+EGAD!  Waiting for the workers to complete introduces a MASSIVE
+slowdown.  It goes from 1.3 seconds to 5 seconds.
+
+
+
 [2012.10.06] {Strange GHC bug?}
 -------------------------------
 
