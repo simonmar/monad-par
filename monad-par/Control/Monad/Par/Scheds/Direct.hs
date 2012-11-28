@@ -229,6 +229,74 @@ instance NFData (IVar a) where
 runPar = unsafePerformIO . runParIO
 
 
+-- | This procedure creates a new worker on the current thread (with a
+-- new session ID) and plugs it into the work-stealing environment.
+runNewSessionAndWait :: String -> Sched -> Par b -> IO b
+runNewSessionAndWait name sched userComp = do
+    tid <- myThreadId -- TODO: remove when done debugging
+    sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))    
+    _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
+    
+    -- Here we have an extra IORef... ugly.
+    ref <- newIORef (error$ "Empty session-result ref ("++name++") should never be touched (sid "++ show sid++", "++show tid ++")")
+
+    newSess <- newHotVar False
+    let userComp' = do when dbg$ io$ do
+                           tid2 <- myThreadId
+                           printf " [%d %s] Starting Par computation on %s.\n" (no sched) (show tid2) name
+                       ans <- userComp
+                       -- This add-on to userComp will run only after userComp has completed successfully,
+                       -- but that does NOT guarantee that userComp-forked computations have terminated:
+                       io$ do when (dbglvl>=1) $ do
+                                tid3 <- myThreadId
+                                printf " [%d %s] Continuation for %s called, finishing it up (%d)...\n" (no sched) (show tid3) name sid
+                              writeIORef ref ans
+                              writeHotVarRaw newSess True
+                              modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
+        freshSched = sched{ sessionFinished=newSess
+                          , sessionID = sid
+                          }
+        -- We don't need to explicitly invoke rescheduleR here,
+        -- because the only way we won't complete fully is if
+        -- userComp blocks on an IVar, which will enter the scheduler anyway:
+        kont = trivialCont$ "("++name++", sid "++show sid++")"
+
+    -- THIS IS RETURNING TOO EARLY!!:
+    runReaderWith freshSched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
+    -- TODO: Ideally we would wait for ALL outstanding, stolen work on this "team" to complete.
+
+    when (dbglvl>=1)$ do
+      active <- readHotVar (activeSessions sched)
+      sess <- readHotVar newSess
+      printf " [%d %s] RETURN from %s (sessFin %s) runContT (%d) active set %s\n"
+               (no sched) (show tid) name (show sess) sid (show active)
+    -- By returning here we ARE implicitly reengaging the scheduler, since we
+    -- are already inside the rescheduleR loop on this thread
+    -- (before runParIO was called in a nested fashion).
+    readIORef ref
+
+#if 0
+-- OLD mian session:    
+                      let userComp'  = do 
+                                          res <- userComp
+                                          finalSched <- RD.ask 
+                                          io$ writeIORef (sessionFinished sched) True
+                                          when dbg$ io$ do tid3 <- myThreadId
+                                                           printf " *** [%d %s] Out of Par on main thread. Set sessionFinished; next write MVar !!\n"
+                                                                  (no finalSched) (show tid3)
+                                          -- Sanity check our work queues:
+--                                          when dbg $ io$ sanityCheck allscheds
+                                          io$ putMVar mfin res
+
+                      runReaderWith sched (C.runContT (unPar userComp') (trivialCont "main worker"))
+                      when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
+--                                   sanityCheck allscheds
+                      -- Not currently requiring that other scheduler threads have exited before we 
+                      -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
+--                      writeIORef (sessionFinished sched) True
+#endif
+
+
 {-# NOINLINE runParIO #-}
 runParIO userComp = do
    tid <- myThreadId  
@@ -255,46 +323,12 @@ runParIO userComp = do
    tidorig <- myThreadId -- TODO: remove when done debugging                
    case maybSched of 
      Just (sched) -> do
-       sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))
-       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) sid
-
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
 
-       -- Here we have an extra IORef... ugly.
-       ref <- newIORef (error$ "this should never be touched (sid "++ show sid++", "++show tidorig ++")")
-       _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
-       newSess <- newHotVar False
-       let userComp' = do ans <- userComp
-                          -- This add-on to userComp will run only after userComp has completed successfully,
-                          -- but that does NOT guarantee that userComp-forked computations have terminated:
-                          io$ do when (dbglvl>=1) $ do
-                                   tid2 <- myThreadId
-                                   printf " [%d %s] Continuation for nested session called, finishing it up (%d)...\n" (no sched) (show tid2) sid
-                                 writeIORef ref ans
-                                 writeHotVarRaw newSess True
-                                 modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
-           freshSched = sched{ sessionFinished=newSess
-                             , sessionID = sid
-                             }
-           -- We don't need to explicitly invoke rescheduleR here,
-           -- because the only way we won't complete fully is if
-           -- userComp blocks on an IVar, which will enter the scheduler anyway:
-           kont = trivialCont$ "(nested runPar, sid "++show sid++")"
-
-       -- THIS IS RETURNING TOO EARLY!!:
-       runReaderWith freshSched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
-       -- TODO: Ideally we would wait for ALL outstanding, stolen work on this "team" to complete.
-       
-       when (dbglvl>=1)$ do
-         active <- readHotVar (activeSessions sched)
-         sess <- readHotVar newSess
-         printf " [%d %s] RETURN from nested (sessFin %s) runContT (%d) active set %s\n"
-                  (no sched) (show tid) (show sess) sid (show active)
-       -- By returning here we ARE implicitly reengaging the scheduler, since we
-       -- are already inside the rescheduleR loop on this thread
-       -- (before runParIO was called in a nested fashion).
-       readIORef ref
+       sid0 <- readHotVar (sessionCounter sched)
+       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) (sid0 + 1)
+       runNewSessionAndWait "nested runPar" sched userComp
 
      ------------------------------------------------------------
      -- Non-nested case, make a new set of worker threads:
@@ -315,29 +349,16 @@ runParIO userComp = do
               tid2 <- myThreadId
               registerWorker tid2 sched
               if (cpu /= main_cpu)
-                 then do when dbg$ printf " [%d %s] Entering scheduling loop.\n" cpu (show tid2)
+                 then do when dbg$ printf " [%d %s] Anonymous worker entering scheduling loop.\n" cpu (show tid2)
                          runReaderWith sched $ rescheduleR (trivialCont (wname++show tid2))
-                         when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
+                         when dbg$ printf " [%d] Anonymous worker exited scheduling loop.  FINISHED.\n" cpu
                          putMVar workerDone cpu
                          return ()
-                 else do
-                      let userComp'  = do when dbg$ io$ printf " [%d %s] Starting Par computation on main thread.\n" main_cpu (show tid2)
-                                          res <- userComp
-                                          finalSched <- RD.ask 
-                                          io$ writeIORef (sessionFinished sched) True
-                                          when dbg$ io$ do tid3 <- myThreadId
-                                                           printf " *** [%d %s] Out of Par on main thread. Set sessionFinished; next write MVar !!\n"
-                                                                  (no finalSched) (show tid3)
-                                          -- Sanity check our work queues:
---                                          when dbg $ io$ sanityCheck allscheds
-                                          io$ putMVar mfin res
+                 else do x <- runNewSessionAndWait "top-lvl main worker" sched userComp
+                         -- When the main worker finishes we can tell the anonymous "system" workers:
+                         writeIORef (sessionFinished sched) True
+                         putMVar mfin x 
 
-                      runReaderWith sched (C.runContT (unPar userComp') (trivialCont "main worker"))
-                      when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
---                                   sanityCheck allscheds
-                      -- Not currently requiring that other scheduler threads have exited before we 
-                      -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
---                      writeIORef (sessionFinished sched) True
               unregisterWorker tid
 --              return cpu
             ------------------------------------------------------------END WORKER THREAD
@@ -638,7 +659,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			go (tries-1) i'
 
       | otherwise     = do
-         -- We ONLY go through the global sched array to access 
+         -- We ONLY go through the global sched array to access victims:
          let schd = scheds!!i
          when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
 
