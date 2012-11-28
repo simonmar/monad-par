@@ -62,14 +62,12 @@ data Sched = Sched
       -- reallocated on each nested runPar invocation and will signal
       -- the completion of that session to a specific waiting thread.
       sessionFinished :: HotVar Bool,
+      -- The original invocation of runPar also counts as a session
+      -- and uses sessionFinished.
       
       ---- Global data: ----
       idle     :: HotVar [MVar Bool], -- waiting idle workers
       scheds   :: [Sched],            -- A global list of schedulers.
-
-      -- A flag written ONLY by the master thread that starts the Par
-      -- computation.  When set to True, signals that ALL workers should lay off.
-      killflag :: HotVar Bool,
       
       -- Any thread that enters runPar (original or nested) registers
       -- itself in this global list.  When the list becomes null,
@@ -78,7 +76,7 @@ data Sched = Sched
       sessionCounter :: HotVar SessionID,
 
       -- The ID or "team" of *this* worker.
-      sessionId :: SessionID
+      sessionID :: SessionID
      }
 
 

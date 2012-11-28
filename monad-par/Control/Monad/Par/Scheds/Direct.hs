@@ -42,7 +42,7 @@ import                 System.Mem.StableName (makeStableName, hashStableName)
 import qualified       Control.Monad.Par.Class  as PC
 import qualified       Control.Monad.Par.Unsafe as UN
 import                 Control.Monad.Par.Scheds.DirectInternal
-                       (Par(..), Sched(..), HotVar, 
+                       (Par(..), Sched(..), HotVar, SessionID,
                         newHotVar, readHotVar, modifyHotVar, writeHotVarRaw)
 import Control.DeepSeq
 import qualified Data.Map as M
@@ -274,7 +274,7 @@ runParIO userComp = do
                                  writeHotVarRaw newSess True
                                  modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
            freshSched = sched{ sessionFinished=newSess
-                             , sessionId = sid
+                             , sessionID = sid
                              }
            -- We don't need to explicitly invoke rescheduleR here,
            -- because the only way we won't complete fully is if
@@ -288,9 +288,8 @@ runParIO userComp = do
        when (dbglvl>=1)$ do
          active <- readHotVar (activeSessions sched)
          sess <- readHotVar newSess
-         kflg <- readHotVar (killflag sched)
-         printf " [%d %s] RETURN from nested (sessFin %s, kflag %s) runContT (%d) active set %s\n"
-                  (no sched) (show tid) (show sess) (show kflg) sid (show active)
+         printf " [%d %s] RETURN from nested (sessFin %s) runContT (%d) active set %s\n"
+                  (no sched) (show tid) (show sess) sid (show active)
        -- By returning here we ARE implicitly reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread
        -- (before runParIO was called in a nested fashion).
@@ -324,9 +323,9 @@ runParIO userComp = do
                       let userComp'  = do when dbg$ io$ printf " [%d %s] Starting Par computation on main thread.\n" main_cpu (show tid2)
                                           res <- userComp
                                           finalSched <- RD.ask 
-                                          io$ writeIORef (killflag sched) True
+                                          io$ writeIORef (sessionFinished sched) True
                                           when dbg$ io$ do tid3 <- myThreadId
-                                                           printf " *** [%d %s] Out of Par on main thread. Set killflag; next write MVar !!\n"
+                                                           printf " *** [%d %s] Out of Par on main thread. Set sessionFinished; next write MVar !!\n"
                                                                   (no finalSched) (show tid3)
                                           -- Sanity check our work queues:
 --                                          when dbg $ io$ sanityCheck allscheds
@@ -337,7 +336,7 @@ runParIO userComp = do
 --                                   sanityCheck allscheds
                       -- Not currently requiring that other scheduler threads have exited before we 
                       -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
---                      writeIORef (killflag sched) True
+--                      writeIORef (sessionFinished sched) True
               unregisterWorker tid
 --              return cpu
             ------------------------------------------------------------END WORKER THREAD
@@ -370,22 +369,24 @@ makeScheds main = do
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
    idle      <- newHotVar []   
-   killflag  <- newHotVar False
    sessionFinished <- newHotVar False
 
    activeSessions  <- newHotVar S.empty
-   let baseSessionId = 1000
-   sessionCounter  <- newHotVar (baseSessionId + 1)
-   let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
+   sessionCounter  <- newHotVar (baseSessionID + 1)
+   let allscheds = [ Sched { no=x, idle, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
                              sessionFinished=sessionFinished,
                              activeSessions=activeSessions,
                              sessionCounter=sessionCounter,
-                             sessionId= baseSessionId
+                             sessionID= baseSessionID
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
 
+
+-- The ID of top-level runPar sessions.
+baseSessionID :: SessionID
+baseSessionID = 1000
 
 
 --------------------------------------------------------------------------------
@@ -554,26 +555,24 @@ longjmpSched :: Par a
 -- longjmpSched = Par $ C.ContT rescheduleR
 longjmpSched = Par $ C.ContT (\ _k -> rescheduleR (trivialCont "longjmpSched"))
 
--- Reschedule the scheduler loop until it observes killflag==True, and
+-- Reschedule the scheduler loop until it observes sessionFinished==True, and
 -- then it finally invokes its continuation.
 rescheduleR :: (a -> ROnly ()) -> ROnly ()
 rescheduleR kont = do
   mysched <- RD.ask 
   when dbg$ liftIO$ do tid <- myThreadId
-                       k <- liftIO$ readIORef (killflag mysched)
                        fin <- liftIO$ readIORef (sessionFinished mysched)
-                       printf " [%d %s]  - Reschedule... kill %s, sid %d, sessfin %s\n"
-                              (no mysched) (show tid) (show k) (sessionId mysched) (show fin)
+                       printf " [%d %s]  - Reschedule... sid %d, sessfin %s\n"
+                              (no mysched) (show tid) (sessionID mysched) (show fin)
   mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do 
-                  k <- liftIO$ readIORef (killflag mysched)
                   fin <- liftIO$ readIORef (sessionFinished mysched)
-		  if (k ||  fin) 
+		  if fin
                    then do when (dbglvl >= 1) $ liftIO $ do
                              tid <- myThreadId
-                             printf " [%d %s]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n" 
-                                    (no mysched) (show tid) (show k) (show fin)
+                             printf " [%d %s]  - DROP out of reschedule loop, sessionFinished=%s\n" 
+                                    (no mysched) (show tid) (show fin)
                            kont (error "Direct.hs: The result value from rescheduleR should not be used.")
                    else do
 		     liftIO$ steal mysched
@@ -629,7 +628,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			 i <- getnext (-1::Int)
                          go maxtries i
 
-    -- We need to return from this loop to check killflag and exit the scheduler if necessary.
+    -- We need to return from this loop to check sessionFinished and exit the scheduler if necessary.
     go 0 _i | _IDLING_ON == False = yield
 
     ----------------------------------------
