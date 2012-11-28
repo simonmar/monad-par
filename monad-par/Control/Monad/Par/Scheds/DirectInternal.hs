@@ -75,7 +75,10 @@ data Sched = Sched
       -- itself in this global list.  When the list becomes null,
       -- worker threads may shut down or at least go idle.
       activeSessions :: HotVar (S.Set SessionID),
-      sessionCounter :: HotVar SessionID
+      sessionCounter :: HotVar SessionID,
+
+      -- The ID or "team" of *this* worker.
+      sessionId :: SessionID
      }
 
 

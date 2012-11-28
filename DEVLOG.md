@@ -457,9 +457,52 @@ all the other mess)... things seem to work, and run much faster.
 Direct.hs WITHOUT nesting can knock out issue21 on 10M in 1.3 seconds.
 Barely slower than sparks.
 
-
 EGAD!  Waiting for the workers to complete introduces a MASSIVE
 slowdown.  It goes from 1.3 seconds to 5 seconds.
+
+
+REACTIVATING Nested -- Now the problem is <<loop>>
+--------------------------------------------------
+
+I don't see it when debugging is on...  Is it possible that GHC is
+having a FALSE POSITIVE on its loop detection inside the reschedule
+loop?  No... it couldn't possibly apply to IO loops, could it?
+It happens inside the workers though:
+
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    issue21.exe: thread blocked indefinitely in an MVar operation
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+
+Oh, wait... on some runs it looks like I'm seeing this instead:
+
+    Beginning benchmark on: ThreadId 3, numCapabilities 4
+    Exception inside child thread "(worker 3 of originator ThreadId 3)": this should never be touched
+    Exception inside child thread "(worker 1 of originator ThreadId 3)": this should never be touched
+    Exception inside child thread "(worker 2 of originator ThreadId 3)": this should never be touched
+    issue21.exe: this should never be touched
+
+That would imply that the continuation for the nested session's
+runCont is never called...  Still, this is tough because it now fails
+a smaller percentage of the time.
+
+This has all been without optimization... do things change if I turn
+on -O2?  Nope, same behavior; I see both kinds of failures.
+
+Ah, ok I CAN produce the "this should never be touched" error from
+DEBUG mode.  It is just rare.   
+
+Here's a relevant snippet.  These are most definitely out of order,
+RETURN before "Continuation":
+
+    [2 ThreadId 6] RETURN from nested (sessFin False, kflag False) runContT (1007) active set fromList [1000,1004,1007]
+    [1]  | stole work (unit 64) from cpu 2
+    [2 ThreadId 5] Continuation for nested session called, finishing it up (1007)...
+    Exception inside child thread "(worker 2 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
+    Exception inside child thread "(worker 0 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
+     [1 ThreadId 5]  - Reschedule... kill False sessfin False
+    Exception inside child thread "(worker 3 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
 
 
 

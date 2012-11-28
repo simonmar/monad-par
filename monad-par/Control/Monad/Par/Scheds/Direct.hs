@@ -53,7 +53,7 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 
 import qualified Control.Exception as E
-import qualified Control.Concurrent.Async as A
+-- import qualified Control.Concurrent.Async as A
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -62,16 +62,16 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
--- #define DEBUG
+#define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 #define NESTED_SCHEDS
-#define PARPUTS
+-- #define PARPUTS
 -- #define FORKPARENT
 -- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
 -- #define WAKEIDLE
 
--- #define WAIT_FOR_WORKERS
+#define WAIT_FOR_WORKERS
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
@@ -228,6 +228,8 @@ instance NFData (IVar a) where
 {-# NOINLINE runPar #-}
 runPar = unsafePerformIO . runParIO
 
+
+{-# NOINLINE runParIO #-}
 runParIO userComp = do
    tid <- myThreadId  
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
@@ -250,6 +252,7 @@ runParIO userComp = do
    let main_cpu = 0
 #endif
    maybSched <- amINested tid
+   tidorig <- myThreadId -- TODO: remove when done debugging                
    case maybSched of 
      Just (sched) -> do
        sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))
@@ -258,36 +261,54 @@ runParIO userComp = do
        -- do is plug the users new computation in.
 
        -- Here we have an extra IORef... ugly.
-       ref <- newIORef (error "this should never be touched")
+       ref <- newIORef (error$ "this should never be touched (sid "++ show sid++", "++show tidorig ++")")
        _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
        newSess <- newHotVar False
-       let kont ans = liftIO$ do when (dbglvl>=1) $ do
+       let userComp' = do ans <- userComp
+                          -- This add-on to userComp will run only after userComp has completed successfully,
+                          -- but that does NOT guarantee that userComp-forked computations have terminated:
+                          io$ do when (dbglvl>=1) $ do
                                    tid2 <- myThreadId
                                    printf " [%d %s] Continuation for nested session called, finishing it up (%d)...\n" (no sched) (show tid2) sid
                                  writeIORef ref ans
                                  writeHotVarRaw newSess True
                                  modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
-                                 
-       runReaderWith (sched{ sessionFinished=newSess}) (C.runContT (unPar userComp) kont) 
+           freshSched = sched{ sessionFinished=newSess
+                             , sessionId = sid
+                             }
+           -- We don't need to explicitly invoke rescheduleR here,
+           -- because the only way we won't complete fully is if
+           -- userComp blocks on an IVar, which will enter the scheduler anyway:
+           kont = trivialCont$ "(nested runPar, sid "++show sid++")"
+
+       -- THIS IS RETURNING TOO EARLY!!:
+       runReaderWith freshSched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
+       -- TODO: Ideally we would wait for ALL outstanding, stolen work on this "team" to complete.
+       
        when (dbglvl>=1)$ do
          active <- readHotVar (activeSessions sched)
-         printf " [%d %s] RETURN from nested runContT (%d) active set %s\n" (no sched) (show tid) sid (show active)
+         sess <- readHotVar newSess
+         kflg <- readHotVar (killflag sched)
+         printf " [%d %s] RETURN from nested (sessFin %s, kflag %s) runContT (%d) active set %s\n"
+                  (no sched) (show tid) (show sess) (show kflg) sid (show active)
        -- By returning here we ARE implicitly reengaging the scheduler, since we
        -- are already inside the rescheduleR loop on this thread
        -- (before runParIO was called in a nested fashion).
        readIORef ref
+
+     ------------------------------------------------------------
+     -- Non-nested case, make a new set of worker threads:
+     ------------------------------------------------------------       
      Nothing -> do
        allscheds <- makeScheds main_cpu
-       
-       tidorig <- myThreadId -- TODO: remove when done debugging
        
        mfin <- newEmptyMVar
        doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
             workerDone <- newEmptyMVar            
             ----------------------------------------
-            let wname = ("(worker of originator "++show tidorig++")")
+            let wname = ("(worker "++show cpu++" of originator "++show tidorig++")")
 --            forkOn cpu $ do
-            forkWithExceptions (forkOn cpu) wname $ do                                    
+            _ <- forkWithExceptions (forkOn cpu) wname $ do                                    
 --            as <- A.asyncOn cpu $ do
 --            as <- A.async $ do            
             ------------------------------------------------------------STRT WORKER THREAD              
@@ -295,7 +316,7 @@ runParIO userComp = do
               registerWorker tid2 sched
               if (cpu /= main_cpu)
                  then do when dbg$ printf " [%d %s] Entering scheduling loop.\n" cpu (show tid2)
-                         runReaderWith sched $ rescheduleR (trivialCont wname)
+                         runReaderWith sched $ rescheduleR (trivialCont (wname++show tid2))
                          when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
                          putMVar workerDone cpu
                          return ()
@@ -353,12 +374,14 @@ makeScheds main = do
    sessionFinished <- newHotVar False
 
    activeSessions  <- newHotVar S.empty
-   sessionCounter  <- newHotVar 1000
+   let baseSessionId = 1000
+   sessionCounter  <- newHotVar (baseSessionId + 1)
    let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
                              sessionFinished=sessionFinished,
                              activeSessions=activeSessions,
-                             sessionCounter=sessionCounter
+                             sessionCounter=sessionCounter,
+                             sessionId= baseSessionId
 			   }
                    | (x,wp,rng) <- zip3 [0..] workpools rngs]
    return allscheds
@@ -539,7 +562,8 @@ rescheduleR kont = do
   when dbg$ liftIO$ do tid <- myThreadId
                        k <- liftIO$ readIORef (killflag mysched)
                        fin <- liftIO$ readIORef (sessionFinished mysched)
-                       printf " [%d %s]  - Reschedule... kill %s sessfin %s\n" (no mysched) (show tid) (show k) (show fin)
+                       printf " [%d %s]  - Reschedule... kill %s, sid %d, sessfin %s\n"
+                              (no mysched) (show tid) (show k) (sessionId mysched) (show fin)
   mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do 

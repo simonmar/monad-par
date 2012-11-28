@@ -1,12 +1,12 @@
 
 
-SRC= issue21.hs
+SRC= issue21.hs issue_forkOmega.hs
 EXES= $(SRC:.hs=.exe)
 
 .SUFFIXES: .hs .exe
 
 .hs.exe: $< $(SRC)
-	ghc -i../monad-par/ --make $< -o $@ -rtsopts -threaded -with-rtsopts -N $(GHC_ARGS)
+	ghc -O0 -i../monad-par/ --make $< -o $@ -rtsopts -threaded -with-rtsopts -N $(GHC_ARGS)
 
 all: $(EXES)
 
