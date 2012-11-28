@@ -53,7 +53,6 @@ import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
 
 import qualified Control.Exception as E
--- import qualified Control.Concurrent.Async as A
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -230,7 +229,10 @@ runPar = unsafePerformIO . runParIO
 
 
 -- | This procedure creates a new worker on the current thread (with a
--- new session ID) and plugs it into the work-stealing environment.
+--   new session ID) and plugs it into the work-stealing environment.
+--   This new worker extracts itself from the work stealing pool when
+--   `userComp` has completed, thus freeing the current thread (this
+--   procedure) to return normally.
 runNewSessionAndWait :: String -> Sched -> Par b -> IO b
 runNewSessionAndWait name sched userComp = do
     tid <- myThreadId -- TODO: remove when done debugging
@@ -263,7 +265,7 @@ runNewSessionAndWait name sched userComp = do
 
     -- THIS IS RETURNING TOO EARLY!!:
     runReaderWith freshSched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
-    -- TODO: Ideally we would wait for ALL outstanding, stolen work on this "team" to complete.
+    -- TODO: Ideally we would wait for ALL outstanding (stolen) work on this "team" to complete.
 
     when (dbglvl>=1)$ do
       active <- readHotVar (activeSessions sched)
@@ -274,27 +276,6 @@ runNewSessionAndWait name sched userComp = do
     -- are already inside the rescheduleR loop on this thread
     -- (before runParIO was called in a nested fashion).
     readIORef ref
-
-#if 0
--- OLD mian session:    
-                      let userComp'  = do 
-                                          res <- userComp
-                                          finalSched <- RD.ask 
-                                          io$ writeIORef (sessionFinished sched) True
-                                          when dbg$ io$ do tid3 <- myThreadId
-                                                           printf " *** [%d %s] Out of Par on main thread. Set sessionFinished; next write MVar !!\n"
-                                                                  (no finalSched) (show tid3)
-                                          -- Sanity check our work queues:
---                                          when dbg $ io$ sanityCheck allscheds
-                                          io$ putMVar mfin res
-
-                      runReaderWith sched (C.runContT (unPar userComp') (trivialCont "main worker"))
-                      when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
---                                   sanityCheck allscheds
-                      -- Not currently requiring that other scheduler threads have exited before we 
-                      -- (the main thread) exits (FIXME).  But we do signal here that they should terminate:
---                      writeIORef (sessionFinished sched) True
-#endif
 
 
 {-# NOINLINE runParIO #-}
@@ -343,8 +324,6 @@ runParIO userComp = do
             let wname = ("(worker "++show cpu++" of originator "++show tidorig++")")
 --            forkOn cpu $ do
             _ <- forkWithExceptions (forkOn cpu) wname $ do                                    
---            as <- A.asyncOn cpu $ do
---            as <- A.async $ do            
             ------------------------------------------------------------STRT WORKER THREAD              
               tid2 <- myThreadId
               registerWorker tid2 sched
@@ -357,12 +336,12 @@ runParIO userComp = do
                  else do x <- runNewSessionAndWait "top-lvl main worker" sched userComp
                          -- When the main worker finishes we can tell the anonymous "system" workers:
                          writeIORef (sessionFinished sched) True
+                         when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
+                         --  sanityCheck allscheds
                          putMVar mfin x 
 
               unregisterWorker tid
---              return cpu
             ------------------------------------------------------------END WORKER THREAD
---            return as
             return (if cpu == main_cpu then Nothing else Just workerDone)
 
        when _WAIT_FOR_WORKERS $ do 
