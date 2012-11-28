@@ -44,6 +44,9 @@ type ROnly = RD.ReaderT Sched IO
 
 type SessionID = Word64
 
+-- An ID along with a flag to signal completion:
+data Session = Session SessionID (HotVar Bool)
+
 data Sched = Sched 
     { 
       ---- Per worker ----
@@ -52,21 +55,16 @@ data Sched = Sched
       rng      :: HotVar Random.GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
-      -- The ID or "team" of *this* worker.
-      sessionID :: SessionID,
-
-      ---- Per session / per worker ----
-      
-      -- For nested support, our scheduler may be working on behalf of
-      -- a REAL haskell continuation that we need to return to.  In
-      -- that case we need to know WHEN to stop rescheduling and
-      -- return to that genuine continuation.  This variable will be
-      -- reallocated on each nested runPar invocation and will signal
-      -- the completion of that session to a specific waiting thread.
-      sessionFinished :: HotVar Bool,
-      -- The original invocation of runPar also counts as a session
-      -- and uses sessionFinished.
-      
+      -- The stack of nested sessions that THIS worker is participating in.
+      -- When a session finishes, the worker can return to its Haskell
+      -- calling context (it's "real" continuation).
+      sessions :: HotVar [Session],
+      -- (1) This is always non-empty, containing at least the root
+      --     session corresponding to the anonymous system workers.      
+      -- (2) The original invocation of runPar also counts as a session
+      --     and pushes a second 
+      -- (3) Nested runPar invocations may push further sessions onto the stack.
+            
       ---- Global data: ----
       idle     :: HotVar [MVar Bool], -- waiting idle workers
       scheds   :: [Sched],            -- A global list of schedulers.
@@ -75,6 +73,8 @@ data Sched = Sched
       -- itself in this global list.  When the list becomes null,
       -- worker threads may shut down or at least go idle.
       activeSessions :: HotVar (S.Set SessionID),
+
+      -- A counter to support unique session IDs:
       sessionCounter :: HotVar SessionID
      }
 

@@ -1,8 +1,10 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ScopedTypeVariables,
              TypeSynonymInstances, MultiParamTypeClasses,
-             GeneralizedNewtypeDeriving, PackageImports
+             GeneralizedNewtypeDeriving, PackageImports,
+             ParallelListComp
 	     #-}
+
 
 {- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind -}
 
@@ -42,8 +44,8 @@ import                 System.Mem.StableName (makeStableName, hashStableName)
 import qualified       Control.Monad.Par.Class  as PC
 import qualified       Control.Monad.Par.Unsafe as UN
 import                 Control.Monad.Par.Scheds.DirectInternal
-                       (Par(..), Sched(..), HotVar, SessionID,
-                        newHotVar, readHotVar, modifyHotVar, writeHotVarRaw)
+                       (Par(..), Sched(..), HotVar, SessionID, Session(Session),
+                        newHotVar, readHotVar, modifyHotVar, modifyHotVar_, writeHotVarRaw)
 import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -241,8 +243,10 @@ runNewSessionAndWait name sched userComp = do
     
     -- Here we have an extra IORef... ugly.
     ref <- newIORef (error$ "Empty session-result ref ("++name++") should never be touched (sid "++ show sid++", "++show tid ++")")
+    newFlag <- newHotVar False    
+    -- Push the new session:
+    _ <- modifyHotVar (sessions sched) (\ ls -> ((Session sid newFlag) : ls, ()))
 
-    newSess <- newHotVar False
     let userComp' = do when dbg$ io$ do
                            tid2 <- myThreadId
                            printf " [%d %s] Starting Par computation on %s.\n" (no sched) (show tid2) name
@@ -253,25 +257,31 @@ runNewSessionAndWait name sched userComp = do
                                 tid3 <- myThreadId
                                 printf " [%d %s] Continuation for %s called, finishing it up (%d)...\n" (no sched) (show tid3) name sid
                               writeIORef ref ans
-                              writeHotVarRaw newSess True
+                              writeHotVarRaw newFlag True
                               modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
-        freshSched = sched{ sessionFinished=newSess
-                          , sessionID = sid
-                          }
+
         -- We don't need to explicitly invoke rescheduleR here,
         -- because the only way we won't complete fully is if
         -- userComp blocks on an IVar, which will enter the scheduler anyway:
         kont = trivialCont$ "("++name++", sid "++show sid++")"
 
     -- THIS IS RETURNING TOO EARLY!!:
-    runReaderWith freshSched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
+    runReaderWith sched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
     -- TODO: Ideally we would wait for ALL outstanding (stolen) work on this "team" to complete.
 
     when (dbglvl>=1)$ do
       active <- readHotVar (activeSessions sched)
-      sess <- readHotVar newSess
+      sess <- readHotVar newFlag
       printf " [%d %s] RETURN from %s (sessFin %s) runContT (%d) active set %s\n"
                (no sched) (show tid) name (show sess) sid (show active)
+
+    -- Here we pop off the frame we added to the session stack:
+    modifyHotVar_ (sessions sched) $ \ (Session sid2 _ : tl) ->
+        if sid == sid2
+        then tl
+        else error$ "Tried to pop the session stack and found we ("++show sid
+                   ++") were not on the top! (instead "++show sid2++")"
+               
     -- By returning here we ARE implicitly reengaging the scheduler, since we
     -- are already inside the rescheduleR loop on this thread
     -- (before runParIO was called in a nested fashion).
@@ -316,6 +326,7 @@ runParIO userComp = do
      ------------------------------------------------------------       
      Nothing -> do
        allscheds <- makeScheds main_cpu
+       [Session _ topSessFlag] <- readHotVar$ sessions$ head allscheds
        
        mfin <- newEmptyMVar
        doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
@@ -335,7 +346,7 @@ runParIO userComp = do
                          return ()
                  else do x <- runNewSessionAndWait "top-lvl main worker" sched userComp
                          -- When the main worker finishes we can tell the anonymous "system" workers:
-                         writeIORef (sessionFinished sched) True
+                         writeIORef topSessFlag True
                          when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
                          --  sanityCheck allscheds
                          putMVar mfin x 
@@ -369,19 +380,24 @@ makeScheds main = do
                 printf "[initialization] Creating %d worker threads, currently on %s\n" numCapabilities (show tid)
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
-   idle      <- newHotVar []   
+   idle      <- newHotVar []
+   -- The STACKs are per-worker.. but the root finished flag is shared between all anonymous system workers:
    sessionFinished <- newHotVar False
-
+   sessionStacks   <- mapM newHotVar (replicate numCapabilities [Session baseSessionID sessionFinished])
    activeSessions  <- newHotVar S.empty
    sessionCounter  <- newHotVar (baseSessionID + 1)
    let allscheds = [ Sched { no=x, idle, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=sessionFinished,
+                             sessions = stck,
                              activeSessions=activeSessions,
-                             sessionCounter=sessionCounter,
-                             sessionID= baseSessionID
+                             sessionCounter=sessionCounter
 			   }
-                   | (x,wp,rng) <- zip3 [0..] workpools rngs]
+                   -- | (x,wp,rng,stck) <- zip4 [0..] workpools rngs sessionStacks
+                   | x   <- [0 .. numCapabilities-1]
+                   | wp  <- workpools
+                   | rng <- rngs
+                   | stck <- sessionStacks
+                   ]
    return allscheds
 
 
@@ -562,18 +578,25 @@ rescheduleR :: (a -> ROnly ()) -> ROnly ()
 rescheduleR kont = do
   mysched <- RD.ask 
   when dbg$ liftIO$ do tid <- myThreadId
-                       fin <- liftIO$ readIORef (sessionFinished mysched)
-                       printf " [%d %s]  - Reschedule... sid %d, sessfin %s\n"
-                              (no mysched) (show tid) (sessionID mysched) (show fin)
+                       sess <- readSessions mysched
+                       printf " [%d %s]  - Reschedule... sessions %s\n"
+                              (no mysched) (show tid) (show sess)
   mtask  <- liftIO$ popWork mysched
   case mtask of
-    Nothing -> do 
-                  fin <- liftIO$ readIORef (sessionFinished mysched)
+    Nothing -> do
+                  (Session _ finRef):_ <- liftIO$ readIORef $ sessions mysched
+                  fin <- liftIO$ readIORef finRef      
 		  if fin
                    then do when (dbglvl >= 1) $ liftIO $ do
                              tid <- myThreadId
-                             printf " [%d %s]  - DROP out of reschedule loop, sessionFinished=%s\n" 
-                                    (no mysched) (show tid) (show fin)
+                             sess <- readSessions mysched
+                             printf " [%d %s]  - DROP out of reschedule loop, sessionFinished=%s, all sessions %s\n" 
+                                    (no mysched) (show tid) (show fin) (show sess)
+                             empt <- R.nullQ$ workpool mysched
+                             when (not empt) $ do
+                               printf " [%d %s] - WARNING - leaving rescheduleR while local workpoll is nonempty\n" 
+                                      (no mysched) (show tid) 
+                           
                            kont (error "Direct.hs: The result value from rescheduleR should not be used.")
                    else do
 		     liftIO$ steal mysched
@@ -839,3 +862,13 @@ forkWithExceptions forkit descr action = do
                         "Exception inside child thread %s: %s\n" (show descr) (show e)
                       E.throwTo parent (e :: E.SomeException)
 	 )
+
+
+-- Do all the memory reads to snapshot the current session stack:
+readSessions :: Sched -> IO [(SessionID, Bool)]
+readSessions sched = do
+  ls <- readIORef (sessions sched)
+  bools <- mapM (\ (Session _ r) -> readIORef r) ls
+  return (zip (map (\ (Session sid _) -> sid) ls) bools)
+  
+  
