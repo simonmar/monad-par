@@ -505,6 +505,18 @@ RETURN before "Continuation":
     Exception inside child thread "(worker 3 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
 
 
+[2012.11.28] {I hope this is the last debugging round!}
+
+Ok, the extra "bounce" policy for going back into reschedule to ensure
+LIFO exiting of nested sesisons...  that seems to have fixed at least
+the premature RETURN bug.  I *thought* I still saw a <<loop>>
+bug... but now I can't reproduce it over 1600 runs so I may have just
+been mixing things up and that was before the latest change.
+
+ * 100 reps * 16 machines, nested + wait-for-workers -- passed
+
+
+
 
 [2012.10.06] {Strange GHC bug?}
 -------------------------------
