@@ -64,16 +64,16 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
-#define DEBUG
+-- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
-#define NESTED_SCHEDS
+-- #define NESTED_SCHEDS
 #define PARPUTS
 -- #define FORKPARENT
 -- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
 -- #define WAKEIDLE
 
-#define WAIT_FOR_WORKERS
+-- #define WAIT_FOR_WORKERS
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
@@ -268,7 +268,7 @@ runNewSessionAndWait name sched userComp = do
                       when dbg $ liftIO$ do
                         tid4 <- myThreadId
                         printf " [%d %s] BOUNCE %d... going into reschedule until finished.\n" (no sched) (show tid4) n
-                      rescheduleR$ trivialCont$ "("++name++", sid "++show sid++")"
+                      rescheduleR 0 $ trivialCont$ "("++name++", sid "++show sid++")"
                       loop (n+1)
 
     -- THIS IS RETURNING TOO EARLY!!:
@@ -348,7 +348,7 @@ runParIO userComp = do
               registerWorker tid2 sched
               if (cpu /= main_cpu)
                  then do when dbg$ printf " [%d %s] Anonymous worker entering scheduling loop.\n" cpu (show tid2)
-                         runReaderWith sched $ rescheduleR (trivialCont (wname++show tid2))
+                         runReaderWith sched $ rescheduleR 0 (trivialCont (wname++show tid2))
                          when dbg$ printf " [%d] Anonymous worker exited scheduling loop.  FINISHED.\n" cpu
                          putMVar workerDone cpu
                          return ()
@@ -377,8 +377,8 @@ runParIO userComp = do
        ----------------------------------------
        --              DEBUGGING             -- 
 --       takeMVar mfin -- Final value.
-       dbgTakeMVar "global waiting thread" mfin -- Final value.
---       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
+--       dbgTakeMVar "global waiting thread" mfin -- Final value.
+       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
        ----------------------------------------
 
 -- Create the default scheduler(s) state:
@@ -578,17 +578,18 @@ fork task =
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
 longjmpSched :: Par a
 -- longjmpSched = Par $ C.ContT rescheduleR
-longjmpSched = Par $ C.ContT (\ _k -> rescheduleR (trivialCont "longjmpSched"))
+longjmpSched = Par $ C.ContT (\ _k -> rescheduleR 0 (trivialCont "longjmpSched"))
 
 -- Reschedule the scheduler loop until it observes sessionFinished==True, and
 -- then it finally invokes its continuation.
-rescheduleR :: (a -> ROnly ()) -> ROnly ()
-rescheduleR kont = do
+rescheduleR :: Word64 -> (a -> ROnly ()) -> ROnly ()
+rescheduleR cnt kont = do
   mysched <- RD.ask 
   when dbg$ liftIO$ do tid <- myThreadId
                        sess <- readSessions mysched
-                       printf " [%d %s]  - Reschedule... sessions %s\n"
-                              (no mysched) (show tid) (show sess)
+                       null <- R.nullQ (workpool mysched)
+                       printf " [%d %s]  - Reschedule #%d... sessions %s, pool empty %s\n"
+                              (no mysched) (show tid) cnt (show sess) (show null)
   mtask  <- liftIO$ popWork mysched
   case mtask of
     Nothing -> do
@@ -607,12 +608,17 @@ rescheduleR kont = do
                            
                            kont (error "Direct.hs: The result value from rescheduleR should not be used.")
                    else do
+                     -- when (dbglvl >= 1) $ liftIO $ do
+                     --     tid <- myThreadId                       
+                     --     sess <- readSessions mysched
+                     --     printf " [%d %s]  -    Apparently NOT finished with head session... trying to steal, all sessions %s\n" 
+                     --            (no mysched) (show tid) (show sess)
 		     liftIO$ steal mysched
 #ifdef WAKEIDLE
 --                     io$ tryWakeIdle (idle mysched)
 #endif
                      liftIO yield
-		     rescheduleR kont
+		     rescheduleR (cnt+1) kont
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ do sn <- liftIO$ makeStableName task
@@ -622,7 +628,7 @@ rescheduleR kont = do
        fn (\ _ -> do 
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
-	   rescheduleR kont)
+	   rescheduleR 0 kont)
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
@@ -631,7 +637,8 @@ rescheduleR kont = do
 --   yielding or pausing inbetween.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
-  when (dbglvl>=2)$ printf " [%d]  + stealing\n" my_no
+  when (dbglvl>=2)$ do tid <- myThreadId
+                       printf " [%d %s]  + stealing\n" my_no (show tid)
   i <- getnext (-1 :: Int)
   go maxtries i
  where
@@ -853,21 +860,20 @@ forkIO_Suppress whre action =
 		    )
            action
 
--- forkOnIt
-
 
 -- | Exceptions that walk up the fork tree of threads:
 forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
 forkWithExceptions forkit descr action = do 
    parent <- myThreadId
-   forkit $ 
+   forkit $ do
+      tid <- myThreadId
       E.catch action
 	 (\ e -> 
            case E.fromException e of 
              Just E.ThreadKilled -> printf -- hPrintf stderr 
-                                    "ThreadKilled exception inside child thread (not propagating!): %s\n" (show descr)
+                                    "\nThreadKilled exception inside child thread, %s (not propagating!): %s\n" (show tid) (show descr)
 	     _  -> do printf -- hPrintf stderr
-                        "Exception inside child thread %s: %s\n" (show descr) (show e)
+                        "\nException inside child thread %s, %s: %s\n" (show descr) (show tid) (show e)
                       E.throwTo parent (e :: E.SomeException)
 	 )
 

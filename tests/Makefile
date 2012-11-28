@@ -6,7 +6,7 @@ EXES= $(SRC:.hs=.exe)
 .SUFFIXES: .hs .exe
 
 .hs.exe: $< $(SRC)
-	ghc -O0 -i../monad-par/ --make $< -o $@ -rtsopts -threaded -with-rtsopts -N $(GHC_ARGS)
+	ghc-7.6.1 -O0 -i../monad-par/ --make $< -o $@ -rtsopts -threaded -with-rtsopts -N $(GHC_ARGS)
 
 all: $(EXES)
 

@@ -506,6 +506,7 @@ RETURN before "Continuation":
 
 
 [2012.11.28] {I hope this is the last debugging round!}
+-------------------------------------------------------
 
 Ok, the extra "bounce" policy for going back into reschedule to ensure
 LIFO exiting of nested sesisons...  that seems to have fixed at least
@@ -525,7 +526,61 @@ on all the 4-core MINE machines:
 
  * 100 reps * 17 machines, nested + wait-for-workers + parputs (-N4) -- failed on 2 machines
 
-Darn, no such luck.
+Darn, no such luck.  OOPS!!!! WAIT ... ugh, I hate uncertainty in my
+procedure.  I was using a different executable to run the batch of
+machines, than in my edit-compile-run cycle.  I think I may have rerun
+without updating that executable.  Let's try again.
+
+ * w/busyTakeMVar: 100 reps * 17 machines, nested + wait-for-workers + parputs (-N4) -- FAILED
+ * +busyTakeMVar, -debug: 100 reps * 17 machines, ditto (-N4) -- FAIL much more often
+ * +busyTakeMVar, -debug, -waitForWorkers: 100 reps * 17 machines, ditto (-N4) -- 
+    FAIL quickly with "not getting anywhere", OR with "<<loop>>"
+
+So it seems like sometimes it was blocking on the waitForWorkers
+takeMVars (why? dead worker, worker stuck in loop?).  But it still
+fails blocking on the main result.
+
+On my laptop I don't get the loop detection, but I do get a divergent
+loop in reschedule.  Same as earlier, the continuation for finishing
+some sessions seems to be lost.
+
+!! NOTE: I've been using GHC 7.4.2 on linux, but 7.6.1 on my laptop:
+
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+
+Ack, with waitForWorkers off + busyTakeMVar, I seem to have a really
+hard time getting my error on the linux machines...  I'm trying -N5 to
+mix it up some.  In the following PARPUTS is implicitly ON from now on.
+
+Also switching to GHC 7.6.1 for now:
+
+ * 7.6.1, +busyTakeMVar, +debug, -waitForWorkers: 100 reps * 17 machines (-N5) -- failed with lots of loops
+
+
+Ok, let's hop back and make sure our non-nested version is still working with recent changes:
+
+ * 7.6.1, -nested, -busyTakeMVar, -debug, -waitForWorkers, -idling, -forkparent: 100 reps * 17 machines (-N4) -- 
+
+Or, more concisely, if we only list the activated flags (except
+PARPUTS, which is now implicit):
+
+ * 7.6.1: 100 reps * 16 machines (-N5) -- 
+ * 7.4.2: 100 reps * 16 machines (-N5) --  
+
+
 
 
 [2012.10.06] {Strange GHC bug?}
