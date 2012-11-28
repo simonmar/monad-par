@@ -263,7 +263,17 @@ runNewSessionAndWait name sched userComp = do
         -- We don't need to explicitly invoke rescheduleR here,
         -- because the only way we won't complete fully is if
         -- userComp blocks on an IVar, which will enter the scheduler anyway:
-        kont = trivialCont$ "("++name++", sid "++show sid++")"
+        -- kont = trivialCont$ "("++name++", sid "++show sid++")"
+
+        -- We do a round of rescheduling here which will delay our
+        -- exit until the head of the stack is finished.  Without this
+        -- we could exit just because a different session finished out of order:
+        kont _ = do flg <- liftIO$ readIORef newFlag
+                    unless flg $ do 
+                      when dbg $ liftIO$ do
+                        tid4 <- myThreadId
+                        printf " [%d %s] BOUNCE... going into reschedule until finished.\n" (no sched) (show tid4)
+                      rescheduleR$ trivialCont$ "("++name++", sid "++show sid++")"
 
     -- THIS IS RETURNING TOO EARLY!!:
     runReaderWith sched (C.runContT (unPar userComp') kont)  -- Does this ASSUME child stealing?
