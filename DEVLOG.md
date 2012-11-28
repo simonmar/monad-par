@@ -513,9 +513,19 @@ the premature RETURN bug.  I *thought* I still saw a <<loop>>
 bug... but now I can't reproduce it over 1600 runs so I may have just
 been mixing things up and that was before the latest change.
 
- * 100 reps * 16 machines, nested + wait-for-workers -- passed
+ * 100 reps * 16 machines, nested + wait-for-workers -- passed [spuriously!]
 
+Aha!! There it is... after doing that many reps I FINALLY hit the
+<<loop>> bug on two worker machines.
 
+Ok, I'm going to turn PARPUTS back on.  I had turned "everything off".
+But Parputs off is really wrong, it could be introducing deadlock and
+that may be exactly the problem we are seeing, ok, here we go, running
+on all the 4-core MINE machines:
+
+ * 100 reps * 17 machines, nested + wait-for-workers + parputs (-N4) -- failed on 2 machines
+
+Darn, no such luck.
 
 
 [2012.10.06] {Strange GHC bug?}

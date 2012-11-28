@@ -67,7 +67,7 @@ import qualified Prelude
 #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 #define NESTED_SCHEDS
--- #define PARPUTS
+#define PARPUTS
 -- #define FORKPARENT
 -- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
