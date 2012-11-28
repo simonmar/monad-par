@@ -52,6 +52,8 @@ data Sched = Sched
       rng      :: HotVar Random.GenIO, -- Random number gen for work stealing.
       isMain :: Bool, -- Are we the main/master thread? 
 
+      -- The ID or "team" of *this* worker.
+      sessionID :: SessionID,
 
       ---- Per session / per worker ----
       
@@ -73,10 +75,7 @@ data Sched = Sched
       -- itself in this global list.  When the list becomes null,
       -- worker threads may shut down or at least go idle.
       activeSessions :: HotVar (S.Set SessionID),
-      sessionCounter :: HotVar SessionID,
-
-      -- The ID or "team" of *this* worker.
-      sessionID :: SessionID
+      sessionCounter :: HotVar SessionID
      }
 
 

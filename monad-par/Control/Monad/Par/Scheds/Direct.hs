@@ -257,6 +257,7 @@ runParIO userComp = do
      Just (sched) -> do
        sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))
        when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) sid
+
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
 
