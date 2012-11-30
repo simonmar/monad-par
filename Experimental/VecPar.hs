@@ -4,12 +4,7 @@
 {-# LANGUAGE Rank2Types #-}
 
 module VecPar
-       -- (
-       --   forkParVec, getParVec, initParVec, 
-       --   liftST,
-
-       --   p1
-       -- )
+       (ParVec, runParVec, forkWithVec, liftST, getParVec, initParVec)
        where
 
 import Control.Monad
@@ -21,7 +16,6 @@ import Control.Monad.ST        (ST)
 import Control.Monad.ST.Unsafe (unsafeSTToIO)
 import Control.Monad.Trans (lift)
 import Data.STRef
-import Data.Vector.Mutable as MV 
 import Data.Vector.Mutable as MV
 import Data.Vector       (freeze)
 import Prelude hiding (read, length)
@@ -87,6 +81,7 @@ forkWithVec mid (ParVec lef) (ParVec rig) = ParVec $ do
   S.put vec                     -- Put the whole vec back in place.
   return (lx,rx)
 
+-- | Allow `ST` computations inside `ParVec` computations.
 liftST :: ST s a -> ParVec s elt a
 liftST st = ParVec $ liftIO io
   where
@@ -152,7 +147,5 @@ p2 = do
 
   liftST$ writeSTRef r "hello "
   hello <- liftST$ readSTRef r
-
---  return$ hello ++ show (x,y)
   return$ hello ++ show z
 
