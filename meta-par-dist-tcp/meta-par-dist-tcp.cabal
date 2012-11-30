@@ -60,7 +60,8 @@ Library
                 , network-transport >= 0.3
                 , network-transport-tcp >= 0.3
 
-  if flag(pipes) {
-    build-depends: network-transport-pipes
-    cpp-options:  -DUSE_PIPES
-  }
+  -- if flag(pipes) {
+  --   build-depends: network-transport-pipes
+  --   cpp-options:  -DUSE_PIPES
+  --   default: False
+  -- }

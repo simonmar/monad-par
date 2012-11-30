@@ -19,8 +19,9 @@ DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/
 #  Deques/ChaseLev/ Deques/MegaDeque/ 
 
 # Third party dependency: network-transport layer
-NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ \
-  distributed-process/network-transport 
+NETWORK_PKGS=   RPC/ meta-par-dist-tcp/ 
+#  distributed-process/network-transport 
+#  distributed-process/network-transport-tcp 
 #  distributed-process/network-transport-pipes/
 
 # Third party dependency: Accelerate

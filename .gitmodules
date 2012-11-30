@@ -7,9 +7,6 @@
 [submodule "bench_results"]
 	path = bench_results
 	url = https://github.com/rrnewton/monad-par-results.git
-[submodule "distributed-process"]
-	path = distributed-process
-	url = https://github.com/haskell-distributed/distributed-process.git
 [submodule "accelerate"]
 	path = accelerate
 	url = https://github.com/AccelerateHS/accelerate.git
