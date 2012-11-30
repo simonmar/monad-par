@@ -2,6 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module VecPar
        -- (
@@ -16,16 +17,15 @@ import Control.Monad
 import Control.Monad.IO.Class
 import Control.Monad.Par.IO (ParIO,runParIO,IVar)
 import qualified Control.Monad.Par.Class as PC
--- import Control.Monad.Trans
--- import qualified Control.Monad.Trans.State.Lazy as SL
 import qualified Control.Monad.Trans.State.Strict as S
-import Control.Monad.ST
+import Control.Monad.ST        (ST)
+import Control.Monad.ST.Unsafe (unsafeSTToIO)
 import Data.STRef
 import Data.Vector.Mutable as MV 
 import System.IO.Unsafe
--- import GHC.IO (unsafeSTToIO)
 import Control.Monad.Trans (lift)
 import Prelude hiding (read, length)
+
 
 -- | The ParVec monad.  It uses the StateT monad transformer to layer
 -- a state of type (STVector s elt), on top of an inner monad, ParIO.
@@ -104,18 +104,31 @@ liftST st = ParVec $ liftIO io
   where
     io = unsafeSTToIO st
 
-
--- instance Monad (ParVec s) where
   
 instance PC.ParFuture IVar (ParVec s elt) where
--- Implement me...
-  
+  spawn_ (ParVec task) = ParVec $ 
+    do iv <- lift $ PC.new
+       lift $ PC.fork $ do
+           (res,_) <- S.runStateT task
+                      (error "spawn_: This child thread does not have permission to touch the array!")
+           PC.put_ iv res
+       return iv
+  get iv = ParVec $ lift $ PC.get iv
+
 instance PC.ParIVar IVar (ParVec s elt) where
--- Implement me...
-
-
+  fork (ParVec task) = ParVec $ 
+    lift $ PC.fork $ do
+      (res,_) <- S.runStateT task
+                 (error "fork: This child thread does not have permission to touch the array!")
+      return res
+  new       = ParVec$ lift PC.new
+  put_ iv v = ParVec$ lift$ PC.put_ iv v
+  
+  
 --------------------------------------------------------------------------------
-
+-- Tests and Scrap:
+--------------------------------------------------------------------------------
+  
 p1 :: ST s String
 p1 = do
   r <- newSTRef "hi"
