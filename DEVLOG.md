@@ -189,7 +189,7 @@ It may be some spurious NFS problem.
 
 
 [2012.08.31] {Debugging the notorious Issue21}
-------------------------------------------------------------
+----------------------------------------------
 
 I'm doing this in the context of Direct right now.  Hmm, I thought 
 before that disabling Idling disabled the bug.  Seems not so presently.
@@ -308,14 +308,324 @@ should still be THREE worker threads, not TWO.
 
 The 200% must be from hitting some kind of blackhole to disable the worker?
 
+
+[2012.11.26] {More debugging for Issue 21}
+------------------------------------------
+
+Alright, my new nested support in Direct.hs is still failing on
+issue21, though the "shallow nesting" hack seems to work.
+
+Coming back to the code now after an absence I am especially
+suspicious of this business with sessionFinished -- using a single
+boolean variable flag, and then allocating a fresh one for nested
+sessions?  I don't trust the protocol aruond that.  Might we need
+something like a mutable dictionary allocated at the outset instead?
+
+If I do an "issue21.exe +RTS -N3" exection, then right now I see more
+instances of the "existing worker" (start of nested session) message,
+than of the "RETURN from nested" message (30 vs. 27).
+
+I don't *think* that's just a matter of continuations not getting called.
+
+
+ HMM... it is indeed dropping a continuation.  We get these two
+messages and not the one in the middle:
+
+     [2 ThreadId 6] Starting Par computation on main thread.
+     *** Out of entire runContT user computation on main thread.
+
+That means that work died in the middle of userComp'.
+
+
+What about idling?  Seems obvious... but turning nesting on and idling
+OFF seems to make the problem go away.  Are the extra continuations
+dying because nested sessions are started on worker threads that then
+go idle?
+
+NO!  Scratch that... it took dozens of iterations but it DID hit the
+bug even with idling off.  UGH.  The triad of
+existing/Continuation/RETURN messages actually MATCH in this run (30
+of each).  So that's not a reliable diagnostic either.
+
+But it DOES drop the top-level continuation midway through userComp'
+(and therefore the call to trivialCont).
+
+Ok, well next I'm going to log into several machines with cssh and
+stress test the non-nested version.
+
+  * Confirmed: the problem crops up w/ nested even with DEBUG off.
+  * Non-nested no-idling: many runs with and without debug... no
+    observation of the bug yet (~80 runs x 16 machines).
+
+
+[2012.11.26] {Totally new kind of problem for Direct.hs}
+--------------------------------------------------------
+
+This a new leg of the same debugging saga.  Ok, so if I make the
+runPar originator thread explictly wait on all workers... that breaks
+things right off the bat even WITHOUT nesting enabled (<<loop>>,
+indefinitely blocked on MVar exceptions).  Why!?
+
+
+[2012.11.27] {Continued debugging}
+----------------------------------
+
+My last hack yesterday was to make rescheduleR actually EXECUTE its
+continuation when its ready to exit.  (And I turned off the business
+with the originator waiting for all workers.)
+
+I also went in an hacked "forkOn" to "asyncOn" but I haven't done
+anything else with that yet.
+
+Ok, what's up with this.  After that hack the busyTakeMVar hack seems
+to be causing infinite loops on issue21 with:
+
+    debug:on, nested:off, forkparent:off, idling:off
+
+But why should that be!?  It includes a yield?  Is it simply that all
+the extra wasted cycles bring it to a crawl and it seems like its
+diverged (when without the busy wait with 100K input it takes 270ms)?
+
+But to emphasize that it DOES work without the busyTakeMVar, I stress
+tested it.  All these work:
+
+ * 16 machines * 100 reps with debug
+ * 16 machines * 50 reps with debug piped to /dev/null
+ * 16 machines * 100 reps without debug
+
+Then if we ALSO turn on the new "wait for workers to complete"
+thing...
+
+Ok, when I do that I immediately get "thread blocked indefinitely".
+
+If I wait on the Asyncs instead of the MVars... well that's just
+worse, then I don't get the exception and it just spins in reschedule.
+HERE'S THE WEIRD PART.  The killflag IS set and the DROP-out's do
+happen.  Yet it still spins.
+
+It loosk like some nested invocations are reaching the killflag and
+others are not, leaving their workers spinning.  In fact, exactly ONE
+"set killflag" message gets through....  And I already moved the set
+killflag UP into userComp'.
+
+It looks like we're losing real haskell continuations all over the
+place.  We're not getting this message:
+
+    Exited scheduling loop.  FINISHED
+
+Could this somehow be an effect of kill the originator threads waiting
+on MVars inside an unsafePerformIO?  Also (OOPS) runPar was not set to
+NOINLINE...  
+
+    (NOINLINE by itself didn't fix the problem)
+
+Could reschedule be a NAUGHTY loop with no allocation?  Steal
+currently has a yield but not rescheduleR...
+
+     (Adding a yield didn't fix things either...)
+  
+WEIRD COMBINATION
 -----------------
+
+I just switched a couple knobs back (forkOn, use MVars to signal
+currently has a yield but not rescheduleR.worker completion).
+
+Then I made the wait-for-workers feature *gentle*, it just tries to
+take those MVars to check if the workers are done.  This triggers a
+behavior that hasn't happened till now:
+
+  * issue21.exe: Error cont: this closure shouldn't be used
+  * issue21.exe: DEBUGME -- Why is this not happening??
+
+We weren't using the withAsync feature that would have killed the
+child threads before these happened.... so why weren't we reaching
+these continuations before but we are now?
+
+Nevertheless, it IS forkOn vs. async that was the trigger, even
+turning the gentler waiting strategy off has nothing to do with it.
+Was I somehow routing the exceptions to a different thread and
+actually losing them under the async method (precisely NOT what it's
+for)?
+
+Hmm... unlike async, my own forkWithExceptions seems to propagate them
+properly.  That results in a tidier, earlier death for the whole
+process.
+
+Ok, in that configuration, if I remove the two intentional errors
+(well, full disclosure, originally intentional, but semi-forgotten in
+all the other mess)... things seem to work, and run much faster.
+Direct.hs WITHOUT nesting can knock out issue21 on 10M in 1.3 seconds.
+Barely slower than sparks.
+
+EGAD!  Waiting for the workers to complete introduces a MASSIVE
+slowdown.  It goes from 1.3 seconds to 5 seconds.
+
+
+REACTIVATING Nested -- Now the problem is <<loop>>
+--------------------------------------------------
+
+I don't see it when debugging is on...  Is it possible that GHC is
+having a FALSE POSITIVE on its loop detection inside the reschedule
+loop?  No... it couldn't possibly apply to IO loops, could it?
+It happens inside the workers though:
+
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    issue21.exe: thread blocked indefinitely in an MVar operation
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+    Exception inside child thread "(worker of originator ThreadId 3)": <<loop>>
+
+Oh, wait... on some runs it looks like I'm seeing this instead:
+
+    Beginning benchmark on: ThreadId 3, numCapabilities 4
+    Exception inside child thread "(worker 3 of originator ThreadId 3)": this should never be touched
+    Exception inside child thread "(worker 1 of originator ThreadId 3)": this should never be touched
+    Exception inside child thread "(worker 2 of originator ThreadId 3)": this should never be touched
+    issue21.exe: this should never be touched
+
+That would imply that the continuation for the nested session's
+runCont is never called...  Still, this is tough because it now fails
+a smaller percentage of the time.
+
+This has all been without optimization... do things change if I turn
+on -O2?  Nope, same behavior; I see both kinds of failures.
+
+Ah, ok I CAN produce the "this should never be touched" error from
+DEBUG mode.  It is just rare.   
+
+Here's a relevant snippet.  These are most definitely out of order,
+RETURN before "Continuation":
+
+    [2 ThreadId 6] RETURN from nested (sessFin False, kflag False) runContT (1007) active set fromList [1000,1004,1007]
+    [1]  | stole work (unit 64) from cpu 2
+    [2 ThreadId 5] Continuation for nested session called, finishing it up (1007)...
+    Exception inside child thread "(worker 2 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
+    Exception inside child thread "(worker 0 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
+     [1 ThreadId 5]  - Reschedule... kill False sessfin False
+    Exception inside child thread "(worker 3 of originator ThreadId 3)": this should never be touched (sid 1007, ThreadId 6)
+
+
+[2012.11.28] {I hope this is the last debugging round!}
+-------------------------------------------------------
+
+Ok, the extra "bounce" policy for going back into reschedule to ensure
+LIFO exiting of nested sesisons...  that seems to have fixed at least
+the premature RETURN bug.  I *thought* I still saw a <<loop>>
+bug... but now I can't reproduce it over 1600 runs so I may have just
+been mixing things up and that was before the latest change.
+
+ * 100 reps * 16 machines, nested + wait-for-workers -- passed [spuriously!]
+
+Aha!! There it is... after doing that many reps I FINALLY hit the
+<<loop>> bug on two worker machines.
+
+Ok, I'm going to turn PARPUTS back on.  I had turned "everything off".
+But Parputs off is really wrong, it could be introducing deadlock and
+that may be exactly the problem we are seeing, ok, here we go, running
+on all the 4-core MINE machines:
+
+ * 100 reps * 17 machines, nested + wait-for-workers + parputs (-N4) -- failed on 2 machines
+
+Darn, no such luck.  OOPS!!!! WAIT ... ugh, I hate uncertainty in my
+procedure.  I was using a different executable to run the batch of
+machines, than in my edit-compile-run cycle.  I think I may have rerun
+without updating that executable.  Let's try again.
+
+ * w/busyTakeMVar: 100 reps * 17 machines, nested + wait-for-workers + parputs (-N4) -- FAILED
+ * +busyTakeMVar, -debug: 100 reps * 17 machines, ditto (-N4) -- FAIL much more often
+ * +busyTakeMVar, -debug, -waitForWorkers: 100 reps * 17 machines, ditto (-N4) -- 
+    FAIL quickly with "not getting anywhere", OR with "<<loop>>"
+
+So it seems like sometimes it was blocking on the waitForWorkers
+takeMVars (why? dead worker, worker stuck in loop?).  But it still
+fails blocking on the main result.
+
+On my laptop I don't get the loop detection, but I do get a divergent
+loop in reschedule.  Same as earlier, the continuation for finishing
+some sessions seems to be lost.
+
+!! NOTE: I've been using GHC 7.4.2 on linux, but 7.6.1 on my laptop:
+
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+     [4 ThreadId 8]  - Reschedule... sessions [(1006,False),(1000,False)], pool empty True
+
+Ack, with waitForWorkers off + busyTakeMVar, I seem to have a really
+hard time getting my error on the linux machines...  I'm trying -N5 to
+mix it up some.  In the following PARPUTS is implicitly ON from now on.
+
+Also switching to GHC 7.6.1 for now:
+
+ * 7.6.1, +busyTakeMVar, +debug, -waitForWorkers: 100 reps * 17 machines (-N5) -- failed with lots of loops
+
+
+Ok, let's hop back and make sure our non-nested version is still working with recent changes:
+
+ * 7.6.1, -nested, -busyTakeMVar, -debug, -waitForWorkers, -idling, -forkparent: 100 reps * 17 machines (-N4) -- 
+
+Or, more concisely, if we only list the activated flags (except
+PARPUTS, which is now implicit):
+
+ * 7.6.1: 100 reps * 16 machines (-N5) -- 
+ * 7.4.2: 100 reps * 16 machines (-N5) --  
+
+
+
+
+[2012.10.06] {Strange GHC bug?}
+-------------------------------
+
+I got into a bad state with ghc-7.4.1 where I would try to import my
+module, and it would appear to succeed, but nothing would be bound.
+
+But then it looks like I could import any old (capitalized) nonsense
+string and it would also appear to succeed!!  
+
+    Prelude> import Control.Monad.Par.aoetu
+    <interactive>:1:8: parse error on input `Control.Monad.Par.aoetu'
+    Prelude> import Control.Monad.Par.I
+    Prelude> import Control.Monad.Par.IO
+    Prelude> import Control.Monad.Par.A
+    Prelude> import Control.Monad.Par.BB
+    Prelude> import Control.Monad.Par.BBBBB
+
+Strange.  Is it because I just installed a new GHC alongside and am
+now using this old one by appending the extension?
+
+Note, this works even for top-level nonsense modules:
+
+    Prelude> import ENOTHU
+
+This problem is unique to my 7.4.1 install.  It doesn't happen under
+7.0 or 7.6.
+
+-------------
+
+Also, don't forget to list "OtherModules" to avoid this:
+
+    Failed to load interface for `Control.Monad.Par.Scheds.DirectInternal'
+    There are files missing in the `monad-par-0.3' package,
+    try running 'ghc-pkg check'.
+    Use -v to see a list of the files searched for.
+
+
 
 
 
 
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
-
 
 
 

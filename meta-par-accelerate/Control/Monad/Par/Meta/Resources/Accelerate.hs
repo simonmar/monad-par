@@ -106,7 +106,7 @@ spawnAccWith runner comp = do
  -- other work while waiting for the GPU computation to complete.
  -- 
  -- Moreover, when configured with a high-performance /CPU/ Accelerate backend
- -- in the future this routine can enable automatic CPU/GPU work partitioning.
+ -- in the future this routine can enable automatic CPU-GPU work partitioning.
  -- 
  -- The more generic version of this function is "Control.Monad.Par.OffChip.runOffChip".
 runAccWith  :: (Arrays a) => (Acc a -> a) -> Acc a -> Par a

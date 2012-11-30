@@ -1,8 +1,10 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ScopedTypeVariables,
              TypeSynonymInstances, MultiParamTypeClasses,
-             GeneralizedNewtypeDeriving, PackageImports
+             GeneralizedNewtypeDeriving, PackageImports,
+             ParallelListComp
 	     #-}
+
 
 {- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind -}
 
@@ -15,10 +17,11 @@
 -- trace data structure).
 
 module Control.Monad.Par.Scheds.Direct (
-   Sched(..), Par,
+   Sched(..), 
+   Par, -- abstract: Constructor not exported.
    IVar(..), IVarContents(..),
 --    sched,
-    runPar, 
+    runPar, runParIO,
     new, get, put_, fork,
     newFull, newFull_, put,
     spawn, spawn_, spawnP,
@@ -29,37 +32,30 @@ module Control.Monad.Par.Scheds.Direct (
 
 import Control.Applicative
 import Control.Concurrent hiding (yield)
-import Debug.Trace
-import Data.IORef
-import Text.Printf
-import GHC.Conc
-import "mtl" Control.Monad.Cont as C
+import Data.IORef         (IORef,newIORef,readIORef,writeIORef,atomicModifyIORef)
+import Text.Printf        (printf, hPrintf)
+import GHC.Conc           (numCapabilities,yield)
+import           "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
--- import qualified Data.Array as A
--- import qualified Data.Vector as A
-import qualified Data.Sequence as Seq
-import System.Random.MWC as Random
-import System.IO.Unsafe (unsafePerformIO)
-import System.Mem.StableName
-import qualified Control.Monad.Par.Class  as PC
-import qualified Control.Monad.Par.Unsafe as UN
+import qualified       System.Random.MWC as Random
+import                 System.IO  (stderr)
+import                 System.IO.Unsafe (unsafePerformIO)
+import                 System.Mem.StableName (makeStableName, hashStableName)
+import qualified       Control.Monad.Par.Class  as PC
+import qualified       Control.Monad.Par.Unsafe as UN
+import                 Control.Monad.Par.Scheds.DirectInternal
+                       (Par(..), Sched(..), HotVar, SessionID, Session(Session),
+                        newHotVar, readHotVar, modifyHotVar, modifyHotVar_, writeHotVarRaw)
 import Control.DeepSeq
 import qualified Data.Map as M
-
--- import Data.Concurrent.Deque.Class as DQ
-#ifdef REACTOR_DEQUE
--- These performed ABYSMALLY:
-import Data.Concurrent.Deque.ChaseLev
-import Data.Concurrent.Deque.ChaseLev.DequeInstance
-import qualified Data.Concurrent.Deque.ReactorDeque as R
-import Data.Array.IO
-#else
+import qualified Data.Set as S
+import Data.Maybe (catMaybes)
 import Data.Concurrent.Deque.Class (WSDeque)
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
-#endif
+import Data.Word (Word64)
 
-import Control.Exception(fromException, handle, BlockedIndefinitelyOnMVar, SomeException, IOException)
+import qualified Control.Exception as E
 
 import Prelude hiding (null)
 import qualified Prelude
@@ -68,21 +64,25 @@ import qualified Prelude
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
--- define DEBUG
+-- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
-#define NESTED_SCHEDS
+-- #define NESTED_SCHEDS
 #define PARPUTS
--- define FORKPARENT
--- define IDLING_ON
+-- #define FORKPARENT
+-- #define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
-#define WAKEIDLE
+-- #define WAKEIDLE
+
+-- #define WAIT_FOR_WORKERS
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code
--- that lives in this dangerous region:
+-- that lives in this dangerous region, and instead do normal
+-- conditionals and trust dead-code-elimination.
 --------------------------------------------------------------------
 
 #ifdef DEBUG
+import Debug.Trace        (trace)
 import System.Environment (getEnvironment)
 theEnv = unsafePerformIO $ getEnvironment
 dbg = True
@@ -91,13 +91,17 @@ dbglvl = 1
 dbg = False
 dbglvl = 0
 #endif
+dbg    :: Bool
+dbglvl :: Int
 
+_PARPUTS :: Bool
 #ifdef PARPUTS
 _PARPUTS = True
 #else
 _PARPUTS = False
 #endif
 
+_FORKPARENT :: Bool
 #ifdef FORKPARENT
 _FORKPARENT = True
 #else
@@ -105,62 +109,36 @@ _FORKPARENT = True
 _FORKPARENT = False
 #endif
 
+_IDLING_ON :: Bool
 #ifdef IDLING_ON
 _IDLING_ON = True
 #else
 _IDLING_ON = False
 #endif
 
+_WAIT_FOR_WORKERS :: Bool
+#ifdef WAIT_FOR_WORKERS
+_WAIT_FOR_WORKERS = True
+#else
+_WAIT_FOR_WORKERS = False
+#endif
+
+
+
 --------------------------------------------------------------------------------
 -- Core type definitions
 --------------------------------------------------------------------------------
 
--- Our monad stack looks like this:
---      ---------
---        ContT
---       ReaderT
---         IO
---      ---------
--- The ReaderT monad is there for retrieving the scheduler given the
--- fact that the API calls do not get it as an argument.
--- 
--- Note that the result type for continuations is unit.  Forked
--- computations return nothing.
---
-newtype Par a = Par { unPar :: C.ContT () ROnly a }
-    deriving (Monad, MonadCont, RD.MonadReader Sched)
 type ROnly = RD.ReaderT Sched IO
-
-data Sched = Sched 
-    { 
-      ---- Per worker ----
-      no       :: {-# UNPACK #-} !Int,
-#ifdef REACTOR_DEQUE
-      workpool :: R.Deque IOArray (Par ()),
-#else
-      workpool :: WSDeque (Par ()),
-#endif
-      rng      :: HotVar GenIO, -- Random number gen for work stealing.
-      isMain :: Bool, -- Are we the main/master thread? 
-
-      ---- Global data: ----
-      killflag :: HotVar Bool,
-      idle     :: HotVar [MVar Bool],
-      scheds   :: [Sched],   -- A global list of schedulers.
-
-      -- For nested support, our scheduler may be working on behalf of
-      -- a REAL haskell continuation that we need to return to.  In
-      -- that case we need to know WHEN to stop rescheduling and
-      -- return to that genuine continuation.
-      sessionFinished :: Maybe (HotVar Bool)
-     }
 
 newtype IVar a = IVar (IORef (IVarContents a))
 
 data IVarContents a = Full a | Empty | Blocked [a -> IO ()]
 
 unsafeParIO :: IO a -> Par a 
-unsafeParIO io = Par (lift$ lift io)
+unsafeParIO iom = Par (lift$ lift iom)
+
+io :: IO a -> Par a
 io = unsafeParIO -- shorthand used below
 
 --------------------------------------------------------------------------------
@@ -173,6 +151,7 @@ io = unsafeParIO -- shorthand used below
 -- globalWorkerPool :: IORef (Data.IntMap ())
 globalWorkerPool :: IORef (M.Map ThreadId Sched)
 globalWorkerPool = unsafePerformIO $ newIORef M.empty
+-- TODO! Make this semi-local! (not shared between "top-level" runPars)
 
 {-# INLINE amINested #-}
 {-# INLINE registerWorker #-}
@@ -181,16 +160,12 @@ amINested :: ThreadId -> IO (Maybe Sched)
 registerWorker :: ThreadId -> Sched -> IO ()
 unregisterWorker :: ThreadId -> IO ()
 #ifdef NESTED_SCHEDS
+-- | If the current threadID is ALREADY a worker, return the corresponding Sched structure.
 amINested tid = do
   -- There is no race here.  Each thread inserts itself before it
   -- becomes an active worker.
   wp <- readIORef globalWorkerPool
-  case M.lookup tid wp of
-    Nothing -> return Nothing
-    Just Sched{sessionFinished=Nothing, no} -> do
-      when (dbglvl>=0) $ printf " [%d] SHALLOW strategy: NOT nesting, because we're already nested.\n" no
-      return Nothing
-    oth -> return oth
+  return (M.lookup tid wp)
 registerWorker tid sched = 
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.insert tid sched mp, ())
@@ -198,91 +173,10 @@ unregisterWorker tid =
   atomicModifyIORef globalWorkerPool $ 
     \ mp -> (M.delete tid mp, ())
 #else 
-amINested      _     = return Nothing
-registerWorker _ _   = return ()
-unregisterWorker tid = return ()
+amINested      _      = return Nothing
+registerWorker _ _    = return ()
+unregisterWorker _tid = return ()
 #endif
-
---------------------------------------------------------------------------------
--- Helpers #1:  Atomic Variables
---------------------------------------------------------------------------------
--- TEMP: Experimental
-
-#ifndef HOTVAR
-#define HOTVAR 1
-#endif
-newHotVar      :: a -> IO (HotVar a)
-modifyHotVar   :: HotVar a -> (a -> (a,b)) -> IO b
-modifyHotVar_  :: HotVar a -> (a -> a) -> IO ()
-writeHotVar    :: HotVar a -> a -> IO ()
-readHotVar     :: HotVar a -> IO a
--- readHotVarRaw  :: HotVar a -> m a
--- writeHotVarRaw :: HotVar a -> m a
-
-{-# INLINE newHotVar     #-}
-{-# INLINE modifyHotVar  #-}
-{-# INLINE modifyHotVar_ #-}
-{-# INLINE readHotVar    #-}
-{-# INLINE writeHotVar   #-}
-
-
-#if HOTVAR == 1
-type HotVar a = IORef a
-newHotVar     = newIORef
-modifyHotVar  = atomicModifyIORef
-modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
-readHotVar    = readIORef
-writeHotVar   = writeIORef
-instance Show (IORef a) where 
-  show ref = "<ioref>"
-
--- hotVarTransaction = id
-hotVarTransaction = error "Transactions not currently possible for IO refs"
-readHotVarRaw  = readHotVar
-writeHotVarRaw = writeHotVar
-
-
-#elif HOTVAR == 2 
-#warning "Using MVars for hot atomic variables."
--- This uses MVars that are always full with *something*
-type HotVar a = MVar a
-newHotVar   x = do v <- newMVar; putMVar v x; return v
-modifyHotVar  v fn = modifyMVar  v (return . fn)
-modifyHotVar_ v fn = modifyMVar_ v (return . fn)
-readHotVar    = readMVar
-writeHotVar v x = do swapMVar v x; return ()
-instance Show (MVar a) where 
-  show ref = "<mvar>"
-
--- hotVarTransaction = id
--- We could in theory do this by taking the mvar to grab the lock.
--- But we'd need some temporary storage....
-hotVarTransaction = error "Transactions not currently possible for MVars"
-readHotVarRaw  = readHotVar
-writeHotVarRaw = writeHotVar
-
-
-#elif HOTVAR == 3
-#warning "Using TVars for hot atomic variables."
--- Simon Marlow said he saw better scaling with TVars (surprise to me):
-type HotVar a = TVar a
-newHotVar = newTVarIO
-modifyHotVar  tv fn = atomically (do x <- readTVar tv 
-				     let (x2,b) = fn x
-				     writeTVar tv x2
-				     return b)
-modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
-readHotVar x = atomically $ readTVar x
-writeHotVar v x = atomically $ writeTVar v x
-instance Show (TVar a) where 
-  show ref = "<tvar>"
-
-hotVarTransaction = atomically
-readHotVarRaw  = readTVar
-writeHotVarRaw = writeTVar
-
-#endif
-
 
 -----------------------------------------------------------------------------
 -- Helpers #2:  Pushing and popping work.
@@ -294,14 +188,13 @@ popWork Sched{ workpool, no } = do
   mb <- R.tryPopL workpool 
   when dbg $ case mb of 
          Nothing -> return ()
-	 Just x  -> do sn <- makeStableName mb
-		       printf " [%d]                                   -> POP work unit %d\n" no (hashStableName sn)
+	 Just _  -> do sn <- makeStableName mb
+	 	       printf " [%d]                                   -> POP work unit %d\n" no (hashStableName sn)
   return mb
 
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
 pushWork Sched { workpool, idle, no, isMain } task = do
---  modifyHotVar_ workpool (`pushL` task)
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
 		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
@@ -312,6 +205,7 @@ pushWork Sched { workpool, idle, no, isMain } task = do
 #endif
   return ()
 
+tryWakeIdle :: HotVar [MVar Bool] -> IO ()
 tryWakeIdle idle = do
 -- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
   -- If any worker is idle, wake one up and give it work to do.
@@ -319,11 +213,11 @@ tryWakeIdle idle = do
   when (not (Prelude.null idles)) $ do
     when dbg$ printf "Waking %d idle thread(s).\n" (length idles)
     r <- modifyHotVar idle (\is -> case is of
-                             []     -> ([], return ())
-                             (i:is) -> (is, putMVar i False))
+                             []      -> ([], return ())
+                             (i:ils) -> (ils, putMVar i False))
     r -- wake an idle worker up by putting an MVar.
 
-rand :: HotVar GenIO -> IO Int
+rand :: HotVar Random.GenIO -> IO Int
 rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 
 --------------------------------------------------------------------------------
@@ -333,7 +227,77 @@ rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 instance NFData (IVar a) where
   rnf _ = ()
 
-runPar userComp = unsafePerformIO $ do
+{-# NOINLINE runPar #-}
+runPar = unsafePerformIO . runParIO
+
+
+-- | This procedure creates a new worker on the current thread (with a
+--   new session ID) and plugs it into the work-stealing environment.
+--   This new worker extracts itself from the work stealing pool when
+--   `userComp` has completed, thus freeing the current thread (this
+--   procedure) to return normally.
+runNewSessionAndWait :: String -> Sched -> Par b -> IO b
+runNewSessionAndWait name sched userComp = do
+    tid <- myThreadId -- TODO: remove when done debugging
+    sid <- modifyHotVar (sessionCounter sched) (\ x -> (x+1,x))    
+    _ <- modifyHotVar (activeSessions sched) (\ set -> (S.insert sid set, ()))
+    
+    -- Here we have an extra IORef... ugly.
+    ref <- newIORef (error$ "Empty session-result ref ("++name++") should never be touched (sid "++ show sid++", "++show tid ++")")
+    newFlag <- newHotVar False    
+    -- Push the new session:
+    _ <- modifyHotVar (sessions sched) (\ ls -> ((Session sid newFlag) : ls, ()))
+
+    let userComp' = do when dbg$ io$ do
+                           tid2 <- myThreadId
+                           printf " [%d %s] Starting Par computation on %s.\n" (no sched) (show tid2) name
+                       ans <- userComp
+                       -- This add-on to userComp will run only after userComp has completed successfully,
+                       -- but that does NOT guarantee that userComp-forked computations have terminated:
+                       io$ do when (dbglvl>=1) $ do
+                                tid3 <- myThreadId
+                                printf " [%d %s] Continuation for %s called, finishing it up (%d)...\n" (no sched) (show tid3) name sid
+                              writeIORef ref ans
+                              writeHotVarRaw newFlag True
+                              modifyHotVar (activeSessions sched) (\ set -> (S.delete sid set, ()))
+        kont :: Word64 -> a -> ROnly ()
+        kont n = trivialCont$ "("++name++", sid "++show sid++", round "++show n++")"
+        loop :: Word64 -> ROnly ()
+        loop n = do flg <- liftIO$ readIORef newFlag
+                    unless flg $ do 
+                      when dbg $ liftIO$ do
+                        tid4 <- myThreadId
+                        printf " [%d %s] BOUNCE %d... going into reschedule until finished.\n" (no sched) (show tid4) n
+                      rescheduleR 0 $ trivialCont$ "("++name++", sid "++show sid++")"
+                      loop (n+1)
+
+    -- THIS IS RETURNING TOO EARLY!!:
+    runReaderWith sched (C.runContT (unPar userComp') (kont 0))  -- Does this ASSUME child stealing?
+    runReaderWith sched (loop 1)
+
+    -- TODO: Ideally we would wait for ALL outstanding (stolen) work on this "team" to complete.
+
+    when (dbglvl>=1)$ do
+      active <- readHotVar (activeSessions sched)
+      sess@True <- readHotVar newFlag -- ASSERT!
+      printf " [%d %s] RETURN from %s (sessFin %s) runContT (%d) active set %s\n"
+               (no sched) (show tid) name (show sess) sid (show active)
+
+    -- Here we pop off the frame we added to the session stack:
+    modifyHotVar_ (sessions sched) $ \ (Session sid2 _ : tl) ->
+        if sid == sid2
+        then tl
+        else error$ "Tried to pop the session stack and found we ("++show sid
+                   ++") were not on the top! (instead "++show sid2++")"
+               
+    -- By returning here we ARE implicitly reengaging the scheduler, since we
+    -- are already inside the rescheduleR loop on this thread
+    -- (before runParIO was called in a nested fashion).
+    readIORef ref
+
+
+{-# NOINLINE runParIO #-}
+runParIO userComp = do
    tid <- myThreadId  
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
@@ -355,88 +319,99 @@ runPar userComp = unsafePerformIO $ do
    let main_cpu = 0
 #endif
    maybSched <- amINested tid
+   tidorig <- myThreadId -- TODO: remove when done debugging                
    case maybSched of 
-     Just (sched@Sched{scheds}) -> do 
-       when (dbglvl>=1)$ printf " [%d %s] Engaging trivial strategy for embedding nested work....\n" (no sched) (show tid)
+     Just (sched) -> do
        -- Here the current thread is ALREADY a worker.  All we need to
        -- do is plug the users new computation in.
---       runReaderWith sched $ rescheduleR errK
 
-       -- Here we have an extra IORef... ugly.
-       ref <- newIORef (error "this should never be touched")
-       newSess <- newHotVar False
-       let cont ans = liftIO$ do writeIORef ref ans; writeHotVarRaw newSess True
-       RD.runReaderT (C.runContT (unPar userComp) cont) (sched{ sessionFinished=Just newSess})
-       when (dbglvl>=1)$ printf " [%d %s] RETURN from nested runContT\n" (no sched) (show tid)
-       -- By returning here we ARE reengaging the scheduler, since we
-       -- are already inside the rescheduleR loop on this thread.
-       readIORef ref
+       sid0 <- readHotVar (sessionCounter sched)
+       when (dbglvl>=1)$ printf " [%d %s] runPar called from existing worker thread, new session (%d)....\n" (no sched) (show tid) (sid0 + 1)
+       runNewSessionAndWait "nested runPar" sched userComp
+
+     ------------------------------------------------------------
+     -- Non-nested case, make a new set of worker threads:
+     ------------------------------------------------------------       
      Nothing -> do
        allscheds <- makeScheds main_cpu
-
-       m <- newEmptyMVar
-       forM_ (zip [0..] allscheds) $ \(cpu,sched) ->
-            forkOn cpu $ do 
-              tid <- myThreadId
-              registerWorker tid sched
+       [Session _ topSessFlag] <- readHotVar$ sessions$ head allscheds
+       
+       mfin <- newEmptyMVar
+       doneFlags <- forM (zip [0..] allscheds) $ \(cpu,sched) -> do
+            workerDone <- newEmptyMVar            
+            ----------------------------------------
+            let wname = ("(worker "++show cpu++" of originator "++show tidorig++")")
+--            forkOn cpu $ do
+            _ <- forkWithExceptions (forkOn cpu) wname $ do                                    
+            ------------------------------------------------------------STRT WORKER THREAD              
+              tid2 <- myThreadId
+              registerWorker tid2 sched
               if (cpu /= main_cpu)
-                 then do when dbg$ printf " [%d] Entering scheduling loop.\n" cpu
-                         runReaderWith sched $ rescheduleR errK
-                         when dbg$ printf " [%d] Exited scheduling loop.  FINISHED.\n" cpu
+                 then do when dbg$ printf " [%d %s] Anonymous worker entering scheduling loop.\n" cpu (show tid2)
+                         runReaderWith sched $ rescheduleR 0 (trivialCont (wname++show tid2))
+                         when dbg$ printf " [%d] Anonymous worker exited scheduling loop.  FINISHED.\n" cpu
+                         putMVar workerDone cpu
                          return ()
-                 else do
-                      let userComp'  = do when dbg$ io$ printf " [%d] Starting Par computation on main thread.\n" main_cpu
-                                          res <- userComp
-                                          finalSched <- RD.ask 
-                                          when dbg$ io$ printf " [%d] Out of Par computation on main thread.  Writing MVar...\n" (no finalSched)
+                 else do x <- runNewSessionAndWait "top-lvl main worker" sched userComp
+                         -- When the main worker finishes we can tell the anonymous "system" workers:
+                         writeIORef topSessFlag True
+                         when dbg$ do printf " *** Out of entire runContT user computation on main thread %s.\n" (show tid2)
+                         --  sanityCheck allscheds
+                         putMVar mfin x 
 
-                                          -- Sanity check our work queues:
-                                          when dbg $ io$ sanityCheck allscheds
-                                          io$ putMVar m res
+              unregisterWorker tid
+            ------------------------------------------------------------END WORKER THREAD
+            return (if cpu == main_cpu then Nothing else Just workerDone)
 
-                      RD.runReaderT (C.runContT (unPar userComp') trivialCont) sched
-                      when dbg$ do putStrLn " *** Out of entire runContT user computation on main thread."
-                                   sanityCheck allscheds
-                      -- Not currently requiring that other scheduler threads have exited before we 
-                      -- (the main thread) exit.  But we do signal here that they should terminate:
-                      writeIORef (killflag sched) True
-              unregisterWorker tid 
+       when _WAIT_FOR_WORKERS $ do 
+           when dbg$ printf " *** [%s] Originator thread: waiting for workers to complete." (show tidorig)
+           forM_ (catMaybes doneFlags) $ \ mv -> do 
+             n <- readMVar mv
+    --         n <- A.wait mv
+             when dbg$ printf "   * [%s]  Worker %s completed\n" (show tidorig) (show n)
 
-       when dbg$ do putStrLn " *** Reading final MVar on main thread."   
+       when dbg$ do printf " *** [%s] Reading final MVar on originator thread.\n" (show tidorig)
        -- We don't directly use the thread we come in on.  Rather, that thread waits
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
-       takeMVar m -- Final value.
---       dbgTakeMVar "global waiting thread" m -- Final value.
---       busyTakeMVar " global wait " m -- Final value.                    
-
-
--- Make sure there is no work left in any deque after exiting.
-sanityCheck :: [Sched] -> IO ()
-sanityCheck allscheds = do
-  forM_ allscheds $ \ Sched{no, workpool} -> do
-     b <- R.nullQ workpool
-     when (not b) $ do 
-         printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
-         return ()
-  putStrLn "Sanity check complete."
-
+       ----------------------------------------
+       --              DEBUGGING             -- 
+--       takeMVar mfin -- Final value.
+--       dbgTakeMVar "global waiting thread" mfin -- Final value.
+       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
+       ----------------------------------------
 
 -- Create the default scheduler(s) state:
 makeScheds :: Int -> IO [Sched]
-makeScheds main = do
-   when dbg$ printf "[initialization] Creating %d worker threads\n" numCapabilities
+makeScheds main = do   
+   when dbg$ do tid <- myThreadId
+                printf "[initialization] Creating %d worker threads, currently on %s\n" numCapabilities (show tid)
    workpools <- replicateM numCapabilities $ R.newQ
    rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
-   idle      <- newHotVar []   
-   killflag  <- newHotVar False
-   let allscheds = [ Sched { no=x, idle, killflag, isMain= (x==main),
+   idle      <- newHotVar []
+   -- The STACKs are per-worker.. but the root finished flag is shared between all anonymous system workers:
+   sessionFinished <- newHotVar False
+   sessionStacks   <- mapM newHotVar (replicate numCapabilities [Session baseSessionID sessionFinished])
+   activeSessions  <- newHotVar S.empty
+   sessionCounter  <- newHotVar (baseSessionID + 1)
+   let allscheds = [ Sched { no=x, idle, isMain= (x==main),
 			     workpool=wp, scheds=allscheds, rng=rng,
-                             sessionFinished=Nothing
+                             sessions = stck,
+                             activeSessions=activeSessions,
+                             sessionCounter=sessionCounter
 			   }
-                   | (x,wp,rng) <- zip3 [0..] workpools rngs]
+                   -- | (x,wp,rng,stck) <- zip4 [0..] workpools rngs sessionStacks
+                   | x   <- [0 .. numCapabilities-1]
+                   | wp  <- workpools
+                   | rng <- rngs
+                   | stck <- sessionStacks
+                   ]
    return allscheds
 
+
+-- The ID of top-level runPar sessions.
+baseSessionID :: SessionID
+baseSessionID = 1000
 
 
 --------------------------------------------------------------------------------
@@ -453,34 +428,35 @@ new  = io$ do r <- newIORef Empty
 -- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
-get iv@(IVar v) =  do 
-  callCC $ \cont -> 
+get (IVar vr) =  do 
+  callCC $ \kont -> 
     do
-       e  <- io$ readIORef v
+       e  <- io$ readIORef vr
        case e of
 	  Full a -> return a
 	  _ -> do
             sch <- RD.ask
 #  ifdef DEBUG
-            sn <- io$ makeStableName iv
+            sn <- io$ makeStableName vr  -- Should probably do the MutVar inside...
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!") 
 #else
             let resched = 
 #  endif
-			  reschedule
+			  longjmpSched -- Invariant: kont must not be lost.
             -- Because we continue on the same processor the Sched stays the same:
-            -- TODO: Try NOT using monads as first class values here.  Check for performance effect:
-	    r <- io$ atomicModifyIORef v $ \e -> case e of
-		      Empty      -> (Blocked [pushWork sch . cont], resched)
-		      Full a     -> (Full a, return a)
-		      Blocked ks -> (Blocked (pushWork sch . cont:ks), resched)
+            -- TODO: Try NOT using monadic values as first class.  Check for performance effect:
+	    r <- io$ atomicModifyIORef vr $ \x -> case x of
+		      Empty      -> (Blocked [pushWork sch . kont], resched)
+		      Full a     -> (Full a, return a) -- kont is implicit here.
+		      Blocked ks -> (Blocked (pushWork sch . kont:ks), resched)
 	    r
 
 -- | NOTE unsafePeek is NOT exposed directly through this module.  (So
 -- this module remains SAFE in the Safe Haskell sense.)  It can only
 -- be accessed by importing Control.Monad.Par.Unsafe.
 {-# INLINE unsafePeek #-}
-unsafePeek iv@(IVar v) = do 
+unsafePeek :: IVar a -> Par (Maybe a)
+unsafePeek (IVar v) = do 
   e  <- io$ readIORef v
   case e of 
     Full a -> return (Just a)
@@ -490,16 +466,16 @@ unsafePeek iv@(IVar v) = do
 {-# INLINE put_ #-}
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 --   In this scheduler, puts immediately execute woken work in the current thread.
-put_ iv@(IVar v) !content = do
+put_ (IVar vr) !content = do
    sched <- RD.ask
    ks <- io$ do 
-      ks <- atomicModifyIORef v $ \e -> case e of
+      ks <- atomicModifyIORef vr $ \e -> case e of
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
                Blocked ks -> (Full content, ks)
 #ifdef DEBUG
       when (dbglvl >=  3) $ do 
-         sn <- makeStableName iv
+         sn <- makeStableName vr
          printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
                 (no sched) (show content) (hashStableName sn) (length ks)
          return ()
@@ -511,18 +487,18 @@ put_ iv@(IVar v) !content = do
 -- this module remains SAFE in the Safe Haskell sense.)  It can only
 -- be accessed by importing Control.Monad.Par.Unsafe.
 {-# INLINE unsafeTryPut #-}
-unsafeTryPut iv@(IVar v) !content = do
+unsafeTryPut (IVar vr) !content = do
    -- Head strict rather than fully strict.
    sched <- RD.ask 
    (ks,res) <- io$ do 
-      pr@(ks,res) <- atomicModifyIORef v $ \e -> case e of
+      pr <- atomicModifyIORef vr $ \e -> case e of
 		   Empty      -> (Full content, ([], content))
 		   Full x     -> (Full x, ([], x))
 		   Blocked ks -> (Full content, (ks, content))
 #ifdef DEBUG
-      sn <- makeStableName iv
+      sn <- makeStableName vr
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
-	     (no sched) (show content) (hashStableName sn) (length ks)
+	     (no sched) (show content) (hashStableName sn) (length (fst pr))
 #endif
       return pr
    wakeUp sched ks content
@@ -531,7 +507,7 @@ unsafeTryPut iv@(IVar v) !content = do
 -- | When an IVar is filled in, continuations wake up.
 {-# INLINE wakeUp #-}
 wakeUp :: Sched -> [a -> IO ()]-> a -> Par ()
-wakeUp sched ks arg = loop ks
+wakeUp _sched ks arg = loop ks
  where
    loop [] = return ()
    loop (kont:rest) = do
@@ -571,27 +547,27 @@ wakeUp sched ks arg = loop ks
                               
 
 ------------------------------------------------------------
--- TODO: Continuation (parent) stealing version.
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
-fork task = 
+fork task =
+  -- Forking the "parent" means offering up the continuation of the
+  -- fork rather than the task argument for stealing:
   case _FORKPARENT of 
     True -> do 
       sched <- RD.ask   
       callCC$ \parent -> do
          let wrapped = parent ()
-         -- Is it possible to slip in a new Sched here?
-         -- let wrapped = lift$ RD.runReaderT (parent ()) undefined
          io$ pushWork sched wrapped
          -- Then execute the child task and return to the scheduler when it is complete:
          task 
          -- If we get to this point we have finished the child task:
-         reschedule -- We reschedule to pop the cont we pushed.
-         io$ putStrLn " !!! ERROR: Should not reach this point #1"   
+         longjmpSched -- We reschedule to pop the cont we pushed.
+         -- TODO... OPTIMIZATION: we could also try the pop directly, and if it succeeds return normally....
+         io$ printf " !!! ERROR: Should never reach this point #1\n"
 
       when dbg$ do 
        sched2 <- RD.ask 
-       io$ printf "     called parent continuation... was on cpu %d now on cpu %d\n" (no sched) (no sched2)
+       io$ printf "  -  called parent continuation... was on worker [%d] now on worker [%d]\n" (no sched) (no sched2)
        return ()
 
     False -> do 
@@ -600,52 +576,69 @@ fork task =
       io$ pushWork sch task
    
 -- This routine "longjmp"s to the scheduler, throwing out its own continuation.
-reschedule :: Par a 
-reschedule = Par $ C.ContT rescheduleR
+longjmpSched :: Par a
+-- longjmpSched = Par $ C.ContT rescheduleR
+longjmpSched = Par $ C.ContT (\ _k -> rescheduleR 0 (trivialCont "longjmpSched"))
 
--- Reschedule ignores its continuation.
--- It runs the scheduler loop indefinitely, until it observers killflag==True
-rescheduleR :: ignoredCont -> ROnly ()
-rescheduleR k = do
+-- Reschedule the scheduler loop until it observes sessionFinished==True, and
+-- then it finally invokes its continuation.
+rescheduleR :: Word64 -> (a -> ROnly ()) -> ROnly ()
+rescheduleR cnt kont = do
   mysched <- RD.ask 
-  when dbg$ liftIO$ printf " [%d]  - Reschedule...\n" (no mysched)
+  when dbg$ liftIO$ do tid <- myThreadId
+                       sess <- readSessions mysched
+                       null <- R.nullQ (workpool mysched)
+                       printf " [%d %s]  - Reschedule #%d... sessions %s, pool empty %s\n"
+                              (no mysched) (show tid) cnt (show sess) (show null)
   mtask  <- liftIO$ popWork mysched
   case mtask of
-    Nothing -> do 
-                  k <- liftIO$ readIORef (killflag mysched)
-                  fin <- liftIO$ case sessionFinished mysched of
-                                   Nothing -> return False
-                                   Just r  -> readIORef r
-		  if (k || fin) 
-                   then do when (dbglvl>=0) $ 
-                             liftIO$ printf " [%d]  - DROP out of reschedule loop, killflag=%s, sessionFinished=%s\n"
-                                            (no mysched) (show k) (show fin)
-                           return ()
+    Nothing -> do
+                  (Session _ finRef):_ <- liftIO$ readIORef $ sessions mysched
+                  fin <- liftIO$ readIORef finRef      
+		  if fin
+                   then do when (dbglvl >= 1) $ liftIO $ do
+                             tid <- myThreadId
+                             sess <- readSessions mysched
+                             printf " [%d %s]  - DROP out of reschedule loop, sessionFinished=%s, all sessions %s\n" 
+                                    (no mysched) (show tid) (show fin) (show sess)
+                             empt <- R.nullQ$ workpool mysched
+                             when (not empt) $ do
+                               printf " [%d %s] - WARNING - leaving rescheduleR while local workpoll is nonempty\n" 
+                                      (no mysched) (show tid) 
+                           
+                           kont (error "Direct.hs: The result value from rescheduleR should not be used.")
                    else do
+                     -- when (dbglvl >= 1) $ liftIO $ do
+                     --     tid <- myThreadId                       
+                     --     sess <- readSessions mysched
+                     --     printf " [%d %s]  -    Apparently NOT finished with head session... trying to steal, all sessions %s\n" 
+                     --            (no mysched) (show tid) (show sess)
 		     liftIO$ steal mysched
 #ifdef WAKEIDLE
 --                     io$ tryWakeIdle (idle mysched)
 #endif
-		     rescheduleR errK
+                     liftIO yield
+		     rescheduleR (cnt+1) kont
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ do sn <- liftIO$ makeStableName task
 		     liftIO$ printf " [%d] popped work %d from own queue\n" (no mysched) (hashStableName sn)
        let C.ContT fn = unPar task 
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
-       fn (\ () -> do 
+       fn (\ _ -> do 
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
-	   rescheduleR errK)
-
-{-# INLINE runReaderWith #-}
-runReaderWith state m = RD.runReaderT m state
+	   rescheduleR 0 kont)
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
+-- 
+--   The current policy is to do a burst of of N tries without
+--   yielding or pausing inbetween.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
-  when (dbglvl>=2)$ printf " [%d]  + stealing\n" my_no
+  when (dbglvl>=2)$ do tid <- myThreadId
+                       printf " [%d %s]  + stealing\n" my_no (show tid)
   i <- getnext (-1 :: Int)
   go maxtries i
  where
@@ -662,7 +655,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                if length r == numCapabilities - 1
                   then do
                      when dbg$ printf " [%d]  | initiating shutdown\n" my_no
-                     mapM_ (\m -> putMVar m True) r
+                     mapM_ (\vr -> putMVar vr True) r
                   else do
                     done <- takeMVar m
                     if done
@@ -674,8 +667,8 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			 i <- getnext (-1::Int)
                          go maxtries i
 
-    -- We need to return from this loop to check killflag and exit the scheduler if necessary.
-    go 0 i | _IDLING_ON == False = yield
+    -- We need to return from this loop to check sessionFinished and exit the scheduler if necessary.
+    go 0 _i | _IDLING_ON == False = yield
 
     ----------------------------------------
     go tries i
@@ -683,7 +676,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			go (tries-1) i'
 
       | otherwise     = do
-         -- We ONLY go through the global sched array to access 
+         -- We ONLY go through the global sched array to access victims:
          let schd = scheds!!i
          when (dbglvl>=2)$ printf " [%d]  | trying steal from %d\n" my_no (no schd)
 
@@ -705,12 +698,15 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
            Nothing -> do i' <- getnext i
 			 go (tries-1) i'
 
-errK = error "this closure shouldn't be used"
+-- | The continuation which should not be called.
+errK :: t
+errK = error "Error cont: this closure shouldn't be used"
 
-trivialCont :: a -> ROnly ()
-trivialCont _ = 
+trivialCont :: String -> a -> ROnly ()
+trivialCont str _ = do 
 #ifdef DEBUG
-                trace "trivialCont evaluated!"
+--                trace (str ++" trivialCont evaluated!")
+                liftIO$ printf " !! trivialCont evaluated, msg: %s\n" str
 #endif
 		return ()
 
@@ -751,23 +747,29 @@ put    :: (Show a, NFData a) => IVar a -> a -> Par ()
 spawn  :: (Show a, NFData a) => Par a -> Par (IVar a)
 spawn_ :: Show a => Par a -> Par (IVar a)
 spawn1_ :: (Show a, Show b) => (a -> Par b) -> a -> Par (IVar b)
+spawnP :: (Show a, NFData a) => a -> Par (IVar a)
 put_   :: Show a => IVar a -> a -> Par ()
 get    :: Show a => IVar a -> Par a
 runPar :: Show a => Par a -> a 
+runParIO :: Show a => Par a -> IO a 
 newFull :: (Show a, NFData a) => a -> Par (IVar a)
 newFull_ ::  Show a => a -> Par (IVar a)
+unsafeTryPut :: Show b => IVar b -> b -> Par b
 #else
 spawn  :: NFData a => Par a -> Par (IVar a)
 spawn_ :: Par a -> Par (IVar a)
 spawn1_ :: (a -> Par b) -> a -> Par (IVar b)
+spawnP :: NFData a => a -> Par (IVar a)
 put_   :: IVar a -> a -> Par ()
 put    :: NFData a => IVar a -> a -> Par ()
 get    :: IVar a -> Par a
 runPar :: Par a -> a 
+runParIO :: Par a -> IO a 
 newFull :: NFData a => a -> Par (IVar a)
 newFull_ ::  a -> Par (IVar a)
+unsafeTryPut :: IVar b -> b -> Par b
 
-
+-- We can't make proper instances with the extra Show constraints:
 instance PC.ParFuture IVar Par  where
   get    = get
   spawn  = spawn
@@ -797,15 +799,34 @@ instance Applicative Par where
 --------------------------------------------------------------------------------
 
 
+{-# INLINE runReaderWith #-}
+-- | Arguments flipped for convenience.
+runReaderWith :: r -> RD.ReaderT r m a -> m a
+runReaderWith state m = RD.runReaderT m state
+
+
+--------------------------------------------------------------------------------
 -- DEBUGGING TOOLs
 --------------------------------------------------------------------------------
 
+-- Make sure there is no work left in any deque after exiting.
+sanityCheck :: [Sched] -> IO ()
+sanityCheck allscheds = do
+  forM_ allscheds $ \ Sched{no, workpool} -> do
+     b <- R.nullQ workpool
+     when (not b) $ do 
+         () <- printf "WARNING: After main thread exited non-empty queue remains for worker %d\n" no
+         return ()
+  printf "Sanity check complete.\n"
+
+
+-- | This tries to localize the blocked-indefinitely exception:
 dbgTakeMVar :: String -> MVar a -> IO a
 dbgTakeMVar msg mv = 
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
-  catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
+  E.catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
  where   
-   doDebugStuff = do putStrLn$"This takeMVar blocked indefinitely!: "++msg
+   doDebugStuff = do printf "This takeMVar blocked indefinitely!: %s\n" msg
                      error "failed"
 
 -- | For debugging purposes.  This can help us figure out (but an ugly
@@ -816,8 +837,8 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
  where 
  try 0 = do 
    tid <- myThreadId
---   B.putStrLn (B.pack$ show tid ++ "! ")
-   putStrLn (show tid ++" not getting anywhere, msg: "++ msg)  -- After we've failed enough times, start complaining.
+   -- After we've failed enough times, start complaining:
+   printf "%s not getting anywhere, msg: %s\n" (show tid) msg  
    try (100 * 1000)
  try n = do
    x <- tryTakeMVar mv
@@ -831,11 +852,37 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
 forkIO_Suppress :: Int -> IO () -> IO ThreadId
 forkIO_Suppress whre action = 
   forkOn whre $ 
-           handle (\e -> 
---                   case fromException (e::SomeException) :: Maybe IOException of
-                    case (e::BlockedIndefinitelyOnMVar) of
-                     _ -> do 
-                             putStrLn$"CAUGHT child thread exception: "++show e 
-                             return ()
-		  )
+           E.handle (\e -> 
+                      case (e :: E.BlockedIndefinitelyOnMVar) of
+                       _ -> do 
+                               putStrLn$"CAUGHT child thread exception: "++show e 
+                               return ()
+		    )
            action
+
+
+-- | Exceptions that walk up the fork tree of threads:
+forkWithExceptions :: (IO () -> IO ThreadId) -> String -> IO () -> IO ThreadId
+forkWithExceptions forkit descr action = do 
+   parent <- myThreadId
+   forkit $ do
+      tid <- myThreadId
+      E.catch action
+	 (\ e -> 
+           case E.fromException e of 
+             Just E.ThreadKilled -> printf -- hPrintf stderr 
+                                    "\nThreadKilled exception inside child thread, %s (not propagating!): %s\n" (show tid) (show descr)
+	     _  -> do printf -- hPrintf stderr
+                        "\nException inside child thread %s, %s: %s\n" (show descr) (show tid) (show e)
+                      E.throwTo parent (e :: E.SomeException)
+	 )
+
+
+-- Do all the memory reads to snapshot the current session stack:
+readSessions :: Sched -> IO [(SessionID, Bool)]
+readSessions sched = do
+  ls <- readIORef (sessions sched)
+  bools <- mapM (\ (Session _ r) -> readIORef r) ls
+  return (zip (map (\ (Session sid _) -> sid) ls) bools)
+  
+  

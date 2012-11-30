@@ -23,7 +23,7 @@ import System.Environment
 import Control.Exception
 import Test.QuickCheck (Arbitrary, arbitrary, sized, choose, vector)
 
-import Data.List.Split (chunk)
+import Data.List.Split (chunksOf)
 import Data.List (intersperse)
 
 import Data.Word (Word32)
@@ -33,9 +33,11 @@ import Data.Vector.Algorithms.Merge (sort)
 
 #ifdef PARSCHED
 import PARSCHED
-#else
+#elif 0
 import Control.Monad.Par.Meta.SMPMergeSort
 #define GPU_ENABLED
+#else
+import Control.Monad.Par
 #endif
 
 #ifdef GPU_ENABLED
@@ -379,7 +381,7 @@ commaint n | n < 0 = "-" ++ commaint (-n)
 commaint n = 
    reverse $ concat $
    intersperse "," $ 
-   chunk 3 $ reverse (show n)
+   chunksOf 3 $ reverse (show n)
 
 
 -- copyOffset :: (PrimMonad m, MVector v e)
@@ -426,7 +428,7 @@ main = do args <- getArgs
                            -> ("dynamic", (read lo), (read hi), (read n), (read t))
                     [mode, n]    | isMode mode -> (mode, 16, 22, read n, 8192)
                     [mode, n, t] | isMode mode -> (mode, 16, 22, read n, read t)
-                    xs -> error $ "invalid argument list " ++ unwords xs
+                    xs -> error $ "invalid argument list, expecting cpu/dynamic [log_2(numelems)]: " ++ unwords xs
               gpuThi = 2 ^ (min 22 hi)
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)

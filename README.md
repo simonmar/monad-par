@@ -2,12 +2,13 @@
 The Par Monad and Friends
 =========================
 
-Please read the package descriptions in './*.cabal'.  If you've
+Please read the package descriptions in './*/*.cabal'.  If you've
 acquired this source package from github you should have the examples/
-subdirectory.  Look at examples/README to get started.
+subdirectory.  Look at examples/README.md to get started running
+examples.
 
 Here are some commands you may be interested in.  First, install
-to *everything* (except for GPU-dependent packages):
+to *everything* (except for GPU/CUDA-dependent packages):
 
     git submodule update --init --recursive
     make mega-install
@@ -15,7 +16,7 @@ to *everything* (except for GPU-dependent packages):
 That will install certain dependencies as well (Deques and
 accelerate), "make install" just installs the packages directly
 contained within this repo.  See the Makefile for other things you can
-do (e.g. "make mega-install-gpu").
+do (e.g. "make mega-install-cuda" which depends on CUDA).
 
 Some of the individual packages have test-suites:
 

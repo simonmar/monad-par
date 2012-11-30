@@ -1,5 +1,5 @@
 Name:                meta-par
-Version:             0.3
+Version:             0.3.3
 Synopsis:            Provides the monad-par interface, but based on modular scheduler "mix-ins".
 
 -- Version history:

@@ -10,7 +10,7 @@ import qualified Data.ByteString.Char8 as B
 import qualified Data.Vector.Storable as SV
 import qualified Data.Vector         as V
 import Data.Vector.Serialize
-import Data.Vector.Storable.Serialize
+import Data.Vector.Storable.UnsafeSerialize
 import Control.DeepSeq
 import Control.Monad
 import System.Random.MWC

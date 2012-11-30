@@ -6,24 +6,48 @@ This directory contains a collection of programs using the Par monad.
 It is called "examples" but it also serves as most of our tests and
 benchmarks as well.
 
-Building examples:
+QUICK START
+===========
+
+The easy way to get started is to simply run:
+
+    make test
+
+This will produce a lot of output.  It installs dependencies, then
+builds and runs all examples in a "quick" configuration and in
+parallel.
+
+
+MORE DETAILS
+============
+
+Each benchmark/test can be built directly or through a cabal file.
+'generate_cabal.sh' script creates the cabal file for you:
 
     ./generate_cabal.sh
+    
+Once generated, 'cabal install' will compile and install all
+benchmarks (globally):
+
     cabal install
 
-Make deps will install package dependencies that aren't already
-installed by monad-par itself.
 
-BENCHMARKING
-=============================
+The benchmarks are now ready to be run.
 
-This directory provides benchmarking.  Ranging from the simple:
+BENCHMARK SCRIPT
+================
 
-    SHORTRUN=1 THREADS="1" ./benchmark.hs
+This directory provides benchmarking.  We used to run the script
+"benchmark.hs" from source, but now it is highly encouraged to compile
+it (and the Makefile does so).
+
+Benchmarking can range from the simple:
+
+    SHORTRUN=1 THREADS="1" ./benchmark.run
 
 To the more involved:
 
-    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.hs
+    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.run
 
 Both of the above will populate a file named results_$HOSTNAME.dat.
 Typically that will be followed by the following call to file the
@@ -39,7 +63,7 @@ The bechmarking configurations are stored in simple text files.  There
 are three of them currently [2011.10.13] checked in which are tuned
 for different sized runs:
 
-  * benchlist.txt -- desktop version, e.g. 4 core workstation
+  * benchlist.txt        -- desktop version, e.g. 4 core workstation
   * benchlist_server.txt -- big multicore, e.g. 16-32 core server
   * benchlist_laptop.txt -- ~dual processor mobile processor
 
@@ -67,7 +91,8 @@ It is important that new benchmarks conform to all the conventions.
 Here is the recipe:
 
   * Add your benchmark here (single .hs file) or in a subdirectory.
-  * If the latter, give it a Makefile (supporting "all" and "clean").
+  * Add an entry to generate_cabal.sh, listing the benchmark and its
+    dependencies.  
   * Add the benchmark and its input parameters to benchlist.txt, as
     well as the _laptop and _server variants.
   * Make sure the benchmark runs with no arguments.  This is "test"

@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3
+Version:             0.3.4
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -16,7 +16,8 @@ Synopsis:            A library for parallel programming based on a monad
 
 --  0.3      : Factored/reorganized modules and packages.  
 --             *This* package is the original, core monad-par.
-
+--  0.3.1    : fix for ghc 7.6.1, expose Par.IO
+--  0.3.4    : switch to direct scheduler as default (only 1-level nesting allowed)
 
 Description:         This library offers an alternative parallel programming
                      API to that provided by the @parallel@ package.
@@ -76,6 +77,7 @@ Library
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
+                 , Control.Monad.Par.IO
 
                  -- This is the default scheduler:
                  , Control.Monad.Par.Scheds.Trace
@@ -85,7 +87,8 @@ Library
                  , Control.Monad.Par.Scheds.Direct
 
                  -- This scheduler uses sparks rather than IO threads.
-                 -- It only supports Futures, not full IVars:
+                 -- It only supports Futures, not full IVars.  Fork
+                 -- becomes lighter weight.
                  , Control.Monad.Par.Scheds.Sparks
 
   Build-depends: base >= 4 && < 5
@@ -100,6 +103,7 @@ Library
                , containers
                , parallel >= 3.1
                , mtl >= 2.0.1.0
+               , async >= 2.0.1.0
 
   ghc-options: -O2
   Other-modules:
@@ -113,8 +117,10 @@ Library
                -- Internal logging framework:
                -- Control.Monad.Par.Logging,
 
-               -- Serial Elision is currently experimental:
+               -- Serial Elision scheduling is currently experimental:
                -- Control.Monad.Par.Scheds.SerialElision
+
+               Control.Monad.Par.Scheds.DirectInternal
 
                ------------------------------------------------------------
                --                   Data Structures                      -- 
@@ -141,3 +147,8 @@ Test-Suite test-monad-par
                  , QuickCheck, HUnit
                  , test-framework-hunit, test-framework-quickcheck2
                  , test-framework, test-framework-th
+
+                 , abstract-deque >= 0.1.4
+                 , mwc-random >= 0.11
+                 , mtl >= 2.0.1.0
+                 , containers

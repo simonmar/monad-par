@@ -9,14 +9,13 @@ import System.IO.Unsafe (unsafePerformIO)
 import Data.IORef
 import Data.Time.Clock
 
--- import Control.Monad.Par.Unsafe
-import Control.Monad.Par.Scheds.Trace
-import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
+import Control.Monad.Par.Class
 
 ------------------------------------------------------------
 -- Helpers
 
-_unsafeio :: IO a -> Par a
+-- _unsafeio :: IO a -> Par a
+_unsafeio :: ParFuture iv p => IO a -> p a
 _unsafeio io = let x = unsafePerformIO io in
 	        x `seq` return x
 
@@ -42,14 +41,16 @@ waste_time seconds =
 
 -- Obviously this takes a lot longer if it's interpreted:
 --awhile = 300000000
+awhile :: Integer
 awhile = 3 * 1000 * 1000
 -- awhile = 300000
 
+atomicModifyIORef_ :: IORef a -> (a -> a) -> IO ()
 atomicModifyIORef_ rf fn = atomicModifyIORef rf (\x -> (fn x, ()))
 
 
--- Haskell doesn't offer a way to create a Handle for in-memory output.
--- So here we use IORefs instead
+-- | Haskell doesn't offer a way to create a Handle for in-memory output.
+--   So here we use IORefs instead...
 collectOutput :: (IORef [String] -> IO ()) -> IO String
 collectOutput fn = 
   do c <- newIORef []
@@ -60,7 +61,8 @@ collectOutput fn =
 prnt :: IORef [String] -> String -> IO ()
 prnt ref str = atomicModifyIORef_ ref (str:)
 
-_prnt :: IORef [String] -> String -> Par ()
+-- _prnt :: IORef [String] -> String -> Par ()
+_prnt :: ParFuture iv p => IORef [String] -> String -> p ()
 _prnt ref = _unsafeio . prnt ref
      
 
@@ -74,17 +76,18 @@ _prnt ref = _unsafeio . prnt ref
 --         assertFailure $ "Expected exception: " ++ show ex
 --   where isWanted = guard . (== ex)
 
--- Ensure that evaluating an expression returns an exception
-assertException  :: String -> a -> IO ()
-assertException msg val = do
+-- | Ensure that evaluating an expression returns an exception
+--   containing one of the expected messages.
+assertException  :: [String] -> a -> IO ()
+assertException msgs val = do
  x <- catch (do evaluate val; return Nothing) 
             (\e -> do putStrLn$ "Good.  Caught exception: " ++ show (e :: SomeException)
                       return (Just$ show e))
  case x of 
   Nothing -> error "Failed to get an exception!"
   Just s -> 
-   if isInfixOf msg s 
+   if  any (`isInfixOf` s) msgs
    then return () 
-   else error$ "Got the wrong exception, expected to see the text: "++ show msg 
+   else error$ "Got the wrong exception, expected to one of the strings: "++ show msgs
 	       ++ "\nInstead got this exception:\n  " ++ show s
      

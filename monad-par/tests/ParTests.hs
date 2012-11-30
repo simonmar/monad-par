@@ -4,44 +4,54 @@ module ParTests (tests) where
 
 import Control.Monad.Par.Combinator 
 
-import Control.Monad.Par.Scheds.Trace
-import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
+-- import Control.Monad.Par.Scheds.Trace
+-- import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
 
--- import Control.Monad.Par.Scheds.Direct
+import Control.Monad.Par.Scheds.Direct
 
-import Control.Concurrent.Chan
-import Control.Exception 
-import System.IO.Unsafe
-import Data.IORef
-import Test.HUnit
+-- import Control.Concurrent.Chan  ()
+import GHC.Conc (numCapabilities)
+import Control.Exception (evaluate)
+-- import System.IO.Unsafe
+-- import Data.IORef
+import Test.HUnit        (Assertion, (@=?))
 import Test.Framework.TH (testGroupGenerator)
-import Test.Framework (defaultMain, testGroup)
-import Test.Framework.Providers.HUnit
+-- import Test.Framework (defaultMain, testGroup)
+import qualified Test.Framework as TF
+import           Test.Framework.Providers.HUnit 
 -- import Test.Framework.Providers.QuickCheck2 (testProperty)
-import System.Timeout
+import System.Timeout (timeout)
 
-import TestHelpers
+import TestHelpers (assertException, prnt, _prnt, _unsafeio, waste_time, collectOutput)
 
 -- -----------------------------------------------------------------------------
 
 -- Testing
 
-three = (3::Int)
+three :: Int
+three = 3
+
+par :: (Eq a, Show a) => a -> Par a -> Assertion
 par res m = res @=? runPar m
 
+case_justReturn :: Assertion
 case_justReturn = par three (return 3)
+
+case_oneIVar :: Assertion
 case_oneIVar    = par three (do r <- new; put r 3; get r)
 
 
 -- [2012.01.02] Apparently observing divergences here too:
+case_forkNFill :: Assertion
 case_forkNFill  = par three (do r <- new; fork (put r 3); get r)
 
 -- [2012.05.02] The nested Trace implementation sometimes fails to
 -- throw this exception, so we expect either the exception or a
 -- timeout. This is reasonable since we might expect a deadlock in a
 -- non-Trace scheduler. --ACF
+case_getEmpty :: IO ()
 case_getEmpty   = do
-  _ <- timeout 100000 $ assertException "no result" $ 
+  _ <- timeout 100000 $ assertException ["no result", "timeout"] $ 
          runPar $ do r <- new; get r
   return ()
 
@@ -50,6 +60,7 @@ case_getEmpty   = do
 -- master branch with 16 threads:
 -- 
 -- | Simple diamond test.
+case_test_diamond :: Assertion
 case_test_diamond = 9 @=? (m :: Int)
  where 
   m = runPar $ do
@@ -64,7 +75,8 @@ case_test_diamond = 9 @=? (m :: Int)
 --
 -- NOTE: presently observing termination problems here.
 -- runPar is failing to exist after the exception?
-disabled_case_multiput = assertException "multiple put" $ 
+disabled_case_multiput :: IO ()
+disabled_case_multiput = assertException ["multiple put"] $ 
   runPar $ do
    a <- new
    put a (3::Int)
@@ -83,6 +95,7 @@ disabled_case_multiput = assertException "multiple put" $
 --   both :: Par a -> Par a -> Par a
 --   both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
+case_test_pmrr1 :: Assertion
 case_test_pmrr1 = 
    par 5050 $ parMapReduceRangeThresh 1 (InclusiveRange 1 100)
 	        (return) (return `bincomp` (+)) 0
@@ -91,29 +104,46 @@ case_test_pmrr1 =
 
 ------------------------------------------------------------
 
--- Observe the real time ordering of events:
 
--- A D B <pause> C E 
+-- | Observe the real time ordering of events:
+--
+--   Child-stealing:       
+--      A D B <pause> C E
+--       
+--   Parent-stealing:
+--      A B D <pause> C E       
+--
+--   Sequential:
+--      A B <pause> C D E
+--       
+--   This is only for the TRACE scheduler right now.
+case_async_test1 :: IO ()
 case_async_test1 = 
   do x <- res
-     case words x of 
-       ["A","D","B","C",_,"E"] -> return ()
-       _  -> error$ "Bad output: "++ show (words x)
+     case (numCapabilities, words x) of
+       (1,["A","B","C",_,"D","E"])         -> return ()       
+       (n,["A","D","B","C",_,"E"]) | n > 1 -> return ()
+       (n,["A","B","D","C",_,"E"]) | n > 1 -> return ()       
+       _  -> error$ "Bad temporal pattern: "++ show (words x)
  where 
  res = collectOutput $ \ r -> do
   prnt r "A"
   evaluate$ runPar $
-    do 
+    do iv <- new
        fork $ do _prnt r "B"
                  x <- _unsafeio$ waste_time 0.5
 		 _prnt r$ "C "++ show x
 --		 _prnt r$ "C "++ show (_waste_time awhile)
+                 put iv ()
        _prnt r "D"
+       get iv
   prnt r$ "E"
+  
 
 
 
 ------------------------------------------------------------
 
+tests :: [TF.Test]
 tests = [ $(testGroupGenerator) ]
 

@@ -87,7 +87,7 @@ module Control.Monad.Par
  (
   -- * The Par Monad
   Par, 
-  runPar, 
+  runPar, runParIO,
 
   fork,
   -- | forks a computation to happen in parallel.  The forked
@@ -158,7 +158,7 @@ where
 
 -- (0.3) Export 'Par' operators via the generic interface.
 import Control.Monad.Par.Class
-import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
--- import Control.Monad.Par.Scheds.Direct 
+-- import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
+import Control.Monad.Par.Scheds.Direct hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
 
 import Control.Monad.Par.Combinator
