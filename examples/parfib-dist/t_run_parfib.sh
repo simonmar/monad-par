@@ -12,14 +12,16 @@ HOST=`hostname`
 export MACHINE_LIST="$HOST $HOST"
 
 ARGS="tcp 25 1 1"
-OPTS="-N4"
+OPTS="-N2"
 
-./parfib_dist.exe master $ARGS +RTS $OPTS -RTS &
+EXE=dist/build/parfib_dist/parfib_dist
+
+./$EXE master $ARGS +RTS $OPTS -RTS &
 MASTER_PID=$!
 
 sleep 1
 
-./parfib_dist.exe slave $ARGS +RTS $OPTS -RTS &
+./$EXE slave $ARGS +RTS $OPTS -RTS &
 WORKER_PID=$!
 
 wait $MASTER_PID
