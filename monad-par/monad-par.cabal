@@ -19,31 +19,23 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3.1    : fix for ghc 7.6.1, expose Par.IO
 --  0.3.4    : switch to direct scheduler as default
 
-Description:         This library offers an alternative parallel programming
-                     API to that provided by the @parallel@ package.
-
-                     A 'Par' monad allows the simple description of
-                     parallel computations, and can be used to add
-                     parallelism to pure Haskell code.  The basic API
-                     is straightforward: the monad supports forking
-                     and simple communication in terms of 'IVar's.
-
-                     The library comes with a work-stealing
-                     implementation, but the internals are also
-                     exposed so that you can build your own scheduler
-                     if necessary.
-
-
-                     Examples of use can be found in the examples/ directory
-                     of the source package.
-
-
-                     The modules below provide additionaly schedulers,
-                     data structures, and other added capabilities
-                     layered on top of the 'Par' monad.
-
---                       * Finish These
---                       * Module Descriptions
+Description:
+  The 'Par' monad offers a simple API for parallel programming.  The
+  library works for parallelising both pure and @IO@ computations,
+  although only the pure version is deterministic.
+  .
+  For complete documentation see "Control.Monad.Par".
+  .
+  Some examples of use can be found in the @examples/@ directory of
+  the source package.
+  .
+  Other related packages:
+  .
+  * @abstract-par@ provides the type classes that abstract over different
+  implementations of the @Par@ monad.
+  .
+  * @monad-par-extras@ provides some extra combinators layered on top of
+  the @Par@ monad.
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
