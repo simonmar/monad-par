@@ -8,26 +8,15 @@ Synopsis:            Type classes generalizing the functionality of the 'monad-p
 --  0.3      : Factored out of monad-par package.
 --  0.3.1    : Relax deepseq restriction
 
-
-Description:         The 'Par' monad(s) offer an alternative 
-                     parallel programming API to that provided by the 
-                     @parallel@ package.
-
-                     A 'Par' monad allows the simple description of
-                     parallel computations, and can be used to add
-                     parallelism to pure Haskell code.  The basic API
-                     is straightforward: a @Par@ monad supports forking
-                     and simple communication in terms of 'IVar's.
-
-                     This module is an interface module only. It
-                     provides a number of type clasess, but not an
-                     implementation.  The type classes separate different 
-                     levels of @Par@ functionality.  See the 
-                     "Control.Monad.Par.Class" module for more details.
-
-                     The 'monad-par' library is one example of a
-                     concrete library providing this interface.
-
+Description:
+  The 'Par' monad offers a parallel programming API based on dataflow
+  programming.  To use the `Par` monad, install the @monad-par@
+  package, which includes this package as a dependency.
+  .
+  This package is an abstract interface only. It provides a number of
+  type clasess, but not an implementation.  The type classes separate
+  different levels of @Par@ functionality.  See the
+  "Control.Monad.Par.Class" module for more details.
 
 Homepage:            https://github.com/simonmar/monad-par
 License:             BSD3
@@ -45,11 +34,11 @@ extra-source-files:
 
 Library
   Exposed-modules: 
-                 -- A class generalizing different levels of monad-par functionality:
-                   Control.Monad.Par.Class
+           -- A class generalizing different levels of monad-par functionality:
+           Control.Monad.Par.Class
 
-                 -- A class providing unsafe functionality:
-                 , Control.Monad.Par.Unsafe
+           -- A class providing unsafe functionality:
+           , Control.Monad.Par.Unsafe
 
   Build-depends: base >= 4 && < 5
                , deepseq >= 1.1
