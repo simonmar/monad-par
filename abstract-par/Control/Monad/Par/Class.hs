@@ -4,21 +4,22 @@
 -- UndecidableInstances
 
 {-|
-
     This module establishes a class hierarchy that captures the
-    interface(s) for valid Par monads.  In particular, the functionality
-    is split into layers: e.g. Futures vs. full IVars vs. Chans (Streams).  
-    
-    Not all Par monad schedulers must provide all functionality.
+    interfaces of @Par@ monads.  There are two layers: simple futures
+    ('ParFuture') and full @IVars@ ('ParIVar').  All @Par@ monads are
+    expected to implement the former, some also implement the latter.
 
     For more documentation of the programming model, see  
 
-      * The "Control.Monad.Par" module in the @monad-par@ package.
-      * The wiki/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
-      * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
-      * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
-      * Other slides: <http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>, 
-                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>
+    * The "Control.Monad.Par" module in the @monad-par@ package.
+
+    * The wiki\/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
+
+    * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
+
+    * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
+
+    * Other slides (<http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>, <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>)
 
  -}
 --  
@@ -63,6 +64,8 @@ class Monad m => ParFuture future m | m -> future where
   
   -- | Like 'spawn', but the result is only head-strict, not fully-strict.
   spawn_ :: m a -> m (future a)
+
+  -- | Wait for the result of a future, and then return it.
   get    :: future a -> m a
 
   -- | Spawn a pure (rather than monadic) computation.  Fully-strict.

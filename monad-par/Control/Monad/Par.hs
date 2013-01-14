@@ -1,16 +1,13 @@
 
-{-| (NOTE: This module reexports a default Par scheduler.  A generic
-    interface can be found in "Control.Monad.Par.Class" and other
-    schedulers, sometimes with different capabilities, can be found in
-    "Control.Monad.Par.Scheds".)
+{-|
 
-  The @monad-par@ package provides a family of @Par@ monads, for speeding up pure
-  computations using parallel processors.  They cannot be used for
-  speeding up computations that use IO (for that, see
-  @Control.Concurrent@).  The result of a given @Par@ computation is
-  always the same - ie. it is deterministic, but the computation may
-  be performed more quickly if there are processors available to
-  share the work.
+  The @monad-par@ package provides a family of @Par@ monads, for
+  speeding up pure computations using parallel processors.  (for a similar
+  programming model for use with @IO@, see "Control.Monad.Par.IO".)
+
+  The result of a given @Par@ computation is always the same - i.e. it
+  is deterministic, but the computation may be performed more quickly
+  if there are processors available to share the work.
 
   For example, the following program fragment computes the values of
   @(f x)@ and @(g x)@ in parallel, and returns a pair of their results:
@@ -69,17 +66,27 @@
   parallel work are only created by @fork@ and a few other
   combinators.
 
-  The implementation is based on a work-stealing scheduler that
-  divides the work as evenly as possible between the available
-  processors at runtime.
+  The default implementation is based on a work-stealing scheduler
+  that divides the work as evenly as possible between the available
+  processors at runtime.  Other schedulers are available that are
+  based on different policies and have different performance
+  characteristics.  To use one of these other schedulers, just import
+  its module instead of "Control.Monad.Par":
+
+  * "Control.Monad.Par.Scheds.Trace"
+
+  * "Control.Monad.Par.Scheds.Sparks"
 
   For more information on the programming model, please see these sources:
 
-      * The wiki/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
+      * The wiki\/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
+
       * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
+
       * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
-      * Other slides: <http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>, 
-                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>
+
+      * Other slides: (<http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>,
+                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>)
 
  -}
 
