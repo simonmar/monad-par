@@ -400,7 +400,7 @@ makeScheds main = do
                              activeSessions=activeSessions,
                              sessionCounter=sessionCounter
 			   }
-                   -- | (x,wp,rng,stck) <- zip4 [0..] workpools rngs sessionStacks
+                   --  | (x,wp,rng,stck) <- zip4 [0..] workpools rngs sessionStacks
                    | x   <- [0 .. numCapabilities-1]
                    | wp  <- workpools
                    | rng <- rngs

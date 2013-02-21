@@ -163,9 +163,7 @@ module Control.Monad.Par
  )
 where 
 
--- (0.3) Export 'Par' operators via the generic interface.
-import Control.Monad.Par.Class
--- import Control.Monad.Par.Scheds.Trace hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
-import Control.Monad.Par.Scheds.Direct hiding (spawn_, spawn, spawnP, put, get, new, newFull, fork, put_, newFull_)
-
+import Control.Monad.Par.Class hiding ( spawn, spawn_, spawnP, put, put_
+                                      , get, newFull, new, fork, newFull_ )
+import Control.Monad.Par.Scheds.Direct
 import Control.Monad.Par.Combinator
