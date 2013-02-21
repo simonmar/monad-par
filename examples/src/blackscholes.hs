@@ -115,7 +115,7 @@ blkSchlsEqEuroNoDiv sptprice strike rate volatility time otype timet =
 
 --------------------------------------------------------------------------------
 
-
+-- `t` is the index for the (starting) option we must compute
 computeSegment :: Int -> Int -> U.UArray Int FpType
 computeSegment granularity t = arr
  where 
@@ -129,7 +129,9 @@ computeSegment granularity t = arr
 -- No need to go deeper here because its unboxed, right?
 instance NFData (U.UArray Int FpType) where
 
-main = do args <- getArgs 
+main = do args <- getArgs
+          -- How many [stock] options shall we run through the algorithm, and in
+          -- chunks of what granularity?
           let (numOptions, granularity) =
                case args of 
   	         []      -> (10000, 1000)
@@ -137,7 +139,7 @@ main = do args <- getArgs
 	         [b,n] -> (read n, read b)
 
           if granularity > numOptions
-	   then error "Granularity must be bigger than numOptions!!"
+	   then error "Granularity must be smaller than numOptions!!"
 	   else return ()
 
 	  putStrLn$ "Running blackscholes, numOptions "++ show numOptions ++ " and block size " ++ show granularity

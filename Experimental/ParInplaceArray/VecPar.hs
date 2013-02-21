@@ -3,6 +3,10 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE Rank2Types #-}
 
+-- | This file provides a basic capability for parallel in-place
+-- modification of (disjoint) partitions of an array.  It allows
+-- mutation via arbitrary `ST` computations.
+
 module VecPar
        (ParVec, runParVec, forkWithVec, liftST, getParVec, initParVec)
        where
