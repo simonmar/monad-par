@@ -61,6 +61,7 @@ import Prelude hiding (null)
 import qualified Prelude
 
 #if __GLASGOW_HASKELL__ <= 700
+import GHC.Conc (forkOnIO)
 forkOn = forkOnIO
 #endif
 
