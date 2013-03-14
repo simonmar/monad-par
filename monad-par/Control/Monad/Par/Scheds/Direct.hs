@@ -60,6 +60,10 @@ import qualified Control.Exception as E
 import Prelude hiding (null)
 import qualified Prelude
 
+#if __GLASGOW_HASKELL__ <= 700
+forkOn = forkOnIO
+#endif
+
 --------------------------------------------------------------------------------
 -- Configuration Toggles
 --------------------------------------------------------------------------------
