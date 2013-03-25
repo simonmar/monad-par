@@ -16,11 +16,15 @@ import Control.Exception (evaluate)
 import System.Environment
 import qualified Control.Monad.State.Strict as S 
 import qualified Data.ByteString.Char8 as BS
-
-import Control.Monad.Par.Scheds.Direct (Par, spawn_, get, runPar)
-import Control.Monad.Par.Unsafe
 import System.IO.Unsafe (unsafePerformIO)
 import Control.Concurrent (yield)
+
+
+-- import Control.Monad.Par.Scheds.Direct (Par, spawn_, get, runPar)
+-- import Control.Monad.Par.Unsafe ()
+-- import Control.Monad.Par.IO (ParIO, spawn_, get, runPar)
+-- type Par = ParIO
+import Control.Monad.Par (Par, spawn_, get, runPar)
 
 -- Compute sum_n(1/n)
 work :: Int -> Int -> Double -> Double
@@ -59,11 +63,18 @@ runit total partitions = evaluate $ runPar $
         return res
 
 prnt :: String -> Par ()
-prnt = io . BS.putStrLn . BS.pack 
+prnt str = trace str $ return ()
 
--- io :: IO a -> Par a
-io :: ParUnsafe p iv => IO a -> p a
-io act = unsafeParIO act
+io :: IO a -> Par a
+io act = let x = unsafePerformIO act in 
+         seq x (return x)
+
+-- prnt :: String -> Par ()
+-- prnt = io . BS.putStrLn . BS.pack 
+
+-- -- io :: IO a -> Par a
+-- io :: ParUnsafe p iv => IO a -> p a
+-- io act = unsafeParIO act
 
 main = do args <- getArgs 
 	  case args of 
