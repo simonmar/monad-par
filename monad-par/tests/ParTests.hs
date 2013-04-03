@@ -117,8 +117,12 @@ case_test_pmrr1 =
 --      A B <pause> C D E
 --       
 --   This is only for the TRACE scheduler right now.
-case_async_test1 :: IO ()
-case_async_test1 = 
+--
+-- This test is DISABLED because it fails unless you run with +RTS -N2
+-- or greater.
+--
+disabled_case_async_test1 :: IO ()
+disabled_case_async_test1 =
   do x <- res
      case (numCapabilities, words x) of
        (1,["A","B","C",_,"D","E"])         -> return ()       
