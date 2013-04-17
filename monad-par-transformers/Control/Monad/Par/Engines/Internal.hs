@@ -1,15 +1,24 @@
 {-# LANGUAGE NamedFieldPuns, ScopedTypeVariables, BangPatterns #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
+-- {-# LANGUAGE TypeSynonymInstances #-}
 {-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
 
 -- | Parallel Engines (integrated engines and futures)
 
 --------------------------------------------------------------------------------
 module Control.Monad.Par.Engines.Internal
+       (Fuel, ParEng,
+        runEng, contEng, 
+        spawnEng, getE, fuelLeft, tick
+       )
        where
 
 -- import Data.Word
 -- import Data.IntMap as M
 import qualified Control.Monad.Par as P
+
+import qualified Control.Monad.Par.Class as PC
 import Control.Monad.State.Strict
 -- import Control.Monad.Identity
 -- import Debug.Trace
@@ -33,8 +42,10 @@ type Fuel = Int
 
 -- | A `ParEng` computation has both parallelism and finite fuel.
 --
-type ParEng a = StateT (EngState) P.Par a
-
+-- type ParEng a = StateT (EngState) P.Par a
+newtype ParEng a = ParEng { unEng :: StateT (EngState) P.Par a } 
+  deriving (Monad)
+           
 data EngState =
   EngState
   { startFuel :: Fuel
@@ -103,10 +114,24 @@ data FutureResult a = FutureReady   !(P.IVar a)
 -- Implementation
 --------------------------------------------------------------------------------
 
+instance PC.ParFuture EngFuture ParEng where
+  spawn_ (x::ParEng a) = do
+    curFuel <- fuelLeft
+    let (q,r) = curFuel `quotRem` 2
+        fuel  = q+r
+    fut <- spawnEng fuel x
+    -- tick fuel
+    ParEng$ modify $ \ st -> st{ curFuel= q+1 }
+    tick
+    return fut
+  get = getE 
+--     undefined
+  
+
 -- | Running an engine either completes or returns a new engine with the remaining work.
 --   The returned engine may represent not just one, but many threads suspended.
 runEng :: Fuel -> ParEng a -> P.Par (EngResult a)
-runEng fuel eng = do
+runEng fuel (ParEng eng) = do
   iv  <- P.new
   res <- P.new
   let wrapped = do z <- eng;
@@ -145,13 +170,6 @@ contEng newfuel (EngStalled mainchld res allchlds) = do
   -- SIMPLEST POLICY, everyone gets at least ONE tick:
   let len = length activeChlds
       (q,r) = newfuel `quotRem` (len + 1)
-  --     loop2 _  [] = return ()
-  --     loop2 !ix (hd : tl) = do
-  --       let fuel = max 1 (q + if ix < r then 1 else 0)
-  --       P.put_ hd (Restart fuel nxt)
-  --       loop2 (ix+1) tl
-  -- loop2 0 activeChlds
-
       loop2 _  [] = return ()
       loop2 !ix (hd : tl) = do
         let fuel = max 1 (q + if ix < r then 1 else 0)
@@ -173,7 +191,7 @@ contEng newfuel (EngStalled mainchld res allchlds) = do
 
 -- | How much fuel is remaining for use by the current thread.
 fuelLeft :: ParEng Fuel
-fuelLeft = fmap curFuel get
+fuelLeft = ParEng$ fmap curFuel get
 
 -- | Fork a parallel child-engine.
 -- 
@@ -185,7 +203,7 @@ fuelLeft = fmap curFuel get
 -- current fuel level is less than the requested amount, all the remaining fuel is
 -- used, but no exception is thrown.
 spawnEng :: forall a . Fuel -> ParEng a -> ParEng (EngFuture a)
-spawnEng fuel eng = do
+spawnEng fuel (ParEng eng) = ParEng $ do
   EngState{curFuel=ours, children} <- get
   let ours2  = max 0 (ours - fuel)
       theirs = ours - ours2
@@ -233,15 +251,15 @@ spawnEng fuel eng = do
 
 -- | Use a unit of fuel.  This may cause us to run out and terminate.
 tick :: ParEng ()
-tick = do
+tick = ParEng $ do
   EngState { startFuel, curFuel, parent} <- get
   if curFuel > 0 then
     put (EngState startFuel (curFuel-1) parent [])
-   else yield
+   else unEng yield
 
 -- | Report to the parent computation that we could not continue.  
 yield :: ParEng ()
-yield = do
+yield = ParEng$ do
   EngState {parent, children} <- get  
   -- Here we bounce control back to the whomever is running the engine or waiting
   -- on the result.  We only resume when we are given more fuel.  
@@ -256,7 +274,7 @@ yield = do
 -- | Get the final result of a spawned engine.  Block until the child computation has
 -- either completed or run out of fuel and stalled.
 getE :: forall a . EngFuture a -> ParEng a
-getE (EngFuture iv) = do
+getE (EngFuture iv) = ParEng $ do
   -- If we use a raw P.get here, then we will block without reporting in to our
   -- parent.  
   res <- lift$ P.get iv
@@ -266,4 +284,9 @@ getE (EngFuture iv) = do
     -- computation.  We COULD spend our fuel trying to complete it, before ourselves
     -- yielding.  But we might be racing with someone else to restart it, so for now
     -- we just yield ourselves, discarding what remains of our fuel.
-    FutureStalled iv2 -> do yield; getE (EngFuture iv2)
+    FutureStalled iv2 -> do unEng yield; unEng$ getE (EngFuture iv2)
+
+
+
+
+-- t0 = 
