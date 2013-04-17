@@ -120,9 +120,7 @@ instance PC.ParFuture EngFuture ParEng where
     let (q,r) = curFuel `quotRem` 2
         fuel  = q+r
     fut <- spawnEng fuel x
-    -- tick fuel
-    ParEng$ modify $ \ st -> st{ curFuel= q+1 }
-    tick
+    tick fuel
     return fut
   get = getE 
 --     undefined
@@ -249,13 +247,16 @@ spawnEng fuel (ParEng eng) = ParEng $ do
         
   return (EngFuture ans)
 
--- | Use a unit of fuel.  This may cause us to run out and terminate.
-tick :: ParEng ()
-tick = ParEng $ do
-  EngState { startFuel, curFuel, parent} <- get
-  if curFuel > 0 then
-    put (EngState startFuel (curFuel-1) parent [])
-   else unEng yield
+-- | Use N units of fuel.  This may cause us to run out and terminate.  The engine
+-- will not, however, go into \"debt\".  If the argument to `tick` is greater than
+-- the remaining fuel, the fuel goes to zero.
+tick :: Fuel -> ParEng ()
+tick decr = ParEng $ do
+  st0 <- get
+  let newfl = max 0 (curFuel st0 - decr)
+  put $ st0{curFuel=newfl}
+  when (newfl <= 0) $ 
+     unEng yield
 
 -- | Report to the parent computation that we could not continue.  
 yield :: ParEng ()
@@ -287,6 +288,8 @@ getE (EngFuture iv) = ParEng $ do
     FutureStalled iv2 -> do unEng yield; unEng$ getE (EngFuture iv2)
 
 
-
+--------------------------------------------------------------------------------
+-- Tests:
 
 -- t0 = 
+
