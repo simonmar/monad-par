@@ -53,3 +53,24 @@ Library
 
   ghc-options: -O2
   Other-modules:
+
+
+
+Test-Suite test-monad-par-transformers
+    type:       exitcode-stdio-1.0
+    main-is:    Test.hs
+    ghc-options: -rtsopts -threaded
+    build-depends: base >= 4 && < 5
+                 , abstract-par, monad-par-extras
+                 , monad-par >= 0.3 
+                 , array   >= 0.3
+                 , deepseq >= 1.2
+                 , time
+                 , QuickCheck, HUnit
+                 , test-framework-hunit, test-framework-quickcheck2
+                 , test-framework, test-framework-th
+
+                 , abstract-deque >= 0.1.4
+                 , mwc-random >= 0.11
+                 , mtl >= 2.0.1.0
+                 , containers

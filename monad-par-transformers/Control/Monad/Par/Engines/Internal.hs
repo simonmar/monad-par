@@ -6,6 +6,12 @@
 
 -- | Parallel Engines (integrated engines and futures)
 
+-- TODO: The ideal would probably be for each child thread to have a state that the
+-- parent can check upon sync and decide whether to cancel or continue that child
+-- engine in the next round.
+
+-- TODO: A memoized Par computation would be safe and perhaps useful here.
+
 --------------------------------------------------------------------------------
 module Control.Monad.Par.Engines.Internal
        (Fuel, ParEng,
@@ -20,14 +26,8 @@ import qualified Control.Monad.Par as P
 
 import qualified Control.Monad.Par.Class as PC
 import Control.Monad.State.Strict
--- import Control.Monad.Identity
--- import Debug.Trace
 
--- TODO: The ideal would probably be for each child thread to have a state that the
--- parent can check upon sync and decide whether to cancel or continue that child
--- engine in the next round.
-
--- TODO: A memoized Par computation would be safe and perhaps useful here.
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- Types
@@ -133,12 +133,16 @@ runEng fuel (ParEng eng) = do
   iv  <- P.new
   res <- P.new
   let wrapped = do z <- eng;
+                   EngState{parent=OutStanding ivp2,children} <- get
+                   lift$ P.put_ ivp2 (Finished children)
                    lift$ P.put_ res z;
                    return ()
   -- In this case the 'runEng' itself is a sort of parent to the engine:
   ((), _finState) <- runStateT wrapped
                               (EngState fuel fuel (OutStanding iv) [])
+  trace (" ... Done with runStateT, next wait for child checkin..") $ return ()
   x <- P.get iv
+  trace (" ... Got child checkin..") $ return ()  
   case x of
     Finished newchld       -> return (Right (res, newchld))
     FuelExhausted iv2 chld -> return (Left$ EngStalled iv2 res chld)
@@ -287,9 +291,6 @@ getE (EngFuture iv) = ParEng $ do
     -- we just yield ourselves, discarding what remains of our fuel.
     FutureStalled iv2 -> do unEng yield; unEng$ getE (EngFuture iv2)
 
-
 --------------------------------------------------------------------------------
 -- Tests:
-
--- t0 = 
 
