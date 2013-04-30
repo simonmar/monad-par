@@ -841,9 +841,10 @@ busyTakeMVar :: String -> MVar a -> IO a
 busyTakeMVar msg mv = try (10 * 1000 * 1000)
  where 
  try 0 = do 
-   tid <- myThreadId
-   -- After we've failed enough times, start complaining:
-   printf "%s not getting anywhere, msg: %s\n" (show tid) msg  
+   when dbg $ do
+     tid <- myThreadId
+     -- After we've failed enough times, start complaining:
+     printf "%s not getting anywhere, msg: %s\n" (show tid) msg
    try (100 * 1000)
  try n = do
    x <- tryTakeMVar mv
