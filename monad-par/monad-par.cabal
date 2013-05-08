@@ -145,7 +145,8 @@ Test-Suite test-monad-par
                  , deepseq >= 1.2
                  , time
                  , QuickCheck, HUnit
-                 , test-framework-hunit, test-framework-quickcheck2
+                 , test-framework-hunit
+                 , test-framework-quickcheck2 >= 0.3 
                  , test-framework, test-framework-th
 
                  , abstract-deque >= 0.1.4
