@@ -15,7 +15,7 @@ OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
 # meta-par-cuda/
 
 # Third party dependency: concurrent data structures
-DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ 
+# DEQUE_PKGS= Deques/CAS/ Deques/AbstractDeque/ Deques/MichaelScott/ 
 #  Deques/ChaseLev/ Deques/MegaDeque/ 
 
 # Third party dependency: network-transport layer
@@ -25,10 +25,16 @@ NETWORK_PKGS=   RPC/ meta-par-dist-tcp/
 #  distributed-process/network-transport-pipes/
 
 # Third party dependency: Accelerate
-ACC_PKGS= accelerate/ abstract-par-accelerate/ meta-par-accelerate/
+ACC_PKGS= abstract-par-accelerate/ meta-par-accelerate/
+# accelerate/ 
 # accelerate/accelerate-io/
 # All of the above can work CPU-only.  The following really requires CUDA:
 ACC_GPU_PKGS= accelerate/accelerate-cuda/ 
+
+ifneq ($(GHC_VER),)
+  GHC=ghc-$(GHC_VER)
+  GHC_PKG=ghc-pkg-$(GHC_VER)
+endif
 
 ifeq ($(GHC),)
   GHC=`which ghc`
@@ -48,7 +54,7 @@ ifeq ($(CABAL),)
 endif
 
 ifeq ($(CABAL_ARGS),)
-	CABAL_ARGS=--force-reinstalls
+  CABAL_ARGS=--force-reinstalls
 endif
 
 CABAL_INSTALL= ${CABAL} install --with-ghc=${GHC} --with-ghc-pkg=${GHC_PKG} \
@@ -70,7 +76,7 @@ install-ours:
 	${CABAL_INSTALL} ${OUR_PKGS}
 
 # Install ours plus third-party queue and accelerate dependencies:
-MAIN_PKGS= ${DEQUE_PKGS} ${ACC_PKGS} ${OUR_PKGS} 
+MAIN_PKGS= ${ACC_PKGS} ${OUR_PKGS} 
 mega-install:  check-submodules
 	${CABAL_INSTALL} ${MAIN_PKGS} 
 
@@ -121,7 +127,7 @@ uninstall:
 
 # The short way.  Install everything and test at the same time.
 test:
-	$(MAKE) mega-install CABAL_ARGS='--enable-tests --disable-documentation'
+	$(MAKE) mega-install CABAL_ARGS='--enable-tests --disable-documentation --force-reinstalls'
 
 # The longer way.  Run a full test uses cabal-dev to sandbox the build.
 validate: 
