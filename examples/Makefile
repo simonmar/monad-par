@@ -57,7 +57,7 @@ else
   MAINDEVDIR=..\\cabal-dev
 endif
 
-validate: monad-par-examples.cabal deps
+validate: monad-par-examples.cabal 
 	$(MAKE) $(BUILDCMD)
 
 # This is just like a regular test but with cabal-dev.
