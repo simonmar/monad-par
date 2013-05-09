@@ -3,6 +3,7 @@
 # fingers are in the habit of typing "make".
 
 # Run "make install" in the parent directory before using the below:
+#================================================================================
 
 ifeq ($(GHC),)
   GHC=`which ghc`
@@ -20,19 +21,18 @@ clean:
 	rm -rf bin *.hi *.o *.exe
 	$(CABAL) clean || echo 
 
-distclean: clean
-	rm -f benchmark.run
 
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
 # But right now it's SOO much faster than using cabal that it's nice to have around:
-test: benchmark.run deps
+test: hsbencher deps
         # Building with no cabal should put the same executables in the same
         # places as building with cabal:
-	SHORTRUN=1 THREADS="1" ./benchmark.run --par --no-cabal +RTS -N
+	SHORTRUN=1 THREADS="1" hsbencher --par --no-cabal +RTS -N
 
-benchmark.run: benchmark.hs
-	ghc -rtsopts -threaded --make benchmark.hs -o benchmark.run
+# This is a dependency but isn't yet published to hackage [2013.05.09]
+hsbencher:
+	$(CABAL) install ../HSBenchScaling/
 
 monad-par-examples.cabal:
 	./generate_cabal.sh
@@ -65,9 +65,9 @@ validate: monad-par-examples.cabal
 #	$(MAKE) CABAL=$(CBLDEV) test
 
 # OR... we could build through cabal and forgo parallelism:
-linValidate: benchmark.run monad-par-examples.cabal
+linValidate: hsbencher monad-par-examples.cabal
 	$(MAKE) CABAL=$(CBLDEV) deps
-	SHORTRUN=1 THREADS="1" ./benchmark.run 
+	SHORTRUN=1 THREADS="1" hsbencher
 
 # --------------------------------------------------
 # Hacks to build on Windows:
@@ -95,11 +95,6 @@ sparksvers:
 
 # Should be able to get make -j parallelism here:
 allvers: tracevers directvers smpvers sparksvers
-
-# temphack:
-# 	./generate_cabal.sh
-# 	$(CBLDEV) --only-dependencies
-# 	$(MAKE) -j allvers
 
 
 # TEMP: A cheap way to run everything for a quick test without having to

@@ -89,7 +89,7 @@ mega-install-cuda: check-submodules
 	${CABAL_INSTALL} -fcuda ${MAIN_PKGS} ${ACC_GPU_PKGS}
 
 check-submodules:
-	@if [ ! -f ./Deques/README.md ]; then echo "!!ERROR: submodule missing.  You need to run 'git submodule update --init --recursive'! "; exit 1; fi 
+	@if [ ! -f ./bench_results/README.md ]; then echo "!!ERROR: submodule missing.  You need to run 'git submodule update --init --recursive'! "; exit 1; fi 
 
 # For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:
 jenkins-all-versions:
