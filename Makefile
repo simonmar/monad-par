@@ -10,7 +10,7 @@
 
 # The packages unique to this repository, not including third-party
 # dependencies (submodules).
-OUR_PKGS= abstract-par/ monad-par-extras/ monad-par/ meta-par/
+OUR_PKGS= HSBenchScaling/ abstract-par/ monad-par-extras/ monad-par/ meta-par/
 # Direct CUDA support isn't really meant to be distributed:
 # meta-par-cuda/
 
