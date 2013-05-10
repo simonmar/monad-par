@@ -23,7 +23,13 @@ clean:
 
 
 # We don't know whether this will be cabal install'd or cabal-dev installed:
-HSBENCHER=../HSBenchScaling/dist/build/HSBencher/hsbencher
+# HSBENCHER=../HSBenchScaling/dist/build/HSBencher/hsbencher
+# UPDATE [2013.05.10]: Assume it's in the global path:
+HSBENCHER=hsbencher
+
+# This is a dependency but isn't yet published to hackage [2013.05.09]
+hsbencher:
+#	(cd ..; $(CABAL) install ./HSBenchScaling/)
 
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
@@ -32,10 +38,6 @@ test: hsbencher deps
         # Building with no cabal should put the same executables in the same
         # places as building with cabal:
 	SHORTRUN=1 THREADS="1" $(HSBENCHER) --par --no-cabal +RTS -N
-
-# This is a dependency but isn't yet published to hackage [2013.05.09]
-hsbencher:
-	(cd ..; $(CABAL) install ./HSBenchScaling/)
 
 monad-par-examples.cabal:
 	./generate_cabal.sh
