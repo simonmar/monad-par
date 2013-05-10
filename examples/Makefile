@@ -22,17 +22,20 @@ clean:
 	$(CABAL) clean || echo 
 
 
+# We don't know whether this will be cabal install'd or cabal-dev installed:
+HSBENCHER=../HSBenchScaling/dist/build/HSBencher/hsbencher
+
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
 # But right now it's SOO much faster than using cabal that it's nice to have around:
 test: hsbencher deps
         # Building with no cabal should put the same executables in the same
         # places as building with cabal:
-	SHORTRUN=1 THREADS="1" hsbencher --par --no-cabal +RTS -N
+	SHORTRUN=1 THREADS="1" $(HSBENCHER) --par --no-cabal +RTS -N
 
 # This is a dependency but isn't yet published to hackage [2013.05.09]
 hsbencher:
-	$(CABAL) install ../HSBenchScaling/
+	(cd ..; $(CABAL) install ./HSBenchScaling/)
 
 monad-par-examples.cabal:
 	./generate_cabal.sh
@@ -67,7 +70,7 @@ validate: monad-par-examples.cabal
 # OR... we could build through cabal and forgo parallelism:
 linValidate: hsbencher monad-par-examples.cabal
 	$(MAKE) CABAL=$(CBLDEV) deps
-	SHORTRUN=1 THREADS="1" hsbencher
+	SHORTRUN=1 THREADS="1" $(HSBENCHER)
 
 # --------------------------------------------------
 # Hacks to build on Windows:
