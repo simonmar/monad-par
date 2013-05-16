@@ -621,6 +621,91 @@ Also, don't forget to list "OtherModules" to avoid this:
 
 
 
+[2013.05] {Simon Marlow's Notes about possible nested implementation}
+---------------------------------------------------------------------
+
+Problem scenarios:
+
+runPar $ do
+  let x = runPar $ ...
+  fork (.. x ..)
+  .. x ..
+
+In "let x = runPar $ ...", while the runPar is executing, x is a
+blackhole.  We must ensure that there is a thread making progress on x
+at all times, otherwise we may get a deadlock, because other siblings
+of this computation may depend on x.
+
+So, the thread that evaluates runPar gains a new constraint: it can
+only work on stuff below this runPar.  The other workers can continue
+to work on any work items they like.
+
+How do we know what is "below this runPar"?  A linear depth measure
+won't do, because there might be a tree of runPars.  The easy solution
+is just to assign each runPar a UID, and say that the leader can only
+work on items from this UID.
+
+In general, we have a forest of runPars:
+
+           A       F
+          / \     / \
+         B   C   G   H
+        / \
+       D   E
+
+Where A gave rise to B and C, B gave rise to D and E.  F was a
+completely separate runPar called by a different thread.
+
+The worker that starts on A can work on anything from [A-E], but not
+[F-H].  All of [A-E] are required by A.  Similarly the leader for B
+can only work on [B,D,E], and the leader for F can only work on
+[F,G,H].
+
+Should the leader for A only work on A itself?  That would be bad,
+because A might run out of work while all the action is in its
+children, and we want to be able to use all our cores there.
+
+
+We want to have a fixed number of workers at all times.  So we have a
+fixed number of Scheds:
+
+data Sched = Sched
+    { no       :: Int,
+      thread   :: ThreadId,
+      workpool :: IORef (Map UID [Trace]),
+      idle     :: IORef [MVar Bool],
+      scheds   :: [Sched] -- Global list of all per-thread workers.
+    }
+
+We need a global containing the current UID.
+
+When stealing, if the current worker is a leader, it steals only from
+its UID.  Otherwise, it can steal from any UID.
+
+When a thread enters runPar, either:
+
+  - it is already a worker, in which case we want to create a new UID
+    for this runPar, and dive directly into the scheduler, as a leader
+    on this UID.
+
+  - it is not a worker. What do we do here?  Can we hand off to one of
+    the existing workers?  But then the target worker must become a
+    leader.  What if it was already a leader? Then we can't hand off
+    to it, because it has an important job to do.
+
+    Plan:
+      - grab a new UID for this runPar
+      - make an MVar to hold the result
+      - make a work item containing the whole runPar, that puts its result
+        in the MVar when done
+      - put the work item on one of the work queues.
+      - wait on the MVar.
+
+    A leader won't take it up, because it is a different UID.  As soon
+    as there are free resources it will be executed, and will
+    eventually wake up the original thread that called runPar.
+
+
 
 
 
