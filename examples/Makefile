@@ -11,6 +11,10 @@ endif
 ifeq ($(CABAL),)
   CABAL= cabal
 endif
+ifeq ($(CABALDEV),)
+  CABALDEV= cabal-dev
+endif
+
 
 all: test
 
@@ -50,7 +54,7 @@ deps: monad-par-examples.cabal
 # Validation / regression testing:
 
 # "Validation" uses cabal-dev for isolation:
-CBLDEV=	cabal-dev install -s $(MAINDEVDIR)
+CBLDEV="$CABALDEV install -s $(MAINDEVDIR)"
 BIN="../cabal-dev/bin/"
 
 # BAD way to check for Windows:
@@ -71,8 +75,8 @@ validate: monad-par-examples.cabal
 
 # OR... we could build through cabal and forgo parallelism:
 linValidate: hsbencher monad-par-examples.cabal
-	$(MAKE) CABAL=$(CBLDEV) deps
-	SHORTRUN=1 THREADS="1" $(HSBENCHER)
+	$(MAKE) CABAL="$(CBLDEV)" deps
+	SHORTRUN=1 THREADS="1" $(HSBENCHER) --with-cabal-install="$(CBLDEV)" --with-ghc="$(GHC)"
 
 # --------------------------------------------------
 # Hacks to build on Windows:
