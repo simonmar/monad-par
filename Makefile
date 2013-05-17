@@ -138,7 +138,7 @@ test:
 # The longer way.  Run a full test uses cabal-dev to sandbox the build.
 validate: 
 	$(MAKE) mega-install CABAL='$(CABALDEV)' CABAL_ARGS='$(CABAL_ARGS) --disable-library-profiling --enable-tests --disable-documentation --force-reinstalls'
-	(cd examples; $(MAKE) validate)
+	(cd examples; $(MAKE) validate CABALDEV='$(CABALDEV)')
 
 # --------------------------------------------------------------------------------
 # Build the Documentation 
