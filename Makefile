@@ -54,6 +54,11 @@ ifeq ($(CABAL),)
   CABAL= cabal
 endif
 
+ifeq ($(CABALDEV),)
+  CABALDEV= cabal-dev
+endif
+
+
 ifeq ($(CABAL_ARGS),)
   CABAL_ARGS=--force-reinstalls
 endif
@@ -131,17 +136,9 @@ test:
 	$(MAKE) mega-install CABAL_ARGS='--enable-tests --disable-documentation --force-reinstalls'
 
 # The longer way.  Run a full test uses cabal-dev to sandbox the build.
-validate: 
-	$(MAKE) mega-install CABAL='cabal-dev' CABAL_ARGS='$(CABAL_ARGS) --disable-library-profiling --enable-tests --disable-documentation --force-reinstalls'
-	(cd examples; $(MAKE) validate)
-# force-reinstalls
-# SANDBOX=`pwd`/cabal-dev
-# pushd monad-par
-# cabal-dev -s $SANDBOX configure --with-ghc=$GHC --with-ghc-pkg=$GHC_PKG --enable-tests
-# cabal-dev -s $SANDBOX build
-# cabal-dev -s $SANDBOX test --test-options='--jxml=dist/test/$test-suite.xml'
-# popd
 
+	$(MAKE) mega-install CABAL='$(CABALDEV)' CABAL_ARGS='$(CABAL_ARGS) --disable-library-profiling --enable-tests --disable-documentation --force-reinstalls'
+	(cd examples; $(MAKE) validate)
 
 # --------------------------------------------------------------------------------
 # Build the Documentation 
