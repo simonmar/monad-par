@@ -47,14 +47,13 @@ monad-par-examples.cabal:
 	./generate_cabal.sh
 
 deps: monad-par-examples.cabal
-	$(CABAL) install --only-dependencies
-
+	$(CABAL) install --only-dependencies --disable-library-profiling --enable-tests --disable-documentation -j
 
 #================================================================================
 # Validation / regression testing:
 
 # "Validation" uses cabal-dev for isolation:
-CBLDEV="$CABALDEV install -s $(MAINDEVDIR)"
+CBLDEV=$(CABALDEV) -s $(MAINDEVDIR)
 BIN="../cabal-dev/bin/"
 
 # BAD way to check for Windows:
@@ -91,16 +90,16 @@ winValidate: allvers
         # No way to run Sparks version with this little hack.
 
 tracevers:
-	$(CBLDEV) -ftrace    --program-suffix=_Trace_threaded.exe 
+	$(CBLDEV) install --flags="-ftrace"    --program-suffix=_Trace_threaded.exe 
 
 directvers:
-	$(CBLDEV) -fdirect   --program-suffix=_Direct_threaded.exe 
+	$(CBLDEV) install  --flags="-fdirect"   --program-suffix=_Direct_threaded.exe 
 
 smpvers:
-	$(CBLDEV) -fmeta-smp --program-suffix=_SMP_threaded.exe 
+	$(CBLDEV) install  --flags="-fmeta-smp" --program-suffix=_SMP_threaded.exe 
 
 sparksvers:
-	$(CBLDEV) -fsparks   --program-suffix=_Sparks_threaded.exe 
+	$(CBLDEV) install  --flags="-fsparks"   --program-suffix=_Sparks_threaded.exe 
 
 # Should be able to get make -j parallelism here:
 allvers: tracevers directvers smpvers sparksvers

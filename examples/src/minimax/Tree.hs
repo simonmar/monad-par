@@ -18,7 +18,7 @@ mapTree f (Branch a l)
    = fa `par` Branch fa (map (mapTree f) l `using` myParList)
    where fa = f a
 
-#else  {- SEQ -}
+#else 
 
 mapTree :: (a -> b) -> (Tree a) -> (Tree b)
 mapTree f (Branch a l) = Branch (f a) (map (mapTree f) l)

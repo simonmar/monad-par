@@ -56,6 +56,9 @@ executable mandel
   main-is:           src/mandel.hs
   build-depends:     $COMMON_DEPS , 
                      abstract-par, monad-par-extras
+  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
+    buildable:       False
 EOF
 boilerplate 
 

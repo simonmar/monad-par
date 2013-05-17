@@ -49,9 +49,12 @@ case_forkNFill  = par three (do r <- new; fork (put r 3); get r)
 -- throw this exception, so we expect either the exception or a
 -- timeout. This is reasonable since we might expect a deadlock in a
 -- non-Trace scheduler. --ACF
+-- 
+-- [2013.05.17] Update, it's also possible to get a blocked-indefinitely error here
+--   --RRN
 case_getEmpty :: IO ()
 case_getEmpty   = do
-  _ <- timeout 100000 $ assertException ["no result", "timeout"] $ 
+  _ <- timeout 100000 $ assertException ["no result", "timeout", "thread blocked indefinitely"] $ 
          runPar $ do r <- new; get r
   return ()
 
