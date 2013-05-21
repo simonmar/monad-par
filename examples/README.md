@@ -9,7 +9,14 @@ benchmarks as well.
 QUICK START
 ===========
 
-The easy way to get started is to simply run:
+First thing first you need to install "hsbencher", which is an
+executable program used to run the benchamarks.
+
+    cd ../HSBenchScaling; cabal install
+    
+(Or, in the future, just "cabal install hsbencher")
+
+Then, the easy way to get started is to simply run:
 
     make test
 
@@ -43,11 +50,11 @@ it (and the Makefile does so).
 
 Benchmarking can range from the simple:
 
-    SHORTRUN=1 THREADS="1" ./benchmark.run
+    SHORTRUN=1 THREADS="1" hsbencher
 
 To the more involved:
 
-    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" ./benchmark.run
+    KEEPGOING=1 TRIALS=3 THREADS="0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16" hsbencher
 
 Both of the above will populate a file named results_$HOSTNAME.dat.
 Typically that will be followed by the following call to file the

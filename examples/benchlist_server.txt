@@ -1,6 +1,6 @@
 # See README.md for format description.
 #
-# Version: server 1.4
+# Version: server 1.5
 # 
 # I'm attempting to keep track of changes to this config with the above.
 # Note that changes to the benchmarks themselves also require changing
@@ -12,17 +12,18 @@
 # 1.2 - bringing up to date with benchlist.txt for paper.
 # 1.3 - changed mandel implementation
 # 1.4 - removed path prefixes for new cabal build system -ACF
+# 1.5 - prefixes back
 
-blackscholes  futures 10000 30000000
+src/blackscholes  futures 10000 30000000
 
-nbody         ivars  25000
+src/nbody         ivars  25000
 
-mandel futures 1024 1024 512
+src/mandel futures 1024 1024 512
 
-coins         futures 8 1600
+src/coins         futures 8 1600
 
-MatMult   futures 1024 0 64
+src/matmult/MatMult   futures 1024 0 64
 
-sumeuler futures 38 16000 100
+src/sumeuler/sumeuler futures 38 16000 100
 
-mergesort futures cpu 24 8192
+src/sorting/mergesort futures cpu 24 8192
