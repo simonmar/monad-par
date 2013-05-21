@@ -231,7 +231,7 @@ NAME=minimax
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  main-is:           src/minimax/Main.hs
+  main-is:           Main.hs
   build-depends:     
                      abstract-par, monad-par-extras,
                      parallel, random
