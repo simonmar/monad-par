@@ -2,7 +2,7 @@
 
 # This is a LAME way of eliminating boilerplate in our .cabal files.
 
-COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10 "
+COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10, abstract-par, monad-par-extras"
 REGULAR_BENCHS="mandel/mandel sorting/mergesort"
 PREFIX=monad-par-test
 
@@ -88,22 +88,19 @@ cat >> $CABALFILE <<EOF
 EOF
 }
 
+#--------------------------------------------------------------------------------
 
 NAME=mandel
 DIR=src/$NAME
 header 
-cat >> $CABALFILE <<EOF
-  build-depends: abstract-par, monad-par-extras
-EOF
 boilerplate 
+
 
 NAME=mergesort
 DIR=src/sorting
 header
 cat >> $CABALFILE <<EOF
-  build-depends: 
-                     abstract-par, monad-par-extras,
-                     mwc-random,
+  build-depends:     mwc-random,
                      QuickCheck, split >= 0.2, time, transformers, vector, vector-algorithms
 EOF
 boilerplate 
@@ -113,21 +110,18 @@ NAME=nbody
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:  
-                     abstract-par, monad-par-extras,
-                     array
+  build-depends:    array
   if flag(sparks)
      buildable:      False
 EOF
 boilerplate 
 
+
 NAME=queens
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends: 
-                     abstract-par, monad-par-extras, 
-                     parallel
+  build-depends:    parallel
 EOF
 boilerplate 
 
@@ -136,9 +130,7 @@ NAME=blackscholes
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends: 
-                     abstract-par, monad-par-extras, 
-                     array, parallel
+  build-depends:    array, parallel
 EOF
 boilerplate 
 
@@ -147,18 +139,13 @@ NAME=coins
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:    
-                     abstract-par, monad-par-extras,
-                     parallel
+  build-depends:    parallel
 EOF
 boilerplate 
 
 NAME=parfib-monad
 DIR=src/parfib/
 header
-cat >> $CABALFILE <<EOF
-  build-depends:     abstract-par, monad-par-extras
-EOF
 boilerplate 
 
 # [2013.05.21] Not well setup for sharing yet:
@@ -176,9 +163,7 @@ NAME=randomGen
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:     
-                     abstract-par, monad-par-extras,
-                     random, transformers
+  build-depends:  random, transformers
 EOF
 boilerplate 
 
@@ -186,9 +171,6 @@ boilerplate
 NAME=primes
 DIR=src/$NAME
 header
-cat >> $CABALFILE <<EOF
-  build-depends:    abstract-par, monad-par-extras
-EOF
 boilerplate 
 
 
@@ -199,7 +181,6 @@ cat >> $CABALFILE <<EOF
   -- disabling due to dependency hell with deepseq and containers
   buildable: False
   build-depends:     
-                     abstract-par, monad-par-extras,
                      array, bytestring, containers, time, unix
                      , deepseq > 1.2
   if flag(sparks)
@@ -211,31 +192,21 @@ boilerplate
 NAME=sumeuler
 DIR=src/$NAME
 header
-cat >> $CABALFILE <<EOF
-  build-depends:     abstract-par, monad-par-extras
---  hs-source-dirs:    src/sumeuler
-EOF
 boilerplate 
 
 
 NAME=MatMult
 DIR=src/$NAME
 header
-cat >> $CABALFILE <<EOF
-  build-depends:     abstract-par, monad-par-extras
---  hs-source-dirs:    src/matmult
-EOF
 boilerplate 
+
 
 NAME=minimax
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
   main-is:           Main.hs
-  build-depends:     
-                     abstract-par, monad-par-extras,
-                     parallel, random
---  hs-source-dirs:    src/minimax
+  build-depends:     parallel, random
 EOF
 boilerplate 
 
@@ -244,10 +215,7 @@ NAME=partree
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:    
-                     abstract-par, monad-par-extras,
-                     parallel
---  hs-source-dirs:    src/partree
+  build-depends:     parallel
 EOF
 boilerplate
 
@@ -256,11 +224,8 @@ NAME=kmeans
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:     
-                     abstract-par, monad-par-extras,
-                     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
+  build-depends:     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
                      parallel, time, transformers, vector
---  hs-source-dirs:    src/kmeans
 EOF
 boilerplate 
 

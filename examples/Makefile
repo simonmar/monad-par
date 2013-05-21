@@ -25,7 +25,7 @@ all: test
 
 install: 
 	./generate_cabal.sh
-	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES)
+	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
 	rm -rf bin *.hi *.o *.exe
@@ -47,7 +47,7 @@ monad-par-examples.cabal:
 	./generate_cabal.sh
 
 deps: monad-par-examples.cabal
-	$(CABAL) install --only-dependencies --disable-library-profiling --enable-tests --disable-documentation -j
+	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --enable-tests --disable-documentation -j"
 
 #================================================================================
 # Validation / regression testing:
