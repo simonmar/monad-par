@@ -29,9 +29,9 @@ src/coins         futures 8 1250
 # These don't match the naming convention at the moment.
 src/matmult/MatMult    futures 768 0 64
 
-src/sumeuler/sumeuler  futures 38 8000 100
+src/sumeuler  futures 38 8000 100
 
-src/sorting/mergesort  futures cpu 24 8192
+src/sorting  futures cpu 24 8192
 
 # binomial lattice?
 

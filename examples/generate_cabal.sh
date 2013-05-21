@@ -1,12 +1,27 @@
 #!/bin/bash
 
-# This is a LAME way of eliminating boilerplate in our .cabal file.
+# This is a LAME way of eliminating boilerplate in our .cabal files.
 
 COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10 "
-
 REGULAR_BENCHS="mandel/mandel sorting/mergesort"
+PREFIX=monad-par-test
+
+function executable_header() {
+cat >> $CABALFILE <<EOF
+--------------------------------------------------------------------------------
+executable $PREFIX-$NAME
+  main-is:           $NAME.hs
+
+  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
+    buildable:       False
+
+  build-depends:     $COMMON_DEPS
+EOF
+}
 
 function header() {
+CABALFILE=$DIR/generated.cabal
 cat > $CABALFILE <<EOF
 name:                $NAME
 version:             0.3.1
@@ -32,6 +47,7 @@ flag meta-numa
   default:           False
 
 EOF
+executable_header
 }
 
 function boilerplate() {
@@ -75,228 +91,178 @@ EOF
 
 NAME=mandel
 DIR=src/$NAME
-CABALFILE=$DIR/generated.cabal
-
 header 
 cat >> $CABALFILE <<EOF
---------------------------------------------------------------------------------
-executable mandel
-  main-is:           $NAME.hs
-  build-depends:     $COMMON_DEPS , 
-                     abstract-par, monad-par-extras
-  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
-    buildable:       False
+  build-depends: abstract-par, monad-par-extras
 EOF
 boilerplate 
-
-
 
 NAME=mergesort
 DIR=src/sorting
-CABALFILE=$DIR/generated.cabal
-
+header
 cat >> $CABALFILE <<EOF
---------------------------------------------------------------------------------
-executable mergesort
-  main-is:           $NAME.hs
-  build-depends:     $COMMON_DEPS , 
+  build-depends: 
                      abstract-par, monad-par-extras,
                      mwc-random,
                      QuickCheck, split >= 0.2, time, transformers, vector, vector-algorithms
-  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
-    buildable:       False
 EOF
 boilerplate 
 
 
+NAME=nbody
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:  
+                     abstract-par, monad-par-extras,
+                     array
+  if flag(sparks)
+     buildable:      False
+EOF
+boilerplate 
+
+NAME=queens
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends: 
+                     abstract-par, monad-par-extras, 
+                     parallel
+EOF
+boilerplate 
 
 
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable nbody
-#   main-is:           src/nbody.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      array
-#   if flag(sparks)
-#      buildable:      False
+NAME=blackscholes
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends: 
+                     abstract-par, monad-par-extras, 
+                     array, parallel
+EOF
+boilerplate 
+
+
+NAME=coins
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:    
+                     abstract-par, monad-par-extras,
+                     parallel
+EOF
+boilerplate 
+
+NAME=parfib-monad
+DIR=src/parfib/
+header
+cat >> $CABALFILE <<EOF
+  build-depends:     abstract-par, monad-par-extras
+EOF
+boilerplate 
+
+# [2013.05.21] Not well setup for sharing yet:
+
+# NAME=parfib_pseq
+# DIR=src/$NAME
+# header
+# cat >> $CABALFILE <<EOF
+#   build-depends:     abstract-par, monad-par-extras
 # EOF
 # boilerplate 
 
 
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable queens
-#   main-is:           src/queens.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras, 
-#                      parallel
-# EOF
-# boilerplate 
+NAME=randomGen
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:     
+                     abstract-par, monad-par-extras,
+                     random, transformers
+EOF
+boilerplate 
 
 
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable blackscholes
-#   main-is:           src/blackscholes.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras, 
-#                      array, parallel
-# EOF
-# boilerplate 
+NAME=primes
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:    abstract-par, monad-par-extras
+EOF
+boilerplate 
 
 
+NAME=cholesky
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  -- disabling due to dependency hell with deepseq and containers
+  buildable: False
+  build-depends:     
+                     abstract-par, monad-par-extras,
+                     array, bytestring, containers, time, unix
+                     , deepseq > 1.2
+  if flag(sparks)
+     buildable:      False
+EOF
+boilerplate 
 
 
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable coins
-#   main-is:           src/coins.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      parallel
-# EOF
-# boilerplate 
+NAME=sumeuler
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:     abstract-par, monad-par-extras
+--  hs-source-dirs:    src/sumeuler
+EOF
+boilerplate 
 
 
+NAME=MatMult
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:     abstract-par, monad-par-extras
+--  hs-source-dirs:    src/matmult
+EOF
+boilerplate 
+
+NAME=minimax
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  main-is:           src/minimax/Main.hs
+  build-depends:     
+                     abstract-par, monad-par-extras,
+                     parallel, random
+--  hs-source-dirs:    src/minimax
+EOF
+boilerplate 
 
 
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable parfib_monad
-#   main-is:           src/parfib_monad.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras
-# EOF
-# boilerplate 
+NAME=partree
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:    
+                     abstract-par, monad-par-extras,
+                     parallel
+--  hs-source-dirs:    src/partree
+EOF
+boilerplate
 
 
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable parfib_pseq
-#   main-is:           src/parfib_pseq.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras
-# EOF
-# boilerplate 
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable randomGen
-#   main-is:           src/randomGen.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      random, transformers
-# EOF
-# boilerplate 
-
-
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable primes
-#   main-is:           src/primes.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras
-# EOF
-# boilerplate 
-
-
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable cholesky
-#   -- disabling due to dependency hell with deepseq and containers
-#   buildable: False
-#   main-is:           src/cholesky/cholesky.hs
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      array, bytestring, containers, time, unix
-#                      , deepseq > 1.2
-#   if flag(sparks)
-#      buildable:      False
-# EOF
-# boilerplate 
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable sumeuler
-#   main-is:           sumeuler.hs
-#   hs-source-dirs:    src/sumeuler
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras
-# EOF
-# boilerplate 
-
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable MatMult
-#   main-is:           MatMult.hs
-#   hs-source-dirs:    src/matmult
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras
-# EOF
-# boilerplate 
-
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable minimax
-#   main-is:           Main.hs
-#   hs-source-dirs:    src/minimax
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      parallel, random
-# EOF
-# boilerplate 
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable partree
-#   main-is:           partree.hs
-#   hs-source-dirs:    src/partree
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      parallel
-# EOF
-# boilerplate
-
-
-
-
-# cat >> monad-par-examples.cabal <<EOF
-# --------------------------------------------------------------------------------
-# executable kmeans
-#   main-is:           kmeans.hs
-#   hs-source-dirs:    src/kmeans
-#   build-depends:     $COMMON_DEPS , 
-#                      abstract-par, monad-par-extras,
-#                      array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
-#                      parallel, time, transformers, vector
-# EOF
-# boilerplate 
-
-
+NAME=kmeans
+DIR=src/$NAME
+header
+cat >> $CABALFILE <<EOF
+  build-depends:     
+                     abstract-par, monad-par-extras,
+                     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
+                     parallel, time, transformers, vector
+--  hs-source-dirs:    src/kmeans
+EOF
+boilerplate 
 
 
 # # Disabled until Control.Monad.Par.Stream is imported
@@ -310,7 +276,5 @@ boilerplate
 # #                      abstract-par, monad-par-extras
 # # EOF
 # # boilerplate 
-
-
 
 

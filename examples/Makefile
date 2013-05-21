@@ -15,30 +15,27 @@ ifeq ($(CABALDEV),)
   CABALDEV= cabal-dev
 endif
 
+BENCHES= src/mandel/ src/primes/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
+  src/randomGen/ src/cholesky/ src/sumeuler/ src/MatMult/ src/minimax/ src/partree/ src/kmeans/
 
 all: test
 
-install: monad-par-examples.cabal
-	$(CABAL) install --prefix=`pwd`
+install: 
+	./generate_cabal.sh
+	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES)
 
 clean:
 	rm -rf bin *.hi *.o *.exe
 	$(CABAL) clean || echo 
 
-
-# We don't know whether this will be cabal install'd or cabal-dev installed:
-# HSBENCHER=../HSBenchScaling/dist/build/HSBencher/hsbencher
+# This is a dependency but isn't yet published to hackage [2013.05.09]
 # UPDATE [2013.05.10]: Assume it's in the global path:
 HSBENCHER=hsbencher
-
-# This is a dependency but isn't yet published to hackage [2013.05.09]
-hsbencher:
-#	(cd ..; $(CABAL) install ./HSBenchScaling/)
 
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
 # But right now it's SOO much faster than using cabal that it's nice to have around:
-test: hsbencher deps
+test: deps
         # Building with no cabal should put the same executables in the same
         # places as building with cabal:
 	SHORTRUN=1 THREADS="1" $(HSBENCHER) --par --no-cabal +RTS -N
@@ -73,7 +70,7 @@ validate: monad-par-examples.cabal
 #	$(MAKE) CABAL=$(CBLDEV) test
 
 # OR... we could build through cabal and forgo parallelism:
-linValidate: hsbencher monad-par-examples.cabal
+linValidate: monad-par-examples.cabal
 	$(MAKE) CABAL="$(CBLDEV)" deps
 	SHORTRUN=1 THREADS="1" $(HSBENCHER) --with-cabal-install="$(CBLDEV)" --with-ghc="$(GHC)"
 
