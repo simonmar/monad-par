@@ -3,7 +3,8 @@ module Main where
 
 import qualified Data.Set as Set
 
-import HSBencher.Types (BenchSpace(..), Benchmark2(..), ParamSetting(..))
+import GHC.Conc (getNumProcessors)
+import HSBencher.Types(BenchSpace(..), Benchmark2(..), ParamSetting(..))
 import HSBencher.App (defaultMainWithBechmarks)
 import System.Environment (getEnvironment)
 import System.IO.Unsafe (unsafePerformIO)
@@ -29,16 +30,18 @@ bls =
  , Benchmark2 "src/sorting/mergesort.hs"         ["cpu", "24", "8192"] futures
  ]
 
+test_metapar :: Bool
 test_metapar = False
 
 --------------------------------------------------------------------------------
 -- Set up some common benchmark config spaces:
 --------------------------------------------------------------------------------
-    
+
+-- | Benchmarks that only require futures, not ivars.
 futures = varyThreads $
           Or$ map sched $ Set.toList defaultSchedSet
 
--- For now this just rules out the Sparks scheduler:
+-- | Actually using ivars.  For now this just rules out the Sparks scheduler:
 ivars   = varyThreads $
           Or$ map sched $ Set.toList $
           Set.delete Sparks defaultSchedSet
@@ -90,10 +93,21 @@ schedToCabalFlag s =
     None -> ""
 
 -- TODO: make this an option:
-threadSelection = [1..4]
+threadSelection :: [Int]
+threadSelection = unsafePerformIO $ do
+  env <- getEnvironment
+  p   <- getNumProcessors
+  case lookup "THREADS" env of
+    Just ls -> return$ map read $ words ls
+    -- Arbitrary default policy 
+    Nothing
+      | p <= 16   -> return  [1 .. p]
+      | otherwise -> return$ 1 : [2,4 .. p]
 
-unsafeEnv = unsafePerformIO getEnvironment
+-- unsafeEnv = unsafePerformIO getEnvironment
 
+-- | Add variation from thread count.    
+varyThreads :: BenchSpace -> BenchSpace
 varyThreads conf = Or
   [ conf -- Unthreaded mode.
   , And [ Set (CompileParam "" "-threaded")
@@ -103,7 +117,3 @@ varyThreads conf = Or
  where
    fn n = Set$ RuntimeParam "" ("+RTS -N"++ show n++" -RTS")
 
-
--- These int list arguments are provided in a space-separated form:
-parseIntList :: String -> [Int]
-parseIntList = map read . words 
