@@ -4,10 +4,14 @@ module Main where
 import qualified Data.Set as Set
 
 import GHC.Conc (getNumProcessors)
-import HSBencher.Types(BenchSpace(..), Benchmark2(..), ParamSetting(..))
-import HSBencher.App (defaultMainWithBechmarks)
 import System.Environment (getEnvironment)
 import System.IO.Unsafe (unsafePerformIO)
+
+
+import HSBencher.Types(BenchSpace(..), Benchmark2(..), ParamSetting(..),
+                       compileOptsOnly, enumerateBenchSpace, toCompileFlags)
+import HSBencher.App (defaultMainWithBechmarks)
+import HSBencher.Methods (makeBuildID, BuildID)
 
 -- Temp:
 import Text.PrettyPrint.GenericPretty (Out(doc,docPrec), Generic)
@@ -60,7 +64,7 @@ data Sched
 
 -- | Realize a scheduler selection via a compile flag.
 sched :: Sched -> BenchSpace
-sched = Set . CompileParam "--flags=" . schedToCabalFlag
+sched = Set . CompileParam "" . schedToCabalFlag
 
 -- | By default, we usually don't test meta-par.
 defaultSchedSet :: Set.Set Sched
@@ -84,12 +88,13 @@ schedToModule s =
 
 schedToCabalFlag :: Sched -> String
 schedToCabalFlag s =
+-- "--flags="  
   case s of
-    Trace -> "\"-ftrace\""
-    Direct -> "\"-fdirect\""
-    Sparks -> "\"-fsparks\""
-    SMP -> "\"-fmeta-smp\""
-    NUMA -> "\"-fmeta-numa\""
+    Trace -> "-ftrace"
+    Direct -> "-fdirect"
+    Sparks -> "-fsparks"
+    SMP -> "-fmeta-smp"
+    NUMA -> "-fmeta-numa"
     None -> ""
 
 -- TODO: make this an option:
