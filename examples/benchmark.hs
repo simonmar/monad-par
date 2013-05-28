@@ -10,7 +10,7 @@ import System.IO.Unsafe (unsafePerformIO)
 
 import HSBencher.Types(BenchSpace(..), Benchmark2(..), ParamSetting(..),
                        compileOptsOnly, enumerateBenchSpace, toCompileFlags,
-                       makeBuildID, BuildID)
+                       makeBuildID, BuildID, DefaultParamMeaning(..))
 import HSBencher.App (defaultMainWithBechmarks)
 
 -- Temp:
@@ -51,9 +51,9 @@ ivars   = defaultSettings$ varyThreads $
           Set.delete Sparks defaultSchedSet
 
 defaultSettings spc =
-  And [ Set (CompileParam "--disable-documentation" "")
-      , Set (CompileParam "--disable-library-profiling" "")
-      , Set (CompileParam "--disable-executable-profiling" "")  
+  And [ Set NoMeaning (CompileParam "--disable-documentation" "")
+      , Set NoMeaning (CompileParam "--disable-library-profiling" "")
+      , Set NoMeaning (CompileParam "--disable-executable-profiling" "")  
       , spc]
         
 --------------------------------------------------------------------------------
@@ -69,8 +69,8 @@ data Sched
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
 
 -- | Realize a scheduler selection via a compile flag.
-sched :: Sched -> BenchSpace
-sched = Set . CompileParam "" . schedToCabalFlag
+sched :: Sched -> BenchSpace DefaultParamMeaning
+sched s = Set (Variant$ show s) $ CompileParam "" $ schedToCabalFlag s
 
 -- | By default, we usually don't test meta-par.
 defaultSchedSet :: Set.Set Sched
@@ -118,13 +118,13 @@ threadSelection = unsafePerformIO $ do
 -- unsafeEnv = unsafePerformIO getEnvironment
 
 -- | Add variation from thread count.    
-varyThreads :: BenchSpace -> BenchSpace
+varyThreads :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 varyThreads conf = Or
   [ conf -- Unthreaded mode.
-  , And [ Set (CompileParam "" "--ghc-options='-threaded'")
+  , And [ Set NoMeaning (CompileParam "" "--ghc-options='-threaded'")
         , Or (map fn threadSelection)
         , conf ]
   ]
  where
-   fn n = Set$ RuntimeParam "" ("+RTS -N"++ show n++" -RTS")
+   fn n = Set (Threads n) $ RuntimeParam "" ("+RTS -N"++ show n++" -RTS")
 
