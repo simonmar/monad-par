@@ -53,9 +53,18 @@ ivars   = defaultSettings$ varyThreads $
 defaultSettings spc =
   And [ Set NoMeaning (CompileParam "--disable-documentation" "")
       , Set NoMeaning (CompileParam "--disable-library-profiling" "")
-      , Set NoMeaning (CompileParam "--disable-executable-profiling" "")  
+      , Set NoMeaning (CompileParam "--disable-executable-profiling" "")
+      , Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS" "")
       , spc]
-        
+
+      -- rts = gc_stats_flag ++" "++
+      --       case numthreads of
+      --        0 -> unwords (pruneThreadedOpts (words ghc_RTS))
+      --        _ -> ghc_RTS  ++" -N"++show numthreads
+
+     --, ghc_RTS    =       get "GHC_RTS"   ("-qa " ++ gc_stats_flag) -- Default RTS flags.
+
+
 --------------------------------------------------------------------------------
 -- Supporting definitions:
 --------------------------------------------------------------------------------
