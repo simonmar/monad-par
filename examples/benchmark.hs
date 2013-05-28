@@ -51,10 +51,10 @@ ivars   = defaultSettings$ varyThreads $
           Set.delete Sparks defaultSchedSet
 
 defaultSettings spc =
-  And [ Set NoMeaning (CompileParam "--disable-documentation" "")
-      , Set NoMeaning (CompileParam "--disable-library-profiling" "")
-      , Set NoMeaning (CompileParam "--disable-executable-profiling" "")
-      , Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS" "")
+  And [ Set NoMeaning (CompileParam "--disable-documentation")
+      , Set NoMeaning (CompileParam "--disable-library-profiling")
+      , Set NoMeaning (CompileParam "--disable-executable-profiling")
+      , Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS")
       , spc]
 
       -- rts = gc_stats_flag ++" "++
@@ -79,7 +79,7 @@ data Sched
 
 -- | Realize a scheduler selection via a compile flag.
 sched :: Sched -> BenchSpace DefaultParamMeaning
-sched s = Set (Variant$ show s) $ CompileParam "" $ schedToCabalFlag s
+sched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
 
 -- | By default, we usually don't test meta-par.
 defaultSchedSet :: Set.Set Sched
@@ -130,10 +130,10 @@ threadSelection = unsafePerformIO $ do
 varyThreads :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 varyThreads conf = Or
   [ conf -- Unthreaded mode.
-  , And [ Set NoMeaning (CompileParam "" "--ghc-options='-threaded'")
+  , And [ Set NoMeaning (CompileParam "--ghc-options='-threaded'")
         , Or (map fn threadSelection)
         , conf ]
   ]
  where
-   fn n = Set (Threads n) $ RuntimeParam "" ("+RTS -N"++ show n++" -RTS")
+   fn n = Set (Threads n) $ RuntimeParam  ("+RTS -N"++ show n++" -RTS")
 
