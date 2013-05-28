@@ -24,14 +24,14 @@ main = defaultMainWithBechmarks bls
 
 bls = 
  [ Benchmark2 "src/blackscholes/blackscholes.hs" ["10000","15000000"]  futures
- , Benchmark2 "src/nbody/nbody.hs"               ["13000"]             ivars
- , Benchmark2 "src/mandel/mandel.hs"             ["1024","1024","256"] futures
- , Benchmark2 "src/coins/coins.hs"               ["8", "1250"]         futures
+ -- , Benchmark2 "src/nbody/nbody.hs"               ["13000"]             ivars
+ -- , Benchmark2 "src/mandel/mandel.hs"             ["1024","1024","256"] futures
+ -- , Benchmark2 "src/coins/coins.hs"               ["8", "1250"]         futures
 
-   -- These don't match the naming convention at the moment:
- , Benchmark2 "src/matmult/MatMult.hs"           ["768", "0", "64"]    futures   
- , Benchmark2 "src/sumeuler/sumeuler.hs"         ["38", "8000", "100"] futures
- , Benchmark2 "src/sorting/mergesort.hs"         ["cpu", "24", "8192"] futures
+ --   -- These don't match the naming convention at the moment:
+ -- , Benchmark2 "src/matmult/MatMult.hs"           ["768", "0", "64"]    futures   
+ -- , Benchmark2 "src/sumeuler/sumeuler.hs"         ["38", "8000", "100"] futures
+ -- , Benchmark2 "src/sorting/mergesort.hs"         ["cpu", "24", "8192"] futures
  ]
 
 test_metapar :: Bool
@@ -42,14 +42,20 @@ test_metapar = False
 --------------------------------------------------------------------------------
 
 -- | Benchmarks that only require futures, not ivars.
-futures = varyThreads $
+futures = defaultSettings$ varyThreads $
           Or$ map sched $ Set.toList defaultSchedSet
 
 -- | Actually using ivars.  For now this just rules out the Sparks scheduler:
-ivars   = varyThreads $
+ivars   = defaultSettings$ varyThreads $
           Or$ map sched $ Set.toList $
           Set.delete Sparks defaultSchedSet
 
+defaultSettings spc =
+  And [ Set (CompileParam "--disable-documentation" "")
+      , Set (CompileParam "--disable-library-profiling" "")
+      , Set (CompileParam "--disable-executable-profiling" "")  
+      , spc]
+        
 --------------------------------------------------------------------------------
 -- Supporting definitions:
 --------------------------------------------------------------------------------
@@ -115,7 +121,7 @@ threadSelection = unsafePerformIO $ do
 varyThreads :: BenchSpace -> BenchSpace
 varyThreads conf = Or
   [ conf -- Unthreaded mode.
-  , And [ Set (CompileParam "" "-threaded")
+  , And [ Set (CompileParam "" "--ghc-options='-threaded'")
         , Or (map fn threadSelection)
         , conf ]
   ]
