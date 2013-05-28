@@ -73,10 +73,10 @@ forkOn = forkOnIO
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- #define NESTED_SCHEDS
 #define PARPUTS
--- #define FORKPARENT
--- #define IDLING_ON
+#define FORKPARENT
+#define IDLING_ON
    -- Next, IF idling is on, should we do wakeups?:
--- #define WAKEIDLE
+#define WAKEIDLE
 
 -- #define WAIT_FOR_WORKERS
 
@@ -380,10 +380,13 @@ runParIO userComp = do
        -- waits.  One reason for this is that the main/progenitor thread in
        -- GHC is expensive like a forkOS thread.
        ----------------------------------------
-       --              DEBUGGING             -- 
---       takeMVar mfin -- Final value.
---       dbgTakeMVar "global waiting thread" mfin -- Final value.
-       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.                    
+       --              DEBUGGING             --
+#ifdef DEBUG
+       busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.
+--       dbgTakeMVar "global waiting thread" mfin -- Final value.       
+#else
+       takeMVar mfin -- Final value.
+#endif
        ----------------------------------------
 
 -- Create the default scheduler(s) state:
