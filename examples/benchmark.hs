@@ -9,9 +9,9 @@ import System.IO.Unsafe (unsafePerformIO)
 
 
 import HSBencher.Types(BenchSpace(..), Benchmark2(..), ParamSetting(..),
-                       compileOptsOnly, enumerateBenchSpace, toCompileFlags)
+                       compileOptsOnly, enumerateBenchSpace, toCompileFlags,
+                       makeBuildID, BuildID)
 import HSBencher.App (defaultMainWithBechmarks)
-import HSBencher.Methods (makeBuildID, BuildID)
 
 -- Temp:
 import Text.PrettyPrint.GenericPretty (Out(doc,docPrec), Generic)
@@ -71,8 +71,8 @@ defaultSchedSet :: Set.Set Sched
 defaultSchedSet = Set.difference
                   (Set.fromList [minBound ..])
                   (if test_metapar
-                   then Set.empty
-                   else Set.fromList [NUMA, SMP])
+                   then Set.singleton None
+                   else Set.fromList [NUMA, SMP, None])
 
 -- TODO -- we really need to factor this out into a configuration file.
 schedToModule :: Sched -> String
