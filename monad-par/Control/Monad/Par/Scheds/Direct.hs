@@ -50,10 +50,17 @@ import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
+import Data.Word (Word64)
+
 import Data.Concurrent.Deque.Class (WSDeque)
+#ifdef USE_CHASELEV
+#warning "Note: using Chase-Lev lockfree workstealing deques..."
+import Data.Concurrent.Deque.ChaseLev.DequeInstance
+import Data.Concurrent.Deque.ChaseLev as R
+#else
 import Data.Concurrent.Deque.Reference.DequeInstance
 import Data.Concurrent.Deque.Reference as R
-import Data.Word (Word64)
+#endif
 
 import qualified Control.Exception as E
 
@@ -69,7 +76,6 @@ forkOn = forkOnIO
 -- Configuration Toggles
 --------------------------------------------------------------------------------
 
--- #define DEBUG
 -- [2012.08.30] This shows a 10X improvement on nested parfib:
 -- #define NESTED_SCHEDS
 #define PARPUTS
@@ -86,7 +92,8 @@ forkOn = forkOnIO
 -- conditionals and trust dead-code-elimination.
 --------------------------------------------------------------------
 
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
+#warning "DEBUG: Activating debugging for Direct.hs"
 import Debug.Trace        (trace)
 import System.Environment (getEnvironment)
 theEnv = unsafePerformIO $ getEnvironment
@@ -381,7 +388,7 @@ runParIO userComp = do
        -- GHC is expensive like a forkOS thread.
        ----------------------------------------
        --              DEBUGGING             --
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
        busyTakeMVar (" The global wait "++ show tidorig) mfin -- Final value.
 --       dbgTakeMVar "global waiting thread" mfin -- Final value.       
 #else
@@ -444,7 +451,7 @@ get (IVar vr) =  do
 	  Full a -> return a
 	  _ -> do
             sch <- RD.ask
-#  ifdef DEBUG
+#  ifdef DEBUG_DIRECT
             sn <- io$ makeStableName vr  -- Should probably do the MutVar inside...
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!") 
 #else
@@ -481,7 +488,7 @@ put_ (IVar vr) !content = do
                Empty      -> (Full content, [])
                Full _     -> error "multiple put"
                Blocked ks -> (Full content, ks)
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
       when (dbglvl >=  3) $ do 
          sn <- makeStableName vr
          printf " [%d] Put value %s into IVar %d.  Waking up %d continuations.\n" 
@@ -503,7 +510,7 @@ unsafeTryPut (IVar vr) !content = do
 		   Empty      -> (Full content, ([], content))
 		   Full x     -> (Full x, ([], x))
 		   Blocked ks -> (Full content, (ks, content))
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
       sn <- makeStableName vr
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n" 
 	     (no sched) (show content) (hashStableName sn) (length (fst pr))
@@ -712,7 +719,7 @@ errK = error "Error cont: this closure shouldn't be used"
 
 trivialCont :: String -> a -> ROnly ()
 trivialCont str _ = do 
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
 --                trace (str ++" trivialCont evaluated!")
                 liftIO$ printf " !! trivialCont evaluated, msg: %s\n" str
 #endif
@@ -729,7 +736,7 @@ trivialCont str _ = do
 {-# INLINE spawn1_ #-}
 -- Spawn a one argument function instead of a thunk.  This is good for debugging if the value supports "Show".
 spawn1_ f x = 
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
  do sn  <- io$ makeStableName f
     sch <- RD.ask; when dbg$ io$ printf " [%d] spawning fn %d with arg %s\n" (no sch) (hashStableName sn) (show x)
 #endif
@@ -750,7 +757,7 @@ spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
 spawnP a = spawn (return a)
 
 -- In Debug mode we require that IVar contents be Show-able:
-#ifdef DEBUG
+#ifdef DEBUG_DIRECT
 put    :: (Show a, NFData a) => IVar a -> a -> Par ()
 spawn  :: (Show a, NFData a) => Par a -> Par (IVar a)
 spawn_ :: Show a => Par a -> Par (IVar a)
@@ -840,6 +847,7 @@ dbgTakeMVar msg mv =
 -- | For debugging purposes.  This can help us figure out (but an ugly
 --   process of elimination) which MVar reads are leading to a "Thread
 --   blocked indefinitely" exception.
+{-
 busyTakeMVar :: String -> MVar a -> IO a
 busyTakeMVar msg mv = try (10 * 1000 * 1000)
  where 
@@ -854,7 +862,7 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
    case x of 
      Just y  -> return y
      Nothing -> do yield; try (n-1)
-   
+-}
 
 -- | Fork a thread but ALSO set up an error handler that suppresses
 --   MVar exceptions.
