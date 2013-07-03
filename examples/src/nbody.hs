@@ -6,20 +6,19 @@
 {-# LANGUAGE ExistentialQuantification
    , ScopedTypeVariables
    , BangPatterns
-   , NamedFieldPuns 
+   , NamedFieldPuns
    , RecordWildCards
    , FlexibleInstances
    , DeriveDataTypeable
-   , MagicHash 
+   , MagicHash
    , UnboxedTuples
-   , CPP
-  #-}
+   , CPP #-}
 -- This is INCOMPATIBLE with CncPure..
 
 -- Author: Chih-Ping Chen
 -- Ported to Monad-par by Ryan Newton.
 
--- This program uses CnC to calculate the accelerations of the bodies in a 3D system.  
+-- This program uses CnC to calculate the accelerations of the bodies in a 3D system.
 
 import Control.Monad
 import Data.Int
@@ -27,7 +26,7 @@ import qualified Data.List as List
 import qualified Data.Array as A
 import GHC.Exts
 import System.Environment
-#ifdef PARSCHED 
+#ifdef PARSCHED
 import PARSCHED
 #else
 import Control.Monad.Par
@@ -41,17 +40,17 @@ type UFloat3D = (# Float#, Float#, Float# #)
 genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
    where tag' = fromIntegral tag
 
--- We are keeping the idiomatic Haskell version around as well for comparison: 
+-- We are keeping the idiomatic Haskell version around as well for comparison:
 -- #define IDIOMATIC_VER
 
 -- Only doing the O(N^2) part in parallel:
--- This step computes the accelerations of the bodies.       
+-- This step computes the accelerations of the bodies.
 compute :: A.Array Int Float3D -> A.Array Int (IVar Float3D) -> Int -> Par ()
 compute vecList accels tag =
-    do 
+    do
        let myvector = vecList A.! (tag-1)
        put (accels A.! tag) (accel myvector vecList)
-       where 
+       where
              g = 9.8
 
              multTriple :: Float -> Float3D -> Float3D
@@ -76,13 +75,13 @@ compute vecList accels tag =
              (strt,end) = A.bounds vecList
 
              accel :: Float3D -> (A.Array Int Float3D) -> Float3D
-	     accel vector vecList = 
+	     accel vector vecList =
 
              -- Manually inlining to see if the tuples unbox:
 	        let (# sx,sy,sz #) = loop strt 0 0 0
 		    loop !i !ax !ay !az
                       | i == end = (# ax,ay,az #)
-		      | otherwise = 
+		      | otherwise =
                        let ( x,y,z )    = vector
 			   ( x',y',z' ) = vecList A.! i
 
@@ -99,8 +98,8 @@ compute vecList accels tag =
 
 
 run :: Int -> [Float3D]
-run n = runPar $ 
-        do 
+run n = runPar $
+        do
 	   vars <- sequence$ take n $ repeat new
 --           accels  <- A.array (0,n-1) [ (i,) | i <- [0..n-1]]
 	   -- Is there a better way to make an array of pvars?
@@ -111,15 +110,15 @@ run n = runPar $
 #else
            let initVecs = A.array (0,n-1) [ (i, genVector i) | i <- [0..n-1] ]
 #endif
-           
+
 	   forM_ [1..n] $ \ t -> fork (compute initVecs accels t)
 
            sequence (List.map (\i -> get (accels A.! i)) [1..n])
 
-	  
-main = 
-    do args <- getArgs 
-       let accList = case args of 
+
+main =
+    do args <- getArgs
+       let accList = case args of
                       []  -> run (3::Int)
 		      [s] -> run (read s)
        putStrLn $ show (foldl (\sum (x,y,z) -> if x>0 then sum+1 else sum) 0 accList)
