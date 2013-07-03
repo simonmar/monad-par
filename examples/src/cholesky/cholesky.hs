@@ -8,24 +8,23 @@
 {-# LANGUAGE ExistentialQuantification
    , ScopedTypeVariables
    , BangPatterns
-   , NamedFieldPuns 
+   , NamedFieldPuns
    , RecordWildCards
    , FlexibleInstances
    , DeriveDataTypeable
    , TypeSynonymInstances
    , PackageImports
-   , CPP
-  #-}
+   , CPP #-}
 
 -- Author: Chih-Ping Chen
 -- Modified by Ryan Newton.
 
--- This program uses monad-par to do cholesky transformation.  
+-- This program uses monad-par to do cholesky transformation.
 
 -- Description
 -- -----------
 -- Given a symmetric positive definite matrix A, the Cholesky decomposition is
--- a lower triangular matrix L such that A=L.L^(T). 
+-- a lower triangular matrix L such that A=L.L^(T).
 
 -- Usage
 -- -----
@@ -46,7 +45,7 @@
 -- cholesky v 6 2 m6.in
 
 -- The input SPD matrix is read from the file specified. The output will be a
--- lower triangular matrix. 
+-- lower triangular matrix.
 
 import Data.Int
 import qualified Data.List as List
@@ -70,15 +69,15 @@ import Control.Exception
 import Data.Time.Clock -- Not in 6.10
 
 import Control.Monad
-#ifdef PARSCHED 
+#ifdef PARSCHED
 import PARSCHED
 #else
 import Control.Monad.Par
 #endif
 
-timeit io = 
+timeit io =
     do strt <- getCurrentTime
-       io       
+       io
        end  <- getCurrentTime
        return (diffUTCTime end strt)
 
@@ -118,10 +117,10 @@ s0Compute lkjiv p b =
        parMap_ (s1Compute lkji p b) [0..p-1]
 
 -- This does the cholesky factorization on the a diagonal tile, and
--- kicks off triangular system solve on the tiles that are below and 
+-- kicks off triangular system solve on the tiles that are below and
 -- on the same column as the diagonal tile.
 s1Compute :: Tiles3D -> Int -> Int -> Int -> Par ()
-s1Compute lkji p b k = 
+s1Compute lkji p b k =
     do
        -- Read the tile:
        aBlock <- get $ getTileV (k, k, k) lkji
@@ -129,7 +128,7 @@ s1Compute lkji p b k =
        put (getTileV (k, k, k+1) lkji) (s1Core aBlock b)
        -- Do triangular solves on the tiles with the same column number
        parMap_ (s2Compute lkji b) [(k,j) | j <- [k+1..p-1]]
-    where s1Core aBlock b = unsafePerformIO $ 
+    where s1Core aBlock b = unsafePerformIO $
                             do lBlock <- newArray ((0,0), (b-1,b-1)) 0.0
                                forM_ [0..b-1] (outer aBlock lBlock b)
                                return lBlock
@@ -147,11 +146,11 @@ s1Compute lkji p b k =
                                               writeArray aBlock (ib,jbb) (base1 - base2 * base3)
 
 -- This does the triangular system solve on a tile T, and
--- kicks off the symmetric rank-k update on the tiles that 
--- are to the right and on the same row as T. 
+-- kicks off the symmetric rank-k update on the tiles that
+-- are to the right and on the same row as T.
 s2Compute :: Tiles3D -> Int -> (Int, Int) -> Par ()
 s2Compute lkji b (k, j) =
-    do 
+    do
        aBlock <- get $ getTileV (j,k,k) lkji
        liBlock <- get $ getTileV (k,k,k+1) lkji
        put (getTileV (j,k,k+1) lkji) (s2Core aBlock liBlock b)
@@ -170,12 +169,12 @@ s2Compute lkji b (k, j) =
                                                       base2 <- readArray liBlock (jb,kb)
                                                       base3 <- readArray loBlock (ib,kb)
                                                       writeArray aBlock (ib,jb) (base1 - (base2 * base3))
-                                                      
+
 
 -- This computes the symmetric rank-k update on a tile.
 s3Compute :: Tiles3D -> Int -> (Int, Int, Int) -> Par ()
 s3Compute lkji b (k,j,i) | i == j =
-    do 
+    do
        aBlock <- get $ getTileV (j,i,k) lkji
        l2Block <- get $ getTileV (j,k,k+1) lkji
        put (getTileV (j,i,k+1) lkji) (s3Core aBlock l2Block b)
@@ -185,14 +184,14 @@ s3Compute lkji b (k,j,i) | i == j =
                                     do forM_ [0..b-1] (outer aBlock l2Block b)
                                        return aBlock
           outer aBlock l2Block b jb = do forM_ [0..b-1] (inner1 aBlock l2Block b jb)
-          inner1 aBlock l2Block b jb kb = do base <- readArray l2Block (jb,kb) 
+          inner1 aBlock l2Block b jb kb = do base <- readArray l2Block (jb,kb)
                                              forM_ [jb..b-1] (inner2 aBlock l2Block jb kb (-base))
           inner2 aBlock l2Block jb kb temp ib = do base1 <- readArray aBlock (ib,jb)
                                                    base2 <- readArray l2Block (ib,kb)
                                                    writeArray aBlock (ib,jb) (base1 + temp * base2)
-       
+
 s3Compute lkji b (k,j,i) | otherwise =
-    do 
+    do
        aBlock <- get $ getTileV (j,i,k) lkji
        l2Block <- get $ getTileV (i,k,k+1) lkji
        l1Block <- get $ getTileV (j,k,k+1) lkji
@@ -202,38 +201,38 @@ s3Compute lkji b (k,j,i) | otherwise =
                                             do forM_ [0..b-1] (outer aBlock l1Block l2Block b)
                                                return aBlock
           outer aBlock l1Block l2Block b jb = do forM_ [0..b-1] (inner1 aBlock l1Block l2Block b jb)
-          inner1 aBlock l1Block l2Block b jb kb = do base <- readArray l2Block (jb,kb) 
+          inner1 aBlock l1Block l2Block b jb kb = do base <- readArray l2Block (jb,kb)
                                                      forM_ [0..b-1] (inner2 aBlock l1Block jb kb (-base))
           inner2 aBlock l1Block jb kb temp ib = do base1 <- readArray aBlock (ib,jb)
                                                    base2 <- readArray l1Block (ib,kb)
                                                    writeArray aBlock (ib,jb) (base1 + temp * base2)
 
 -- initLkji initialize the (IVar Tile) map using the input array.
-initLkji :: Matrix -> Int -> Int -> Int -> Par (IVar Tiles3D)    
-initLkji arrA n p b = 
+initLkji :: Matrix -> Int -> Int -> Int -> Par (IVar Tiles3D)
+initLkji arrA n p b =
     let tile i j = unsafePerformIO $ newListArray ((0,0),(b-1,b-1)) (tileList i j)
         tileList i j = [ arrA Array.! (i * b + ii, j * b + jj) | ii <- [0..b-1], jj <-[0..b-1]]
-        fn c (i, j, k) | k == 0 = 
+        fn c (i, j, k) | k == 0 =
             do mv <- c
                m <- get mv
                tv <- spawnP $ tile i j
                spawnP $ insert (i, j, k) tv m
-        fn c (i, j, k) | otherwise = 
+        fn c (i, j, k) | otherwise =
             do mv <- c
                m <- get mv
                tv <- new
                spawnP $ insert (i, j, k) tv m
-    in List.foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]           
-     
+    in List.foldl fn (spawnP empty)  [(i, j, k) | i <- [0..p-1], j <- [0..i], k <- [0..j+1]]
 
--- composeResult collect the tiles with the final results back into one single matrix.    
-composeResult :: Tiles3D -> Int -> Int -> Int -> Par Matrix    
+
+-- composeResult collect the tiles with the final results back into one single matrix.
+composeResult :: Tiles3D -> Int -> Int -> Int -> Par Matrix
 composeResult lkji n p b =
     do assocs <- sequence [ grab i ib j | i <- [0..p-1], ib <- [0..b-1], j <- [0..i]]
        return $ Array.array ((0,0),(n-1,n-1)) (concat assocs)
     where grab i ib j = if (i == j) then
                            do matOut <- get $ getTileV (i,j,j+1) lkji
-                              compose1 matOut 
+                              compose1 matOut
                         else
                            do matOut <- get $ getTileV (i,j,j+1) lkji
                               compose2 matOut
@@ -241,30 +240,30 @@ composeResult lkji n p b =
                               compose11 matOut jb = let elem = unsafePerformIO $
                                                                do readArray matOut (ib,jb)
                                                     in return ((i*b+ib,j*b+jb),elem)
-                              compose2 matOut = do forM [0..b-1] (compose11 matOut)   
+                              compose2 matOut = do forM [0..b-1] (compose11 matOut)
 
-{-# INLINE for_ #-} 
+{-# INLINE for_ #-}
 for_ start end fn | start > end = error "for_: start is greater than end"
 for_ start end fn = loop start
- where 
-  loop !i | i == end  = return () 
+ where
+  loop !i | i == end  = return ()
           | otherwise = do fn i; loop (i+1)
 
 run :: Int -> Int -> Matrix -> Matrix
-run n b arrA = 
+run n b arrA =
     let p = n `div` b
-    in 
+    in
         runPar $
-        do 
+        do
             lkjiv <- initLkji arrA n p b
             _ <- s0Compute lkjiv p b
             lkji' <- get lkjiv
             composeResult lkji' n p b
 
-main = 
-    do ls <- getArgs 
+main =
+    do ls <- getArgs
        let (n, b, fname) =
-            case ls of 
+            case ls of
               []           -> (6,     2, "cholesky_matrix6.dat")
 
               -- To get more data try this:
@@ -276,7 +275,7 @@ main =
 
        bool <- fileExist fname
        let fname' = if bool then fname else "examples/"++fname
-    
+
        ref <- newIORef undefined
        let meaningless_write !val = writeIORef ref val
 
@@ -306,11 +305,11 @@ main =
        val <- readIORef ref
        putStrLn$ "Last value: " ++ show (arrB Array.! (n-1, n-1))
        t5 <- getCurrentTime
-       putStrLn$ "SELFTIMED' " ++ show ((fromRational $ toRational $ diffUTCTime t5 t4) :: Double) 
+       putStrLn$ "SELFTIMED' " ++ show ((fromRational $ toRational $ diffUTCTime t5 t4) :: Double)
 
 initMatrix :: Int -> [Char] -> IO Matrix
-initMatrix n fname = 
+initMatrix n fname =
     do fs <- B.readFile fname
        return $! Array.listArray ((0,0), (n-1, n-1))
                                 (List.cycle $ List.map (read . B.unpack) (B.words fs))
-	   
+

@@ -1,6 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP
-	     #-}
+             ExistentialQuantification, CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 -- | This module exposes the internals of the @Par@ monad so that you
@@ -41,7 +40,7 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
 sched _doSync queue t = loop t
- where 
+ where
   loop t = case t of
     New a f -> do
       r <- newIORef a
@@ -77,7 +76,7 @@ sched _doSync queue t = loop t
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
 
-    Yield parent -> do 
+    Yield parent -> do
         -- Go to the end of the worklist:
         let Sched { workpool } = queue
         -- TODO: Perhaps consider Data.Seq here.
@@ -180,9 +179,9 @@ instance NFData (IVar a) where
 
 -- From outside the Par computation we can peek.  But this is nondeterministic.
 pollIVar :: IVar a -> IO (Maybe a)
-pollIVar (IVar ref) = 
+pollIVar (IVar ref) =
   do contents <- readIORef ref
-     case contents of 
+     case contents of
        Full x -> return (Just x)
        _      -> return (Nothing)
 
@@ -244,7 +243,7 @@ runParIO = runPar_internal True
 
 -- | An asynchronous version in which the main thread of control in a
 -- Par computation can return while forked computations still run in
--- the background.  
+-- the background.
 runParAsync :: Par a -> a
 runParAsync = unsafePerformIO . runPar_internal False
 

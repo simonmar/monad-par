@@ -1,9 +1,8 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP
-	     #-}
+             ExistentialQuantification, CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports #-}
 
-{- 
+{-
 
   This alternate implementation of Par uses the existing thread/MVar
   capabilities of GHC.  It therefore represents an attempt to do
@@ -39,7 +38,7 @@ import Control.Applicative
 -- import Text.Printf
 
 -- For testing only:
-import Test.HUnit 
+import Test.HUnit
 import Control.Exception
 
 
@@ -116,27 +115,27 @@ parMapM f xs = mapM (spawn . f) xs >>= mapM get
 
 
 -- | parMapReduceRange is similar to the "parallel for" construct
---   found in many parallel programming models.  
--- 
+--   found in many parallel programming models.
+--
 parMapReduceRange :: NFData a => Int -> Int -> Int -> (Int -> Par a) -> (a -> a -> Par a) -> a -> Par a
-parMapReduceRange threshold min max fn binop init = loop min max 
- where 
-  loop min max 
-    | max - min <= threshold = 
-	let mapred a b = do x <- fn b; 
+parMapReduceRange threshold min max fn binop init = loop min max
+ where
+  loop min max
+    | max - min <= threshold =
+	let mapred a b = do x <- fn b;
 			    result <- a `binop` x
-			    return result 
+			    return result
 	in foldM mapred init [min..max]
 
     | otherwise  = do
 	let mid = min + ((max - min) `quot` 2)
-	rght <- spawn $ loop (mid+1) max 
-	l  <- loop  min    mid 
+	rght <- spawn $ loop (mid+1) max
+	l  <- loop  min    mid
 	r  <- get rght
 	lr <- l `binop` r
 	return lr
 
 -- TODO: A version that works for any splittable input domain.  In this case
 -- the "threshold" is a predicate on inputs.
--- parMapReduceRangeGeneric :: (inp -> Bool) -> (inp -> Maybe (inp,inp)) -> inp -> 
+-- parMapReduceRangeGeneric :: (inp -> Bool) -> (inp -> Maybe (inp,inp)) -> inp ->
 

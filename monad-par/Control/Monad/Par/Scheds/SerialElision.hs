@@ -1,9 +1,7 @@
-{-# LANGUAGE RankNTypes, ImpredicativeTypes, MultiParamTypeClasses, 
-             CPP
-   #-}
+{-# LANGUAGE RankNTypes, ImpredicativeTypes, MultiParamTypeClasses, CPP #-}
 
 -- | This is a sequential implementation of the Par monad.
--- 
+--
 --   It only works for the subset of programs in which a
 --   top-to-bottom/left-to-right execution of the program writes all
 --   IVars before reading them.  It is analogous to the Cilk notion of
@@ -39,7 +37,7 @@ unP (P x) = x
 
 -- The newtype's above were necessary for the 'ParIVar'/'ParFuture'
 -- instance below and thus we need a Monad instance as well:
-instance Monad Par where 
+instance Monad Par where
   (P m) >>= f = P (m >>= unP . f)
   return x = P (return x)
 
@@ -65,17 +63,17 @@ newFull_ x = P$ newIORef (Just x)             >>= return . I
 
 get (I r) = P$
         do x <- readIORef r
-	   case x of 
+	   case x of
              -- TODO: Could keep track of pedigree for better errors:
 	     Nothing -> error "IVar read before written!"
-	     Just y  -> return y 
+	     Just y  -> return y
 
 put  (I r) x = rnf x `seq` P (writeIORef r (Just x))
 put_ (I r) x = P$ writeIORef r (Just x)
 
-runPar (P m) = 
+runPar (P m) =
   trace ("ParElision: Running with unsafeIO...")
-  unsafePerformIO m 
+  unsafePerformIO m
 
 
 ----------------------------------------------------------------------------------------------------
