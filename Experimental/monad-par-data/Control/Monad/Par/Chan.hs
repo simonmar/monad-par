@@ -1,24 +1,23 @@
-{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses, 
+{-# LANGUAGE FlexibleInstances, MultiParamTypeClasses,
              UndecidableInstances, TypeSynonymInstances, ScopedTypeVariables,
-	     EmptyDataDecls, CPP
-  #-}
-{-| 
+	           EmptyDataDecls, CPP #-}
+{-|
 
-UNFINISHED 
+UNFINISHED
 
     This module provides a basic implementation of channels that is
     usable with any monad satisfying ParIVar.
  -}
 
 
-module Control.Monad.Par.Chan 
+module Control.Monad.Par.Chan
  (
-   ParC, 
+   ParC,
 --    runParRNG, fork,
 --    IVar, new, newFull, newFull_, get, put, put_,
 --    spawn, spawn_
  )
- where 
+ where
 
 import qualified  Control.Monad.Par.Class as PC
 import Control.Monad.Trans
@@ -51,8 +50,8 @@ class SplittableState a where
 instance (SplittableState s, PC.ParFuture iv p)
       =>  PC.ParFuture iv (S.StateT s p) where
   get   = lift . PC.get
-  spawn_ (task :: S.StateT s p a) = 
-		  do s <- S.get 
+  spawn_ (task :: S.StateT s p a) =
+		  do s <- S.get
 		     let (s1,s2) = splitState s
 		     S.put s2
 		     let x  :: p (a,s) = S.runStateT task s1
@@ -66,8 +65,8 @@ instance (SplittableState s, PC.ParFuture iv p)
 --  spawn p  = do r <- new;  fork (p >>= put r);   return r
 --  spawn_ p = do r <- new;  fork (p >>= put_ r);  return r
 
-instance (SplittableState s, PC.ParIVar iv p) 
-      =>  PC.ParIVar iv (S.StateT s p) 
+instance (SplittableState s, PC.ParIVar iv p)
+      =>  PC.ParIVar iv (S.StateT s p)
  where
   fork     = fork
   new      = new
@@ -81,10 +80,10 @@ new      = lift  PC.new
 put  v x = lift$ PC.put  v x
 put_ v x = lift$ PC.put_ v x
 
-fork :: (SplittableState s, PC.ParIVar iv p) 
+fork :: (SplittableState s, PC.ParIVar iv p)
      => S.StateT s p () -> S.StateT s p ()
-fork task = 
-		do s <- S.get 
+fork task =
+		do s <- S.get
 		   let (s1,s2) = splitState s
 		   S.put s2
 		   lift$ PC.fork $ do
@@ -108,13 +107,13 @@ fork task =
 -- Let's do the safe one first:
 
 type Key = (Int, BitList)
--- genKey :: Monad m => ParC m Key 
+-- genKey :: Monad m => ParC m Key
 genKey = undefined
 
 --------------------------------------------------------------------------------
 
 -- A Par monad with stream support can be built from any other Par monad:
-type ParC p = S.StateT (CursorMap Magic) p 
+type ParC p = S.StateT (CursorMap Magic) p
 
 -- newtype CursorMap a = CursorMap (Vector (Cursor a))
 --data Cursor    a = Cursor Int (OpenList a)
@@ -125,7 +124,7 @@ newtype RecvPtr a = RecvPtr (Int, a)
 
 data Magic
 
-instance SplittableState (CursorMap a) where 
+instance SplittableState (CursorMap a) where
   splitState x = (x,x)
 
 -- type SendPort v a = ()
@@ -133,20 +132,20 @@ instance SplittableState (CursorMap a) where
 data SendPort a = SendPort a
 data RecvPort a = RecvPort a
 
-instance PC.ParIVar v m => PC.ParChan (ParC m) SendPort RecvPtr where 
+instance PC.ParIVar v m => PC.ParChan (ParC m) SendPort RecvPtr where
 
   -- A new channel coins a unique key that can be used to lookup the stream.
   newChan = undefined
   send    = undefined
 
   -- Advance the cursor:
-  recv (RecvPtr (i,_::elt)) = 
+  recv (RecvPtr (i,_::elt)) =
     -- The RecvPtr essentially carries the type, but no value for the stream.
-    do CursorMap vec <- S.get 
-       let ol = unsafeIndex vec i       
+    do CursorMap vec <- S.get
+       let ol = unsafeIndex vec i
            hd = L.head ol
 --       tl <- lift$ L.tail ol
---       V.modify (\v -> write v i tl) vec 
+--       V.modify (\v -> write v i tl) vec
 
 --       return hd
        return undefined
