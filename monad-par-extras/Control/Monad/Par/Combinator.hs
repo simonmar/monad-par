@@ -37,14 +37,14 @@ import Control.Monad.Par.Class
 --
 -- > parMap :: NFData b => (a -> b) -> [a] -> Par [b]
 --
-parMap :: (Traversable t, NFData b, ParFuture iv p) => (a -> b) -> t a -> p (t b)
+parMap :: (Eq b, Traversable t, NFData b, ParFuture iv p) => (a -> b) -> t a -> p (t b)
 parMap f xs = mapM (spawnP . f) xs >>= mapM get
 
 -- | Like 'parMap', but the function is a @Par@ monad operation.
 --
 -- > parMapM f xs = mapM (spawn . f) xs >>= mapM get
 --
-parMapM :: (Traversable t, NFData b, ParFuture iv p) => (a -> p b) -> t a -> p (t b)
+parMapM :: (Eq b, Traversable t, NFData b, ParFuture iv p) => (a -> p b) -> t a -> p (t b)
 parMapM f xs = mapM (spawn . f) xs >>= mapM get
 
 -- TODO: parBuffer
@@ -72,7 +72,7 @@ data InclusiveRange = InclusiveRange Int Int
 -- >        0
 --
 parMapReduceRangeThresh
-   :: (NFData a, ParFuture iv p)
+   :: (NFData a, ParFuture iv p, Eq a)
       => Int                            -- ^ threshold
       -> InclusiveRange                 -- ^ range over which to calculate
       -> (Int -> p a)                 -- ^ compute one result
@@ -104,7 +104,7 @@ auto_partition_factor = 4
 
 -- | \"Auto-partitioning\" version of 'parMapReduceRangeThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parMapReduceRange :: (NFData a, ParFuture iv p) => 
+parMapReduceRange :: (NFData a, ParFuture iv p, Eq a) => 
 		     InclusiveRange -> (Int -> p a) -> (a -> a -> p a) -> a -> p a
 parMapReduceRange (InclusiveRange start end) fn binop init =
    loop (length segs) segs

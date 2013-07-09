@@ -1,5 +1,5 @@
 Name:                monad-par-extras
-Version:             0.3.3
+Version:             0.4
 Synopsis:            Combinators and extra features for Par monads
 
 
@@ -7,6 +7,7 @@ Synopsis:            Combinators and extra features for Par monads
 --  0.3      : Factored/reorganized modules.  This module is a spinoff of 
 --             the original monad-par
 --  0.3.2    : Relax depends.
+--  0.4      : Update for new Eq constraints.
 
 
 Description:         The modules below provide additional
