@@ -1,6 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, MultiParamTypeClasses, CPP
-	     #-}
+             ExistentialQuantification, MultiParamTypeClasses, CPP #-}
 {- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fwarn-unused-imports -}
 
 {- | This is the scheduler described in the paper "A Monad for
@@ -13,7 +12,7 @@
 module Control.Monad.Par.Scheds.Trace (
     Par, runPar, runParIO, fork,
     IVar, new, newFull, newFull_, get, put, put_,
-    spawn, spawn_, spawnP 
+    spawn, spawn_, spawnP
   ) where
 
 import qualified Control.Monad.Par.Class as PC
@@ -46,8 +45,8 @@ instance PC.ParFuture IVar Par  where
   spawn_ = spawn_
   spawnP = spawnP
 
-instance PC.ParIVar IVar Par  where 
-  fork = fork 
+instance PC.ParIVar IVar Par  where
+  fork = fork
   new  = new
   put  = put
   put_ = put_
