@@ -98,7 +98,12 @@ disabled_case_multiput = assertException ["multiple put"] $
 --   both :: Par a -> Par a -> Par a
 --   both a b = Par $ \c -> Fork (runCont a c) (runCont b c)
 
+
+-- | A reduction test.
 case_test_pmrr1 :: Assertion
+-- Saw a failure here using Direct:
+--   http://tester-lin.soic.indiana.edu:8080/job/HackageReleased_monad-par/GHC_VERS=7.0.4,label=tank.cs.indiana.edu/40/console
+-- Exception inside child thread "(worker 0 of originator ThreadId 5)", ThreadId 10: thread blocked indefinitely in an MVar operation
 case_test_pmrr1 = 
    par 5050 $ parMapReduceRangeThresh 1 (InclusiveRange 1 100)
 	        (return) (return `bincomp` (+)) 0

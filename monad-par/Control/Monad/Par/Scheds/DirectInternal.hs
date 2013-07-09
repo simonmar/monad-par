@@ -17,14 +17,18 @@ import qualified System.Random.MWC as Random
 import Control.Concurrent hiding (yield)
 import GHC.Conc
 import Data.IORef
-import Data.Concurrent.Deque.Class (WSDeque)
--- import Data.Concurrent.Deque.Reference.DequeInstance
--- import Data.Concurrent.Deque.Reference as R
-import Data.Concurrent.Deque.Class (WSDeque)
-import Data.Concurrent.Deque.Reference.DequeInstance
-import Data.Concurrent.Deque.Reference as R
 import qualified Data.Set as S
 import Data.Word (Word64)
+import Data.Concurrent.Deque.Class (WSDeque)
+
+#ifdef USE_CHASELEV
+#warning "Note: using Chase-Lev lockfree workstealing deques..."
+import Data.Concurrent.Deque.ChaseLev.DequeInstance
+import Data.Concurrent.Deque.ChaseLev as R
+#else
+import Data.Concurrent.Deque.Reference.DequeInstance
+import Data.Concurrent.Deque.Reference as R
+#endif
 
 -- Our monad stack looks like this:
 --      ---------

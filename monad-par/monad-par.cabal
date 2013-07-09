@@ -71,6 +71,10 @@ extra-source-files:
      tests/hs_cassandra_microbench.hs
      tests/hs_cassandra_microbench2.hs
 
+Flag chaselev
+   Description: Use Chase-Lev Deques for higher-perf work-stealing.
+   Default: False
+
 Library
   Source-repository head
     type:     git
@@ -98,13 +102,17 @@ Library
                , abstract-par 
                , abstract-deque >= 0.1.4
                -- Extras such as parMap, RNG, State
-               , monad-par-extras == 0.3.*
+               , monad-par-extras >= 0.3
                , deepseq >= 1.1
                , array >= 0.3
                , mwc-random >= 0.11
                , containers
                , parallel >= 3.1
                , mtl >= 2.0.1.0
+
+  if flag(chaselev)
+    cpp-options: -DUSE_CHASELEV
+    build-depends: chaselev-deque
 
   ghc-options: -O2
   Other-modules:
