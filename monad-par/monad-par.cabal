@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3.4.2
+Version:             0.3.4.3
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -20,6 +20,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3.4    : switch to direct scheduler as default (only 1-level nesting allowed)
 --  0.3.4.1  : fix build with GHC 7.0, and fix test
 --  0.3.4.2  : Bugfix, 0.3.4.1 was released with debugging switches flipped.
+--  0.3.4.3  : Bugfix, Trace scheduler is now the default
 
 Description:
   The 'Par' monad offers a simple API for parallel programming.  The
