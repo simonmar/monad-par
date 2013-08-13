@@ -36,6 +36,7 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | Fork Trace Trace
            | Done
            | Yield Trace
+           | forall a . LiftIO (IO a) (a -> Trace)
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
@@ -83,6 +84,9 @@ sched _doSync queue t = loop t
 	-- This would also be a chance to steal and work from opposite ends of the queue.
         atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
 	reschedule queue
+    LiftIO io c -> do
+        r <- io
+        loop (c r)
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
