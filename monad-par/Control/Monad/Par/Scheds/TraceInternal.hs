@@ -176,6 +176,10 @@ instance Applicative Par where
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))
 
+-- | Equality for IVars is physical equality, as with other reference types.
+instance Eq (IVar a) where
+  (IVar r1) == (IVar r2) = r1 == r2
+
 -- Forcing evaluation of a IVar is fruitless.
 instance NFData (IVar a) where
   rnf _ = ()

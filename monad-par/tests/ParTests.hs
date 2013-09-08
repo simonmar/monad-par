@@ -2,13 +2,12 @@
 
 module ParTests (tests) where
 
-import Control.Monad.Par.Combinator 
-
+import Control.Monad.Par -- Default.
 -- import Control.Monad.Par.Scheds.Trace
 -- import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
+-- import Control.Monad.Par.Scheds.Direct
 
-import Control.Monad.Par.Scheds.Direct
-
+import Control.Monad.Par.Combinator 
 -- import Control.Concurrent.Chan  ()
 import GHC.Conc (numCapabilities)
 import Control.Exception (evaluate)
@@ -52,9 +51,24 @@ case_forkNFill  = par three (do r <- new; fork (put r 3); get r)
 -- 
 -- [2013.05.17] Update, it's also possible to get a blocked-indefinitely error here
 --   --RRN
+--
+-- [2013.09.08] Yep, I'm nondeterministically seeing this fail using
+-- Direct.  But this is actually a failure of the exception handling
+-- setup.  `assertException` should be catching blocked-indefinitely
+-- error and it's NOT always.  Running this test ALONE, I cannot trip
+-- it, but running it with others I do.  In fact, running it with
+-- through test-framework's "-j1" I cannot reproduce the error. It is
+-- probably just the perturbation to timing caused by this, after all,
+-- WAIT_WORKERS is not currently on for Direct.  Still, I thought that
+-- wouldn't matter here because the *main* thread can't return.
+--
+-- Also, it seems like this test can just hang indefinitely, with the
+-- timeout failing to do the trick....  
+-- 
 case_getEmpty :: IO ()
 case_getEmpty   = do
-  _ <- timeout 100000 $ assertException ["no result", "timeout", "thread blocked indefinitely"] $ 
+  -- Microseconds:
+  _ <- timeout (100 * 1000) $ assertException ["no result", "timeout", "thread blocked indefinitely"] $ 
          runPar $ do r <- new; get r
   return ()
 
