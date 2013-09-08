@@ -83,7 +83,7 @@ forkOn = forkOnIO
    -- Next, IF idling is on, should we do wakeups?:
 #define WAKEIDLE
 
-#define WAIT_FOR_WORKERS
+-- #define WAIT_FOR_WORKERS
 
 -------------------------------------------------------------------
 -- Ifdefs for the above preprocessor defines.  Try to MINIMIZE code

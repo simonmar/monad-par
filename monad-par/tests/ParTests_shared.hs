@@ -1,11 +1,3 @@
-{-# LANGUAGE TemplateHaskell, BangPatterns #-}
-
-module ParTests (tests) where
-
-import Control.Monad.Par -- Default.
--- import Control.Monad.Par.Scheds.Trace
--- import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
--- import Control.Monad.Par.Scheds.Direct
 
 import Control.Monad.Par.Combinator 
 -- import Control.Concurrent.Chan  ()
