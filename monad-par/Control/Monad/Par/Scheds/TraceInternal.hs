@@ -23,10 +23,16 @@ import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent hiding (yield)
-import GHC.Conc hiding (yield)
+-- import GHC.Conc hiding (yield)
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
+
+#if __GLASGOW_HASKELL__ <= 700
+import GHC.Conc (forkOnIO)
+forkOn = forkOnIO
+#endif
+
 
 -- ---------------------------------------------------------------------------
 
@@ -207,7 +213,7 @@ runPar_internal _doSync x = do
 
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
-    -- We create a thread on each CPU with forkOnIO.  The CPU on which
+    -- We create a thread on each CPU with forkOn.  The CPU on which
     -- the current thread is running will host the main thread; the
     -- other CPUs will host worker threads.
     --
@@ -227,7 +233,7 @@ runPar_internal _doSync x = do
 
    m <- newEmptyMVar
    forM_ (zip [0..] states) $ \(cpu,state) ->
-        forkOnIO cpu $
+        forkOn cpu $
           if (cpu /= main_cpu)
              then reschedule state
              else do
