@@ -23,7 +23,7 @@ import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent hiding (yield)
--- import GHC.Conc hiding (yield)
+import GHC.Conc (numCapabilities)
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
