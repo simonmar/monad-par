@@ -59,10 +59,10 @@ class Monad m => ParFuture future m | m -> future where
   -- >    fork (p >>= put r)
   -- >    return r
   --
-  spawn  :: (NFData a, Eq a) => m a -> m (future a)
-
+  spawn  :: NFData a => m a -> m (future a)
+  
   -- | Like 'spawn', but the result is only head-strict, not fully-strict.
-  spawn_ :: Eq a => m a -> m (future a)
+  spawn_ :: m a -> m (future a)
 
   -- | Wait for the result of a future, and then return it.
   get    :: future a -> m a
@@ -70,7 +70,7 @@ class Monad m => ParFuture future m | m -> future where
   -- | Spawn a pure (rather than monadic) computation.  Fully-strict.
   --
   -- >  spawnP = spawn . return
-  spawnP :: (NFData a, Eq a) =>   a -> m (future a)
+  spawnP :: NFData a =>   a -> m (future a)
 
   -- Default implementations:
   spawn  p = spawn_ (do x <- p; deepseq x (return x))
@@ -103,20 +103,20 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
   --
   -- Sometimes partial strictness is more appropriate: see 'put_'.
   --
-  put  :: (NFData a, Eq a) => ivar a -> a -> m ()
+  put  :: NFData a => ivar a -> a -> m ()
   put v a = deepseq a (put_ v a)
   
   -- | like 'put', but only head-strict rather than fully-strict.  
-  put_ :: Eq a => ivar a -> a -> m ()
+  put_ :: ivar a -> a -> m ()
 
   -- Extra API routines that have default implementations:
 
   -- | creates a new @IVar@ that contains a value
-  newFull :: (NFData a, Eq a) => a -> m (ivar a)
+  newFull :: NFData a => a -> m (ivar a)
   newFull a = deepseq a (newFull_ a)
 
   -- | creates a new @IVar@ that contains a value (head-strict only)
-  newFull_ :: Eq a => a -> m (ivar a)
+  newFull_ ::  a -> m (ivar a)
   newFull_ a = do v <- new
                   -- This is usually inefficient!
 		  put_ v a

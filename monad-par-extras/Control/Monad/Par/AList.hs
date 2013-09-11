@@ -226,25 +226,25 @@ map f (Append x y) = Append (map f x) (map f y)
 --   over the degree of parallelism.  It indicates under what number
 --   of elements the build process should switch from parallel to
 --   serial.
-parBuildThresh :: (NFData a, ParFuture f p, Eq a) => Int -> C.InclusiveRange -> (Int -> a) -> p (AList a)
+parBuildThresh :: (NFData a, ParFuture f p) => Int -> C.InclusiveRange -> (Int -> a) -> p (AList a)
 parBuildThresh threshold range fn =
   C.parMapReduceRangeThresh threshold range
 			  (return . singleton . fn) appendM empty
 
 -- | Variant of 'parBuildThresh' in which the element-construction function is itself a 'Par' computation.
-parBuildThreshM :: (NFData a, ParFuture f p, Eq a) => Int -> C.InclusiveRange -> (Int -> p a) -> p (AList a)
+parBuildThreshM :: (NFData a, ParFuture f p) => Int -> C.InclusiveRange -> (Int -> p a) -> p (AList a)
 parBuildThreshM threshold range fn =
   C.parMapReduceRangeThresh threshold range 
 			  (\x -> fn x >>= return . singleton) appendM empty
 
 -- | \"Auto-partitioning\" version of 'parBuildThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parBuild :: (NFData a, ParFuture f p, Eq a) => C.InclusiveRange -> (Int -> a) -> p (AList a)
+parBuild :: (NFData a, ParFuture f p) => C.InclusiveRange -> (Int -> a) -> p (AList a)
 parBuild range fn =
   C.parMapReduceRange range (return . singleton . fn) appendM empty
 
 -- | like 'parBuild', but the construction function is monadic
-parBuildM :: (NFData a, ParFuture f p, Eq a) => C.InclusiveRange -> (Int -> p a) -> p (AList a)
+parBuildM :: (NFData a, ParFuture f p) => C.InclusiveRange -> (Int -> p a) -> p (AList a)
 parBuildM range fn =
   C.parMapReduceRange range (\x -> fn x >>= return . singleton) appendM empty
 

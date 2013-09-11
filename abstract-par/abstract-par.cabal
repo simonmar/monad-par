@@ -1,5 +1,5 @@
 Name:                abstract-par
-Version:             0.4
+Version:             0.3.3
 Synopsis:            Type classes generalizing the functionality of the 'monad-par' library.
 
 
@@ -7,7 +7,6 @@ Synopsis:            Type classes generalizing the functionality of the 'monad-p
 
 --  0.3      : Factored out of monad-par package.
 --  0.3.1    : Relax deepseq restriction
---  0.4      : breaking change: Added Eq constraint.
 
 Description:
   The 'Par' monad offers a parallel programming API based on dataflow
