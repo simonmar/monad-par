@@ -16,7 +16,7 @@ ifeq ($(CABALDEV),)
 endif
 
 BENCHES= src/mandel/ src/primes/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
-  src/randomGen/ src/sumeuler/ src/MatMult/ src/minimax/ src/partree/ src/kmeans/
+  src/randomGen/ src/sumeuler/ src/matmult/ src/minimax/ src/partree/ src/kmeans/
 
 # disabling due to dependency hell with deepseq and containers:
 # src/cholesky/ 

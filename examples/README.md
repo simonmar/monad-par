@@ -10,11 +10,11 @@ QUICK START
 ===========
 
 First thing first you need to install "hsbencher", which is an
-executable program used to run the benchamarks.
-
-    cd ../HSBenchScaling; cabal install
+library used to run the benchamarks.
     
-(Or, in the future, just "cabal install hsbencher")
+You an "cabal install hsbencher" or ..............................
+
+FINISHME
 
 Then, the easy way to get started is to simply run:
 

@@ -1,1 +1,0 @@
-../HSBenchScaling/bench/file_away.hs

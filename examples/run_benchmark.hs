@@ -8,21 +8,27 @@ import System.Environment (getEnvironment)
 import System.IO.Unsafe (unsafePerformIO)
 
 
-import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..),
-                       compileOptsOnly, enumerateBenchSpace, toCompileFlags,
-                       makeBuildID, BuildID, DefaultParamMeaning(..))
+import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..)
+                       -- compileOptsOnly, enumerateBenchSpace, toCompileFlags,
+                       -- makeBuildID, BuildID, 
+                      )
 import HSBencher.App (defaultMainWithBechmarks)
 
 -- Temp:
-import Text.PrettyPrint.GenericPretty (Out(doc,docPrec), Generic)
+-- import Text.PrettyPrint.GenericPretty (Out(doc,docPrec), Generic)
 
+main :: IO ()
 main = defaultMainWithBechmarks bls
 
 --------------------------------------------------------------------------------
 -- Here are the actual benchmarks:
 --------------------------------------------------------------------------------
 
-bls = 
+bls :: [Benchmark DefaultParamMeaning]
+bls =
+ ------------------------------------------------------------  
+ -- Desktop configuration:
+ ------------------------------------------------------------    
  [ Benchmark "src/blackscholes/blackscholes.hs" ["10000","15000000"]  futures
  , Benchmark "src/nbody/nbody.hs"               ["13000"]             ivars
  , Benchmark "src/mandel/mandel.hs"             ["1024","1024","256"] futures
@@ -34,6 +40,95 @@ bls =
  , Benchmark "src/sorting/mergesort.hs"         ["cpu", "24", "8192"] futures
  ]
 
+----------------------------------------
+-- Old, disabled benchmarks:
+----------------------------------------
+
+     -- binomial lattice?
+
+     -- ------------------------------------------------------------
+     -- TODO: Get distributed benchmarks integrated in here:
+     --       Although these should probably go in a separate file.
+     -- ------------------------------------------------------------
+     -- distributed/parfib_dist
+     -- distributed/mandel_dist dist pipes 1024a
+
+     -- ------------------------------------------------------------
+     -- Benchmarks that are have problems or have become neglected:
+     -- ------------------------------------------------------------
+
+     -- partree/partree futures 600 20
+
+     -- What should the arguments be here:
+     --  The compute times are highly unpredictable.... it's hard to find good inputs.
+     -- minimax/minimax futures nested ? ? 
+     -- minimax/minimax futures monad  ? ? 
+
+
+     -- We can measure parfib separately... it shouldn't be part of our
+     -- benchmark suite.
+     -- -----------------
+     -- Problems with this fib(38):
+     -- parfib_monad  futures monad  38
+     -- parfib_pseq   none           38
+     -- parfib_monad  futures nested 30
+
+
+     -- I don't think quicksort was every really fixed/tuned:
+     -- It looks like it is still generating random data as an AList and
+     -- getting stack overflows [2012.03.04]
+     -- -----------------
+     -- quicksort/parquicksort_monad futures 1500000
+     -- quicksort/parquicksort_pseq  none    1500000
+
+
+     -- We could include cholesky, but it is a bit annoying in that it
+     -- requires generated input files.  Also we'd like to de-unsafePerformIO it:
+     -- -----------------
+     -- cholesky      default 1000 50 cholesky_matrix1000.dat
+
+
+     -- The whole asynchronous/streaming thing needs to be revisited at a later date.
+     -- -----------------
+     -- stream/disjoint_working_sets_pipeline Trace  monad  4 256 10 10000sx
+     -- stream/disjoint_working_sets_pipeline none   sparks 4 256 10 10000
+
+------------------------------------------------------------  
+-- Server configuration:
+------------------------------------------------------------    
+
+     -- # See README.md for format description.
+     -- #
+     -- # Version: server 1.5
+     -- # 
+     -- # I'm attempting to keep track of changes to this config with the above.
+     -- # Note that changes to the benchmarks themselves also require changing
+     -- # this version number.  However, ADDING new benchmarks does not require 
+     -- # a version bump. 
+     -- # 
+     -- # CHANGELOG:
+     -- # 
+     -- # 1.2 - bringing up to date with benchlist.txt for paper.
+     -- # 1.3 - changed mandel implementation
+     -- # 1.4 - removed path prefixes for new cabal build system -ACF
+     -- # 1.5 - prefixes back
+
+     -- src/blackscholes  futures 10000 30000000
+
+     -- src/nbody         ivars  25000
+
+     -- src/mandel futures 1024 1024 512
+
+     -- src/coins         futures 8 1600
+
+     -- src/matmult/MatMult   futures 1024 0 64
+
+     -- src/sumeuler/sumeuler futures 38 16000 100
+
+     -- src/sorting/mergesort futures cpu 24 8192
+
+
+
 test_metapar :: Bool
 test_metapar = False
 
@@ -42,14 +137,17 @@ test_metapar = False
 --------------------------------------------------------------------------------
 
 -- | Benchmarks that only require futures, not ivars.
+futures :: BenchSpace DefaultParamMeaning
 futures = defaultSettings$ varyThreads $
           Or$ map sched $ Set.toList defaultSchedSet
 
 -- | Actually using ivars.  For now this just rules out the Sparks scheduler:
+ivars :: BenchSpace DefaultParamMeaning
 ivars   = defaultSettings$ varyThreads $
           Or$ map sched $ Set.toList $
           Set.delete Sparks defaultSchedSet
 
+defaultSettings :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 defaultSettings spc =
   And [ Set NoMeaning (CompileParam "--disable-documentation")
       , Set NoMeaning (CompileParam "--disable-library-profiling")

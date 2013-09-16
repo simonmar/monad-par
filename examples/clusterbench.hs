@@ -1,1 +1,0 @@
-../HSBenchScaling/bench/clusterbench.hs

@@ -24,7 +24,7 @@ function header() {
 CABALFILE=$DIR/generated.cabal
 cat > $CABALFILE <<EOF
 name:                $NAME
-version:             0.3.1
+version:             0.3.9
 build-type:          Simple
 cabal-version:       >=1.8
 
@@ -195,7 +195,7 @@ header
 boilerplate 
 
 
-NAME=MatMult
+NAME=matmult
 DIR=src/$NAME
 header
 boilerplate 
