@@ -707,6 +707,36 @@ When a thread enters runPar, either:
 
 
 
+[2013.09.16] {Finishing overhaul of benchmarks for HSBencher}
+--------------------------------------------------------------------------------
+
+
+      Compiling Config 23 of 40:  (args "") confID 
+	   "src_matmult_disabledocumentation_disablelibraryprofiling_disableexecutableprofiling_ftrace"
+
+     [hsbencher] Found 1 methods that can handle src/matmult/: ["cabal"]
+     [cabalMethod]  Switched to src/matmult/, clearing binary target dir... 
+     * Executing command: rm -rf ./bin/*
+     * Command completed with 0 lines of output.
+     [cabalMethod] Running cabal command: cabal install --bindir=./bin/ ./ --program-suffix=_src_matmult_disabledocumentation_disablelibraryprofiling_disableexecutableprofiling_ftrace --disable-documentation --disable-library-profiling --disable-executable-profiling -ftrace
+     * Executing command: cabal install --bindir=./bin/ ./ --program-suffix=_src_matmult_disabledocumentation_disablelibraryprofiling_disableexecutableprofiling_ftrace --disable-documentation --disable-library-profiling --disable-executable-profiling -ftrace
+     [cabal] Resolving dependencies...
+     [cabal] Configuring matmult-0.3.1...
+     [cabal] Building matmult-0.3.1...
+     [cabal] Preprocessing executable 'monad-par-test-matmult' for matmult-0.3.1...
+     [cabal] [stderr] cabal: can't find source for matmult in .
+     [cabal] Failed to install matmult-0.3.1
+     [cabal] [stderr] cabal: Error: some packages failed to install:
+     [cabal] [stderr] matmult-0.3.1 failed during the building phase. The exception was:
+     [cabal] [stderr] ExitFailure 1
+     [cabal] 
+     [cabal] [stderr] 
+     * Command completed with 11 lines of output.
+    run_benchmark: expected this command to succeed! But it exited with code 1:
+      cabal install --bindir=./bin/ ./ --program-suffix=_src_matmult_disabledocumentation_disablelibraryprofiling_disableexecutableprofiling_ftrace --disable-documentation --disable-library-profiling --disable-executable-profiling -ftrace
+
+
+
 
 
 TEMP / SCRAP:

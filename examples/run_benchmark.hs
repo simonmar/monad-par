@@ -27,18 +27,32 @@ main = defaultMainWithBechmarks bls
 bls :: [Benchmark DefaultParamMeaning]
 bls =
  ------------------------------------------------------------  
- -- Desktop configuration:
+ -- Quick-test configuration:
  ------------------------------------------------------------    
- [ Benchmark "src/blackscholes/blackscholes.hs" ["10000","15000000"]  futures
- , Benchmark "src/nbody/nbody.hs"               ["13000"]             ivars
- , Benchmark "src/mandel/mandel.hs"             ["1024","1024","256"] futures
- , Benchmark "src/coins/coins.hs"               ["8", "1250"]         futures
+ [ Benchmark "src/blackscholes/" []  futures
+ , Benchmark "src/nbody/"        []  ivars
+ , Benchmark "src/mandel/"       []  futures
+ , Benchmark "src/coins/"        []  futures
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/MatMult.hs"           ["768", "0", "64"]    futures   
- , Benchmark "src/sumeuler/sumeuler.hs"         ["38", "8000", "100"] futures
- , Benchmark "src/sorting/mergesort.hs"         ["cpu", "24", "8192"] futures
+ , Benchmark "src/matmult/"      []  futures   
+ , Benchmark "src/sumeuler/"     []  futures
+ , Benchmark "src/sorting/"      []  futures
  ]
+
+ ------------------------------------------------------------  
+ -- Desktop configuration:
+ ------------------------------------------------------------  
+ -- [ Benchmark "src/blackscholes/" ["10000","15000000"]  futures
+ -- , Benchmark "src/nbody/"               ["13000"]             ivars
+ -- , Benchmark "src/mandel/"             ["1024","1024","256"] futures
+ -- , Benchmark "src/coins/"               ["8", "1250"]         futures
+
+ --   -- These don't match the naming convention at the moment:
+ -- , Benchmark "src/matmult/"           ["768", "0", "64"]    futures   
+ -- , Benchmark "src/sumeuler/"         ["38", "8000", "100"] futures
+ -- , Benchmark "src/sorting/"         ["cpu", "24", "8192"] futures
+ -- ]
 
 ----------------------------------------
 -- Old, disabled benchmarks:
