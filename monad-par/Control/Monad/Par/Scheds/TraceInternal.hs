@@ -1,6 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP
-	     #-}
+             ExistentialQuantification, CPP #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 -- | This module exposes the internals of the @Par@ monad so that you
@@ -24,10 +23,16 @@ import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
 import Control.Concurrent hiding (yield)
-import GHC.Conc hiding (yield)
+import GHC.Conc (numCapabilities)
 import Control.DeepSeq
 import Control.Applicative
 -- import Text.Printf
+
+#if __GLASGOW_HASKELL__ <= 700
+import GHC.Conc (forkOnIO)
+forkOn = forkOnIO
+#endif
+
 
 -- ---------------------------------------------------------------------------
 
@@ -37,11 +42,12 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | Fork Trace Trace
            | Done
            | Yield Trace
+           | forall a . LiftIO (IO a) (a -> Trace)
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
 sched _doSync queue t = loop t
- where 
+ where
   loop t = case t of
     New a f -> do
       r <- newIORef a
@@ -77,13 +83,16 @@ sched _doSync queue t = loop t
 -- threads work-queue because it can be stolen by other threads.
 --	 else return ()
 
-    Yield parent -> do 
+    Yield parent -> do
         -- Go to the end of the worklist:
         let Sched { workpool } = queue
         -- TODO: Perhaps consider Data.Seq here.
 	-- This would also be a chance to steal and work from opposite ends of the queue.
         atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
 	reschedule queue
+    LiftIO io c -> do
+        r <- io
+        loop (c r)
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -173,6 +182,10 @@ instance Applicative Par where
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))
 
+-- | Equality for IVars is physical equality, as with other reference types.
+instance Eq (IVar a) where
+  (IVar r1) == (IVar r2) = r1 == r2
+
 -- Forcing evaluation of a IVar is fruitless.
 instance NFData (IVar a) where
   rnf _ = ()
@@ -180,9 +193,9 @@ instance NFData (IVar a) where
 
 -- From outside the Par computation we can peek.  But this is nondeterministic.
 pollIVar :: IVar a -> IO (Maybe a)
-pollIVar (IVar ref) = 
+pollIVar (IVar ref) =
   do contents <- readIORef ref
-     case contents of 
+     case contents of
        Full x -> return (Just x)
        _      -> return (Nothing)
 
@@ -200,7 +213,7 @@ runPar_internal _doSync x = do
 
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
-    -- We create a thread on each CPU with forkOnIO.  The CPU on which
+    -- We create a thread on each CPU with forkOn.  The CPU on which
     -- the current thread is running will host the main thread; the
     -- other CPUs will host worker threads.
     --
@@ -220,7 +233,7 @@ runPar_internal _doSync x = do
 
    m <- newEmptyMVar
    forM_ (zip [0..] states) $ \(cpu,state) ->
-        forkOnIO cpu $
+        forkOn cpu $
           if (cpu /= main_cpu)
              then reschedule state
              else do
@@ -244,7 +257,7 @@ runParIO = runPar_internal True
 
 -- | An asynchronous version in which the main thread of control in a
 -- Par computation can return while forked computations still run in
--- the background.  
+-- the background.
 runParAsync :: Par a -> a
 runParAsync = unsafePerformIO . runPar_internal False
 

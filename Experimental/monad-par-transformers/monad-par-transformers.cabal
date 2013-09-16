@@ -1,0 +1,76 @@
+Name:                monad-par-transformers
+Version:             0.3.3
+Synopsis:            Monad transformers, enhancing Par monads with extra capabilities
+
+
+-- Version history:
+--  0.3.3    : Initial version
+
+
+Description:         Just as monad transformers allow extending the meaning of 
+                     monadic bind, Par-monad transformers extend the meaning of fork.
+
+
+Homepage:            https://github.com/simonmar/monad-par
+License:             BSD3
+License-file:        LICENSE
+Author:              Ryan Newton
+Maintainer:          Ryan Newton <rrnewton@gmail.com>
+Copyright:           (c) Ryan Newton 2013
+Stability:           Experimental
+Category:            Parallelism
+Build-type:          Simple
+Cabal-version:       >=1.8
+
+Library
+  Exposed-modules: 
+                 -- State on top of Par is generally useful, but experimental
+--                 Control.Monad.Par.State,
+ 
+                 -- Deterministic RNG needs more testing.
+--                 Control.Monad.Par.RNG
+
+                 -- 
+                 Control.Monad.Par.Engines
+
+  Other-modules:
+                 -- Pedigree is experimental, but potentially useful for
+                 -- many purposes such as assigning unique, reproducable
+                 -- identifiers to IVars
+--                 Control.Monad.Par.Pedigree
+                 Control.Monad.Par.Engines.Internal
+
+  Build-depends: base >= 4 && < 5
+               -- This provides the interface which monad-par implements:
+               , abstract-par >= 0.3
+-- TEMP:
+               , monad-par >= 0.3 
+--               , cereal       >= 0.3
+               , deepseq      >= 1.3
+--               , random       >= 1.0
+               , mtl          >= 2.0
+--               , transformers >= 0.2
+
+  ghc-options: -O2
+  Other-modules:
+
+
+
+Test-Suite test-monad-par-transformers
+    type:       exitcode-stdio-1.0
+    main-is:    Test.hs
+    ghc-options: -rtsopts -threaded
+    build-depends: base >= 4 && < 5
+                 , abstract-par, monad-par-extras
+                 , monad-par >= 0.3 
+                 , array   >= 0.3
+                 , deepseq >= 1.2
+                 , time
+                 , QuickCheck, HUnit
+                 , test-framework-hunit, test-framework-quickcheck2
+                 , test-framework, test-framework-th
+
+                 , abstract-deque >= 0.1.4
+                 , mwc-random >= 0.11
+                 , mtl >= 2.0.1.0
+                 , containers

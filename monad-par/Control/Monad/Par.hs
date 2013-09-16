@@ -165,5 +165,5 @@ where
 
 import Control.Monad.Par.Class hiding ( spawn, spawn_, spawnP, put, put_
                                       , get, newFull, new, fork, newFull_ )
-import Control.Monad.Par.Scheds.Direct
+import Control.Monad.Par.Scheds.Trace
 import Control.Monad.Par.Combinator

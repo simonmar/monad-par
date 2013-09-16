@@ -1,34 +1,28 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, PackageImports #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {- |
    This module is an alternative version of "Control.Monad.Par" in
    which the `Par` type provides `IO` operations, by means of `liftIO`.
    The price paid is that only `runParIO` is available, not the pure `runPar`.
 
-   This module uses the same default scheduler as "Control.Monad.Par",
-   and tasks scheduled by the two can share the same pool of worker
-   threads.   
+   This module uses the same default scheduler as "Control.Monad.Par".
  -}
 
 module Control.Monad.Par.IO
-  ( ParIO, P.IVar, runParIO
+  ( ParIO, IVar, runParIO
     -- And instances!               
   )
   where
 
--- import qualified Control.Monad.Par as P
--- import qualified Control.Monad.Par.Scheds.Trace as P
--- import qualified Control.Monad.Par.Scheds.TraceInternal as TI
+import Control.Monad.Par.Scheds.Trace (Par, IVar)
+import qualified Control.Monad.Par.Scheds.TraceInternal as Internal
 
-import qualified Control.Monad.Par.Scheds.DirectInternal as PI
-import qualified Control.Monad.Par.Scheds.Direct as P
 import Control.Monad.Par.Class
 import Control.Applicative
-import "mtl" Control.Monad.Trans (lift, liftIO, MonadIO)
+import Control.Monad.Trans (liftIO, MonadIO)
 
 -- | A wrapper around an underlying Par type which allows IO.
-newtype ParIO a = ParIO { unPar :: PI.Par a }
-  deriving (Functor, Applicative, Monad,
-            ParFuture P.IVar, ParIVar P.IVar)
+newtype ParIO a = ParIO (Par a)
+  deriving (Functor, Applicative, Monad, ParFuture IVar, ParIVar IVar)
 
 -- | A run method which allows actual IO to occur on top of the Par
 --   monad.  Of course this means that all the normal problems of
@@ -36,9 +30,9 @@ newtype ParIO a = ParIO { unPar :: PI.Par a }
 --
 --   A simple example program:
 --
---   >  runParIO (liftIO$ putStrLn "hi" :: ParIO ())
+--   >  runParIO (liftIO $ putStrLn "hi" :: ParIO ())
 runParIO :: ParIO a -> IO a
-runParIO = P.runParIO . unPar
+runParIO (ParIO p) = Internal.runParIO p
 
 instance MonadIO ParIO where
-    liftIO io = ParIO (PI.Par (lift$ lift io))
+    liftIO io = ParIO (Internal.Par (Internal.LiftIO io))

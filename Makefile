@@ -99,7 +99,7 @@ check-submodules:
 
 # For Jenkins testing of old GHC versions we are only interested in meta-par and monad-par:
 jenkins-all-versions:
-	${CABAL_INSTALL} ${OUR_PKGS} Deques/AbstractDeque/
+	${CABAL_INSTALL} ${OUR_PKGS} 
 
 uninstall:
 	ghc-pkg unregister network-transport-pipes --force || echo

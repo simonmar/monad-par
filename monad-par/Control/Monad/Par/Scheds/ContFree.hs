@@ -1,11 +1,10 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ScopedTypeVariables,
              TypeSynonymInstances, MultiParamTypeClasses,
-             GeneralizedNewtypeDeriving, RecordWildCards
-	     #-}
+             GeneralizedNewtypeDeriving, RecordWildCards #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
-{- | 
+{- |
 
   A monad-par tranfsormer which avoids continuation passing style by
   using actual IO threads to capture continuations (but only to
@@ -21,15 +20,15 @@
 
 
 module Control.Monad.Par.Scheds.ContFree (
-   Sched(..), Par, IVar(..), 
-    runPar, 
+   Sched(..), Par, IVar(..),
+    runPar,
     new, get, put_, fork,
     newFull, newFull_, put,
     spawn, spawn_, spawn1_, spawnP
  ) where
 
 
-import Control.Applicative 
+import Control.Applicative
 import Control.Concurrent hiding (yield)
 import Control.Monad.Cont as C
 import qualified Control.Monad.Reader as R
@@ -65,12 +64,12 @@ dbg = False
 --      ---------
 -- The ReaderT monad is there for retrieving the scheduler given the
 -- fact that the API calls do not get it as an argument.
--- 
+--
 newtype Par a = Par { unPar :: R.ReaderT Sched IO a }
     deriving (Monad, MonadIO, R.MonadReader Sched)
 
-data Sched = Sched 
-    { 
+data Sched = Sched
+    {
       ---- Per worker ----
       no       :: {-# UNPACK #-} !Int,
       workpool :: HotVar (Deque (Par ())),
@@ -86,7 +85,7 @@ data Sched = Sched
 
 newtype IVar a = IVar (IORef (IVarContents a))
 
-data IVarContents a = Full a | Empty | Blocked (MVar a) 
+data IVarContents a = Full a | Empty | Blocked (MVar a)
   -- | Future a
 
 
@@ -99,7 +98,7 @@ data IVarContents a = Full a | Empty | Blocked (MVar a)
 
 casIORef = undefined
 
-emptydeque :: Deque a 
+emptydeque :: Deque a
 addfront  :: a -> Deque a -> Deque a
 addback   :: a -> Deque a -> Deque a
 
@@ -114,24 +113,24 @@ dqlen :: Deque a -> Int
 newtype Deque a = DQ [a]
 emptydeque = DQ []
 
-addfront x (DQ l)    = -- trace (" * addfront brought queue up to: " ++ show (length (x:l))) $ 
+addfront x (DQ l)    = -- trace (" * addfront brought queue up to: " ++ show (length (x:l))) $
 		       DQ (x:l)
 addback x (DQ [])    = DQ [x]
 addback x (DQ (h:t)) = DQ (h : rest)
  where DQ rest = addback x (DQ t)
 
 takefront (DQ [])     = (emptydeque, Nothing)
-takefront (DQ (x:xs)) = -- trace (" * takefront popped one, remaining: " ++ show (length xs)) $ 
+takefront (DQ (x:xs)) = -- trace (" * takefront popped one, remaining: " ++ show (length xs)) $
 			(DQ xs, Just x)
 takeback  (DQ [])     = (emptydeque, Nothing)
-takeback  (DQ ls)     = -- trace (" * takeback popped one, remaining: " ++ show (length rest)) $ 
+takeback  (DQ ls)     = -- trace (" * takeback popped one, remaining: " ++ show (length rest)) $
 			(DQ rest, Just final)
- where 
+ where
   (final,rest) = loop ls []
   loop [x]    acc = (x, reverse acc)
   loop (h:tl) acc = loop tl (h:acc)
   loop []     _   = error "this shouldn't happen"
- 
+
 dqlen (DQ l) = length l
 #endif
 
@@ -164,7 +163,7 @@ modifyHotVar  = atomicModifyIORef
 modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
 readHotVar    = readIORef
 writeHotVar   = writeIORef
-instance Show (IORef a) where 
+instance Show (IORef a) where
   show ref = "<ioref>"
 
 -- hotVarTransaction = id
@@ -173,7 +172,7 @@ readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar
 
 
-#elif HOTVAR == 2 
+#elif HOTVAR == 2
 #warning "Using MVars for hot atomic variables."
 -- This uses MVars that are always full with *something*
 type HotVar a = MVar a
@@ -182,7 +181,7 @@ modifyHotVar  v fn = modifyMVar  v (return . fn)
 modifyHotVar_ v fn = modifyMVar_ v (return . fn)
 readHotVar    = readMVar
 writeHotVar v x = do swapMVar v x; return ()
-instance Show (MVar a) where 
+instance Show (MVar a) where
   show ref = "<mvar>"
 
 -- hotVarTransaction = id
@@ -198,14 +197,14 @@ writeHotVarRaw = writeHotVar
 -- Simon Marlow said he saw better scaling with TVars (surprise to me):
 type HotVar a = TVar a
 newHotVar = newTVarIO
-modifyHotVar  tv fn = atomically (do x <- readTVar tv 
+modifyHotVar  tv fn = atomically (do x <- readTVar tv
 				     let (x2,b) = fn x
 				     writeTVar tv x2
 				     return b)
 modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
 readHotVar x = atomically $ readTVar x
 writeHotVar v x = atomically $ writeTVar v x
-instance Show (TVar a) where 
+instance Show (TVar a) where
   show ref = "<tvar>"
 
 hotVarTransaction = atomically
@@ -220,7 +219,7 @@ writeHotVarRaw = writeTVar
 
 {-# INLINE popWork  #-}
 popWork :: Sched -> IO (Maybe (Par ()))
-popWork Sched{ workpool } = 
+popWork Sched{ workpool } =
   modifyHotVar  workpool  takefront
 
 {-# INLINE pushWork #-}
@@ -251,7 +250,7 @@ rand ref = uniformR (0, numCapabilities-1) =<< readHotVar ref
 
 runPar userComp = unsafePerformIO $ do
    allscheds <- makeScheds
-  
+
 #if __GLASGOW_HASKELL__ >= 701 /* 20110301 */
     --
     -- We create a thread on each CPU with forkOnIO.  The CPU on which
@@ -279,18 +278,18 @@ runPar userComp = unsafePerformIO $ do
         forkOnIO cpu $
           if (cpu /= main_cpu)
              then do when dbg$ printf "CPU %d entering scheduling loop.\n" cpu
-		     R.runReaderT enterScheduler sched 
+		     R.runReaderT enterScheduler sched
 		     when dbg$ printf "    CPU %d exited scheduling loop.  FINISHED.\n" cpu
              else do
                   rref <- newIORef Empty
 		  let userComp'  = do when dbg$ liftIO$ printf "Starting Par computation on main thread (%d).\n" main_cpu
 				      res <- userComp
-                                      finalSched <- R.ask 
+                                      finalSched <- R.ask
 				      when dbg$ liftIO$ printf "Out of Par computation on thread (%d).\n" (no finalSched)
 #ifdef DEBUG
 				      liftIO$ putStrLn$ "Result was " ++ (show res)
 #endif
-                                      -- If we are not purely continuation-stealing that means we may 
+                                      -- If we are not purely continuation-stealing that means we may
 				      -- get to this point and have work left in our queue.  We need to reschedule.
                                       dq <- liftIO$ readHotVar (workpool finalSched)
                                       when (dqlen dq > 0) $ do
@@ -298,17 +297,17 @@ runPar userComp = unsafePerformIO $ do
 					 Par enterScheduler
 
                                       when dbg$ liftIO$ putStrLn "MAIN THREAD ABOUT TO FORCE THE FINAL RESULT."
-                                      -- After that we know that this worker has done all its work.  
-				      -- However, if there's anyone else unfinished we may still 
+                                      -- After that we know that this worker has done all its work.
+				      -- However, if there's anyone else unfinished we may still
 				      -- block on "res" in the following put, which is fine.
 				      put_ (IVar rref) res
-		  
+
 		  R.runReaderT (unPar userComp') sched
 
                   when dbg$ printf " *** Completely out of users computation.  Writing final value to MVar %d\n" (hashStableName sn)
                   readIORef rref >>= putMVar mv
-   
-   when dbg$ do 
+
+   when dbg$ do
       printf " *** Main thread about to take final result from MVar %d\n" (hashStableName sn)
    r <- takeMVar mv
    case r of
@@ -320,45 +319,45 @@ runPar userComp = unsafePerformIO $ do
 -- Create the default scheduler(s) state:
 makeScheds = do
    workpools <- replicateM numCapabilities $ newHotVar emptydeque
-   rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar 
-   idle <- newHotVar []   
+   rngs      <- replicateM numCapabilities $ Random.create >>= newHotVar
+   idle <- newHotVar []
    killflag <- newHotVar False
    mortals  <- mapM newHotVar (replicate numCapabilities Set.empty)
-   let states = [ Sched { no=x, idle, killflag, 
+   let states = [ Sched { no=x, idle, killflag,
 			  workpool=wp, scheds=states, rng=rng,
-			  mortal 
+			  mortal
 			}
-                | ((x,wp),(rng,mortal)) <- zip (zip [0..] workpools) 
+                | ((x,wp),(rng,mortal)) <- zip (zip [0..] workpools)
 		                               (zip rngs mortals)]
    return states
 
 
-regulatePopulation Sched{..} = 
-  do 
+regulatePopulation Sched{..} =
+  do
      return ()
 
 replaceWorker :: Sched -> IO ThreadId
-replaceWorker sch@Sched{no} = do 
+replaceWorker sch@Sched{no} = do
   -- EXPERIMENTAL: Because our deques are threadsafe on both ends we
-  -- can try just reusing the same Sched structure.  
+  -- can try just reusing the same Sched structure.
   --   We use forkOnIO to stay on the same processor as the thread we
   -- are replacing.  Therefore we expect no contention from our Sched
   -- reuse because the reusing thread is on the same physical core.
-  -- 
+  --
   -- We do need to change the identifying 'no' though and thereforewe
   -- copy the Sched structure.  (We advance our 'no' by
   -- numCapabilities to avoid collision.)
-  -- 
+  --
   -- TODO: Compare this partial reuse of the Sched structure to just
-  -- allocating a completely fresh one. 
-  -- 
+  -- allocating a completely fresh one.
+  --
   when dbg $ liftIO$ printf " [%d] Replacing with worker %d\n" no (no+numCapabilities)
   forkOnIO no (R.runReaderT enterScheduler sch{no= no + numCapabilities})
 
 -- Register the current thread as being already replaced.
-makeMortal sch@Sched{no, mortal} = 
+makeMortal sch@Sched{no, mortal} =
   modifyHotVar_ mortal (Set.insert no)
-  
+
 
 --------------------------------------------------------------------------------
 -- IVar operations
@@ -375,21 +374,21 @@ spinReadMVar :: Sched -> MVar b -> IO b
 spinReadMVar Sched{..} mv = do
   sn <- makeStableName mv
   let loop = do v <- tryTakeMVar mv
-		case v of 
-		  Nothing -> do printf "                 [%d] thread spinning to try to read MVar %d\n" no (hashStableName sn) 
+		case v of
+		  Nothing -> do printf "                 [%d] thread spinning to try to read MVar %d\n" no (hashStableName sn)
 				threadDelay (100 * 1000) -- 1/10 a second
-				loop 
-		  Just x -> do printf "[%d] SUCCESSFULLY read MVar %d\n" no (hashStableName sn) 
+				loop
+		  Just x -> do printf "[%d] SUCCESSFULLY read MVar %d\n" no (hashStableName sn)
 			       putMVar mv x
 			       return x
   loop
-		  
+
 
 {-# INLINE get  #-}
 -- | read the value in a @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
-get (IVar v) = do 
+get (IVar v) = do
        -- Optimistically read without writing, maybe the value is already there:
        e  <- liftIO$ readIORef v
        case e of
@@ -400,8 +399,8 @@ get (IVar v) = do
             sch <- R.ask
             mv <- liftIO$ newEmptyMVar
 	    sn <- liftIO$ makeStableName mv
-            let rd mv x = 
-                   let 
+            let rd mv x =
+                   let
 #ifdef DEBUG
 		       act = spinReadMVar sch mv
 #else
@@ -415,15 +414,15 @@ get (IVar v) = do
             when dbg$ liftIO$ printf "  It looks like we may go down to block MVar %d for a get.  Thread %d\n" (hashStableName sn) (no sch)
 
 	    -- The thread modifying the IO ref will block until the MVar is filled in:
-	    val <- liftIO$ atomicModifyIORef v $ \e -> 
+	    val <- liftIO$ atomicModifyIORef v $ \e ->
 	     case e of
 	       Empty         -> rd mv (Blocked mv)
 	       x@(Full a)    -> (x, a) -- This happened 1114 times on fib(24)
-	       x@(Blocked mv) -> rd mv x 
+	       x@(Blocked mv) -> rd mv x
             -- Make sure that we have the actual value (not just a thunk) before proceding:
 #ifdef DEBUG
             trace (" !! performing unsafeIO read of MVar "++ show (hashStableName sn) ++"... thread "++ show (no sch)) $
-             val `pseq` 
+             val `pseq`
               trace (" !! COMPLETED read of MVar "++ show (hashStableName sn) ++" on thread "++ show (no sch) ++ " value " ++ show val) $
               (return val)
 #else
@@ -440,17 +439,17 @@ put_ (IVar v) !content = do
    sn <- liftIO$ makeStableName v
    when dbg$ liftIO$ printf "    !! [%d] PUTTING value %s to ivar %d\n" (no sched) (show content) (hashStableName sn)
 #endif
-   liftIO$ do 
+   liftIO$ do
       mmv <- atomicModifyIORef v $ \e -> case e of
                Empty      -> (Full content, Nothing)
                Blocked mv -> (Full content, Just mv)
                Full _     -> error "multiple put"
-      case mmv of 
-        Just mv -> do 
+      case mmv of
+        Just mv -> do
 		      when dbg$ do sn <- makeStableName mv
 				   printf "    !! [thread %d] Putting MVar %d, unblocking thread(s).\n"  (hashStableName sn) (no sched)
 		      putMVar mv content
-        Nothing -> return () 
+        Nothing -> return ()
 
 {-# INLINE fork #-}
 fork :: Par () -> Par ()
@@ -462,7 +461,7 @@ fork task = do
 -- enterScheduler is the main entrypoint for the scheduler.
 enterScheduler :: R.ReaderT Sched IO ()
 enterScheduler = do
-  mysched <- R.ask 
+  mysched <- R.ask
   when dbg$ liftIO$ printf " - Reschedule: CPU %d\n" (no mysched)
   mtask <- liftIO$ popWork mysched
   case mtask of
@@ -471,17 +470,17 @@ enterScheduler = do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ liftIO$ printf "  popped work from own queue (cpu %d)\n" (no mysched)
        -- Run the stolen tasK:
-       unPar task 
+       unPar task
        when dbg$ do sch <- R.ask; liftIO$ printf "  + task finished successfully on cpu %d\n" (no sch)
-       -- Before going around again, we check if we have become "mortal": 
+       -- Before going around again, we check if we have become "mortal":
        mortset <- liftIO$ readHotVar (mortal mysched)
        if Set.member (no mysched) mortset then
           when dbg$ liftIO$ printf " [%d] Thread is mortal, shutting down.\n" (no mysched)
-        else enterScheduler 
-   
+        else enterScheduler
+
 -- | Attempt to steal work or, failing that, give up and go idle.
 steal :: Sched -> IO ()
-steal mysched@Sched{ idle, scheds, rng, no=my_no } = do 
+steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
   when dbg$ printf "cpu %d stealing\n" my_no
   i <- rand rng  -- Pick an initial victim.
   go maxtries i
@@ -494,7 +493,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 
     ----------------------------------------
     -- IDLING behavior:
-    go 0 _ = 
+    go 0 _ =
             do mv <- newEmptyMVar
                when dbg$ printf "cpu %d Tired of stealing... giving up.\n" my_no
                r <- modifyHotVar idle $ \is -> (mv:is, is)
@@ -521,20 +520,20 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
 			go (tries-1) i'
 
       | otherwise     = do
-         let schd = scheds!!i -- TEMP, FIXME, linear access of a list. 
+         let schd = scheds!!i -- TEMP, FIXME, linear access of a list.
          when dbg$ printf "cpu %d trying steal from %d\n" my_no (no schd)
 
          r <- modifyHotVar (workpool schd) takeback
          case r of
            Just task  -> do
               when dbg$ printf "cpu %d got work from cpu %d\n" my_no (no schd)
-	      R.runReaderT (unPar task) mysched 
-           Nothing -> do i' <- rand rng 
+	      R.runReaderT (unPar task) mysched
+           Nothing -> do i' <- rand rng
 			 go (tries-1) i'
 
 {-# INLINE spawn1_ #-}
 -- Spawn a one argument function instead of a thunk.  This is good for debugging if the value supports "Show".
-spawn1_ f x = 
+spawn1_ f x =
 #ifdef DEBUG
  do sch <- R.ask; when dbg$ liftIO$ printf " [%d] spawning fn with arg %s\n" (no sch) (show x)
 #endif
@@ -544,7 +543,7 @@ spawn1_ f x =
 ----------------------------------------------------------------------------------------------------
 -- TEMPORARY -- SCRAP:
 
--- The following is usually inefficient! 
+-- The following is usually inefficient!
 newFull_ a = do v <- new
 		put_ v a
 		return v
@@ -577,7 +576,7 @@ spawn  :: (Show a, NFData a) => Par a -> Par (IVar a)
 spawn_ :: Show a => Par a -> Par (IVar a)
 put_   :: Show a => IVar a -> a -> Par ()
 get    :: Show a => IVar a -> Par a
-runPar :: Show a => Par a -> a 
+runPar :: Show a => Par a -> a
 newFull_ ::  Show a => a -> Par (IVar a)
 #else
 spawn  :: NFData a => Par a -> Par (IVar a)
@@ -585,7 +584,7 @@ spawn_ :: Par a -> Par (IVar a)
 put_   :: IVar a -> a -> Par ()
 put    :: NFData a => IVar a -> a -> Par ()
 get    :: IVar a -> Par a
-runPar :: Par a -> a 
+runPar :: Par a -> a
 newFull_ ::  a -> Par (IVar a)
 
 instance PC.ParFuture IVar Par where
