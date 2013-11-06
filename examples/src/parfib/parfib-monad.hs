@@ -6,10 +6,10 @@ import GHC.Conc
 #ifdef PARSCHED 
 import PARSCHED
 #else
--- import Control.Monad.Par
+import Control.Monad.Par
 -- import Control.Monad.Par.Scheds.ContFree
 -- import Control.Monad.Par.Scheds.IOThreads
-import Control.Monad.Par.Scheds.Direct
+-- import Control.Monad.Par.Scheds.Direct
 #endif
 
 type FibType = Int64
@@ -78,6 +78,7 @@ main = do
 		else    print$ runPar$ parfib1B size cutoff
         -- TEMP: force thresholded version even if cutoff==1
         "thresh" -> print$ runPar$ parfib1B size cutoff
+        "seq"    -> print$ fib size
         _        -> error$ "unknown version: "++version
 
 
@@ -198,5 +199,35 @@ One interesting consequence here is that while the Sparks scheduler
 has an 8X advantage over Trace (and par/pseq an additional 60%
 advantage, 13.8X total), that advantage widens to over 256X in the
 case of the perversely nested parfib!!!
+
+
+[2013.10.03] {Grabbing some numbers on Seq and IO threads versions}
+-------------------------------------------------------------------
+
+Same westmere MINE machines (slate): 
+GHC 7.6.3:
+
+    ghc -i../../../monad-par/ -O2 -threaded parfib-monad.hs -o parfib-monad.exe
+
+    fib(42) - Sequential, compiled with -threaded: 3.108s
+
+    fib(30) - sequential 20ms, but at least 5ms is startup overhead.
+              let's say 15ms.
+
+    fib(30) -N1 - IO threads: 5.76s
+    fib(30) -N2 - IO threads: 4.1s
+    fib(30) -N3 - IO threads: 3.5s
+    fib(30) -N4 - IO threads: 3.3s, 400% cpu
+    fib(32) -N4 - IO threads: 804s, ~300% cpu.... gosh taking forever.
+                              13m24s
+
+fib(30) = 1346269  (/ 1000000000 (/ 1346269 3.3)) = 2,451 nanoseconds
+fib(32) = 3524578  (/ 1000000000 (/ 3524578 804)) = 228,000 nanoseconds
+
+fib(42) = 433494437,  seq version:  (/ 1000000000 (/ 433494437 3.1)) = 6.4 ns
+
+fib(42) = 433494437,  par/pseq version -N1: (/ 1000000000 (/ 433494437 8.7)) = 20ns - 6.4ns = 14ns
+
+fib(35) = 14930352, trace version -N1: 4.9s (/ 1000000000 (/ 14930352 4.9)) = 328ns
 
 -}
