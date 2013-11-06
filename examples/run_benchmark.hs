@@ -52,8 +52,10 @@ main = do
                         (concat $ map snd all_cli_options)  
   if Help `elem` opts || errs /= [] then
     error help2
-   else  
-    withArgs (nonopts ++ unrecog) $ 
+   else do
+    let passthru = nonopts ++ unrecog
+    putStrLn$ "  [Note: passing through options to HSBencher:] "++unwords passthru
+    withArgs passthru $ 
      case args of
        "desktop":_ -> defaultMainWithBechmarks bls_desktop
        "server" :_ -> defaultMainWithBechmarks bls_server
