@@ -45,8 +45,12 @@ test: deps runner
 
 runner: dist/build/run_benchmark/run_benchmark
 dist/build/run_benchmark/run_benchmark: run_benchmark.hs run_benchmark.cabal
-	$(CABAL) install --only-dependencies
+	$(CABAL) install --only-dependencies -j
 	$(CABAL) build
+
+sandbox:
+	cabal sandbox init
+	for f in $(BENCHES); do (cd $$f; cabal sandbox init --sandbox ../../.cabal-sandbox) done
 
 gen_cabal:
 	./generate_cabal.sh
