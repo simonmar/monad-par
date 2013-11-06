@@ -7,6 +7,7 @@ Synopsis:            Type classes generalizing the functionality of the 'monad-p
 
 --  0.3      : Factored out of monad-par package.
 --  0.3.1    : Relax deepseq restriction
+--  0.3.3    : Minor: doc and formatting changes only.
 
 Description:
   The 'Par' monad offers a parallel programming API based on dataflow
