@@ -300,8 +300,10 @@ threadSelection = unsafePerformIO $ do
 -- | Add variation from thread count.    
 varyThreads :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 varyThreads conf = Or
-  [ conf -- Unthreaded mode.
-  , And [ Set NoMeaning (CompileParam "--ghc-options='-threaded'")
+  [
+    -- Disabling unthreaded mode:
+    -- conf -- Unthreaded mode.
+    And [ Set NoMeaning (CompileParam "--ghc-options='-threaded'")
         , Or (map fn threadSelection)
         , conf ]
   ]
