@@ -45,6 +45,7 @@ test: deps runner
 
 runner: dist/build/run_benchmark/run_benchmark
 dist/build/run_benchmark/run_benchmark: run_benchmark.hs run_benchmark.cabal
+	$(CABAL) install --only-dependencies
 	$(CABAL) build
 
 gen_cabal:
