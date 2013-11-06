@@ -54,13 +54,15 @@ main = do
     error help2
    else do
     let passthru = nonopts ++ unrecog
-    putStrLn$ "  [Note: passing through options to HSBencher:] "++unwords passthru
+    putStrLn$ "  [Bench script mode selection]: "++ show opts
+    putStrLn$ "  [Note: passing through options to HSBencher]: "++unwords passthru
     withArgs passthru $ 
-     case args of
-       "desktop":_ -> defaultMainWithBechmarks bls_desktop
-       "server" :_ -> defaultMainWithBechmarks bls_server
-       "quick"  :_ -> defaultMainWithBechmarks bls_quick
-       _           -> defaultMainWithBechmarks bls_quick
+     case opts of
+       [SetMode Desktop] -> defaultMainWithBechmarks bls_desktop
+       [SetMode Server]  -> defaultMainWithBechmarks bls_server
+       [SetMode Quick]   -> defaultMainWithBechmarks bls_quick
+       []        -> defaultMainWithBechmarks bls_quick
+       ls        -> error$ "Conflicting mode options: "++show ls
     
 --------------------------------------------------------------------------------
 -- Here are the actual benchmarks:
