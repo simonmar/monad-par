@@ -11,6 +11,8 @@
 -- TODO: Before declaring this module TRUSTWORTHY/SAFE, we need to
 -- make the IVar type abstract.
 
+{-# LANGUAGE TypeFamilies #-}
+
 -- | A scheduler for the Par monad based on directly performing IO
 -- actions when Par methods are called (i.e. without using a lazy
 -- trace data structure).
@@ -45,6 +47,9 @@ import qualified       Control.Monad.Par.Unsafe as UN
 import                 Control.Monad.Par.Scheds.DirectInternal
                        (Par(..), Sched(..), HotVar, SessionID, Session(Session),
                         newHotVar, readHotVar, modifyHotVar, modifyHotVar_, writeHotVarRaw)
+#ifdef NEW_GENERIC
+import qualified       Control.Par.Class as PN
+#endif
 import Control.DeepSeq
 import qualified Data.Map as M
 import qualified Data.Set as S
@@ -809,6 +814,24 @@ instance Functor Par where
 instance Applicative Par where
    (<*>) = ap
    pure  = return
+
+#ifdef NEW_GENERIC
+instance PN.ParFuture Par where
+  type Future Par = IVar
+  type FutContents Par a = ()
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+  
+instance PN.ParIVar Par  where
+  fork = fork
+  new  = new
+  put_ = put_
+  newFull = newFull
+  newFull_ = newFull_
+#endif
+   
 -- </boilerplate>
 --------------------------------------------------------------------------------
 
@@ -838,7 +861,7 @@ sanityCheck allscheds = do
 dbgTakeMVar :: String -> MVar a -> IO a
 dbgTakeMVar msg mv =
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
-  E.catch (takeMVar mv) ((\_ -> doDebugStuff) :: IOError -> IO a)
+  E.catch (takeMVar mv) (\(_::IOError) -> doDebugStuff)
  where
    doDebugStuff = do printf "This takeMVar blocked indefinitely!: %s\n" msg
                      error "failed"

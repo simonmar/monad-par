@@ -80,6 +80,10 @@ Flag chaselev
    Description: Use Chase-Lev Deques for higher-perf work-stealing.
    Default: False
 
+Flag newgeneric
+   Description: Provide instances for the new par-classes generic Par programming interface.
+   Default: False
+
 Library
   Source-repository head
     type:     git
@@ -118,6 +122,10 @@ Library
   if flag(chaselev)
     cpp-options: -DUSE_CHASELEV
     build-depends: chaselev-deque
+
+  if flag(newgeneric)
+    cpp-options: -DNEW_GENERIC
+    build-depends: par-classes
 
   ghc-options: -O2
   Other-modules:

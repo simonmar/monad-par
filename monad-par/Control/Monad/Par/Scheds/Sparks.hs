@@ -1,4 +1,5 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE TypeFamilies, CPP #-}
 
 -- | This scheduler uses sparks (par/pseq) directly, but only supplies
 --   the @Monad.Par.Class.ParFuture@ interface.
@@ -17,6 +18,11 @@ import Control.DeepSeq
 import Control.Parallel
 import qualified Control.Monad.Par.Class as PC
 -- import Control.Parallel.Strategies (rpar)
+
+#ifdef NEW_GENERIC
+import qualified       Control.Par.Class as PN
+#endif
+
 
 {-# INLINE runPar #-}
 {-# INLINE spawn #-}
@@ -62,6 +68,16 @@ instance Functor Par where
 instance Applicative Par where
    (<*>) = ap
    pure  = return
+
+#ifdef NEW_GENERIC
+instance PN.ParFuture Par where
+  type Future Par = Future
+  type FutContents Par a = ()
+  get    = get
+  spawn  = spawn
+  spawn_ = spawn_
+  spawnP = spawnP
+#endif
 
 -- </boilerplate>
 --------------------------------------------------------------------------------
