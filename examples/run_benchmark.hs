@@ -121,8 +121,32 @@ bls_desktop ss =
  , Benchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
  ]
 
+
+-- # Version: server 1.5
+-- # I'm attempting to keep track of changes to this config with the above number.
+-- # Note that changes to the benchmarks themselves also require changing
+-- # this version number.  However, ADDING new benchmarks does not require 
+-- # a version bump.
+-- # 
+-- # CHANGELOG:
+-- # 
+-- # 1.2 - bringing up to date with benchlist.txt for paper.
+-- # 1.3 - changed mandel implementation
+-- # 1.4 - removed path prefixes for new cabal build system -ACF
+-- # 1.5 - prefixes back
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
-bls_server ss = []
+bls_server ss = 
+ [ Benchmark "src/blackscholes/" ["10000","30000000"]    (futures ss)
+ , Benchmark "src/nbody/"        ["25000"]               (ivars   ss)
+ , Benchmark "src/mandel/"       (words "1024 1024 512") (futures ss)
+ , Benchmark "src/coins/"        ["8", "1600"]  (futures ss)
+
+   -- These don't match the naming convention at the moment:
+ , Benchmark "src/matmult/"      (words "1024 0 64")  (futures ss)   
+ , Benchmark "src/sumeuler/"     (words "38 16000 100")  (futures ss)
+ , Benchmark "src/sorting/"      ["cpu", "24", "8192"]  (futures ss)
+ ]
+
 
 ----------------------------------------
 -- Old, disabled benchmarks:
@@ -180,36 +204,6 @@ bls_server ss = []
 ------------------------------------------------------------  
 -- Server configuration:
 ------------------------------------------------------------    
-
-     -- # See README.md for format description.
-     -- #
-     -- # Version: server 1.5
-     -- # 
-     -- # I'm attempting to keep track of changes to this config with the above.
-     -- # Note that changes to the benchmarks themselves also require changing
-     -- # this version number.  However, ADDING new benchmarks does not require 
-     -- # a version bump. 
-     -- # 
-     -- # CHANGELOG:
-     -- # 
-     -- # 1.2 - bringing up to date with benchlist.txt for paper.
-     -- # 1.3 - changed mandel implementation
-     -- # 1.4 - removed path prefixes for new cabal build system -ACF
-     -- # 1.5 - prefixes back
-
-     -- src/blackscholes  futures 10000 30000000
-
-     -- src/nbody         ivars  25000
-
-     -- src/mandel futures 1024 1024 512
-
-     -- src/coins         futures 8 1600
-
-     -- src/matmult/MatMult   futures 1024 0 64
-
-     -- src/sumeuler/sumeuler futures 38 16000 100
-
-     -- src/sorting/mergesort futures cpu 24 8192
 
 
 
