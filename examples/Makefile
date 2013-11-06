@@ -56,7 +56,7 @@ gen_cabal:
 	./generate_cabal.sh
 
 deps: gen_cabal
-	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --enable-tests --disable-documentation -j"
+	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --disable-documentation -j"
 
 #================================================================================
 # Validation / regression testing:
