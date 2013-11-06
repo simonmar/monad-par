@@ -34,7 +34,8 @@ install: gen_cabal
 	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
-	rm -rf bin *.hi *.o *.exe
+	rm -rf bin *.hi *.o *.exe .cabal-sandbox/
+	find -name "cabal.sandbox.config" | xargs rm
 	$(CABAL) clean || echo 
 
 # This is a quick test that assumes dependencies are already there.

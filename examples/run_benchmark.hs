@@ -9,9 +9,11 @@ Where mode is 'desktop', 'server', or 'quick'.
 
 -}
 
+{-# OPTIONS_GHC -fwarn-incomplete-patterns #-}
+
 module Main where
 
-import qualified Data.Set as Set
+import qualified Data.Set as S
 
 import GHC.Conc           (getNumProcessors)
 import System.Environment (getEnvironment, getArgs, withArgs)
@@ -29,7 +31,10 @@ import HSBencher.App (defaultMainWithBechmarks, all_cli_options)
 --------------------------------------------------------------------------------
 
 data Mode = Server | Desktop | Quick      deriving (Show,Eq)
-data Flag = SetMode Mode | Help           deriving (Show,Eq)
+data Flag = SetMode Mode
+          | SetSched Sched
+          | Help
+          deriving (Show,Eq)
                 
 options :: [OptDescr Flag]
 options =
@@ -37,8 +42,17 @@ options =
      , Option [] ["desktop"] (NoArg (SetMode Desktop)) "desktop-sized benchmarks"
      , Option [] ["quick"]   (NoArg (SetMode Quick))   "(default) quick testing"
      , Option ['h'] ["help"] (NoArg Help)              "report this help message"
+
+     , Option [] ["sparks"]  (NoArg (SetSched Sparks)) "add this scheduler (default is all schedulers)"
+     , Option [] ["direct"]  (NoArg (SetSched Direct)) "add this scheduler "       
+     , Option [] ["trace"]   (NoArg (SetSched Trace))  "add this scheduler "
+       
+     , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "   
      ]
-    
+
+isSetSched (SetSched _) = True
+isSetSched _ = False
+
 main :: IO ()
 main = do
   args <- getArgs
@@ -49,59 +63,66 @@ main = do
                         "\nFirst, specific options for this script are:\n")
                 options
       help2 = usageInfo (help1++"\nAlso use the generic HSBencher options below:\n")
-                        (concat $ map snd all_cli_options)  
+                        (concat $ map snd all_cli_options)
+
+      activeScheds0 = [ sched | SetSched sched <- opts ]
+      activeScheds = if null activeScheds0
+                     then defaultSchedSet
+                     else S.fromList activeScheds0
   if Help `elem` opts || errs /= [] then
     error help2
    else do
     let passthru = nonopts ++ unrecog
-    putStrLn$ "  [Bench script mode selection]: "++ show opts
+        modes    = [ s | SetMode s <- opts ]
+    putStrLn$ "  [Bench script mode selection]: "++ show modes
+    putStrLn$ "  [Bench script Sched selection]: "++ show activeScheds
     putStrLn$ "  [Note: passing through options to HSBencher]: "++unwords passthru
     withArgs passthru $ 
-     case opts of
-       [SetMode Desktop] -> defaultMainWithBechmarks bls_desktop
-       [SetMode Server]  -> defaultMainWithBechmarks bls_server
-       [SetMode Quick]   -> defaultMainWithBechmarks bls_quick
-       []        -> defaultMainWithBechmarks bls_quick
+     case modes of
+       [Desktop] -> defaultMainWithBechmarks (bls_desktop activeScheds)
+       [Server]  -> defaultMainWithBechmarks (bls_server activeScheds)
+       [Quick]   -> defaultMainWithBechmarks (bls_quick activeScheds)
+       []        -> defaultMainWithBechmarks (bls_quick activeScheds)
        ls        -> error$ "Conflicting mode options: "++show ls
     
 --------------------------------------------------------------------------------
 -- Here are the actual benchmarks:
 --------------------------------------------------------------------------------
 
-bls_quick :: [Benchmark DefaultParamMeaning]
-bls_quick =
+bls_quick :: S.Set Sched -> [Benchmark DefaultParamMeaning]
+bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ Benchmark "src/blackscholes/" []  futures
- , Benchmark "src/nbody/"        []  ivars
- , Benchmark "src/mandel/"       []  futures
- , Benchmark "src/coins/"        []  futures
+ [ Benchmark "src/blackscholes/" []  (futures ss)
+ , Benchmark "src/nbody/"        []  (ivars   ss)
+ , Benchmark "src/mandel/"       []  (futures ss)
+ , Benchmark "src/coins/"        []  (futures ss)
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      []  futures   
- , Benchmark "src/sumeuler/"     []  futures
- , Benchmark "src/sorting/"      []  futures
+ , Benchmark "src/matmult/"      []  (futures ss)   
+ , Benchmark "src/sumeuler/"     []  (futures ss)
+ , Benchmark "src/sorting/"      []  (futures ss)
  ]
 
-bls_desktop :: [Benchmark DefaultParamMeaning]
-bls_desktop = 
+bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
+bls_desktop ss = 
  ------------------------------------------------------------  
  -- Desktop configuration:
  ------------------------------------------------------------  
- [ Benchmark "src/blackscholes/" ["10000","15000000"]  futures
- , Benchmark "src/nbody/"        ["13000"]             ivars
- , Benchmark "src/mandel/"       ["1024","1024","256"] futures
- , Benchmark "src/coins/"        ["8", "1250"]         futures
+ [ Benchmark "src/blackscholes/" ["10000","15000000"]  (futures ss)
+ , Benchmark "src/nbody/"        ["13000"]             (ivars   ss)
+ , Benchmark "src/mandel/"       ["1024","1024","256"] (futures ss)
+ , Benchmark "src/coins/"        ["8", "1250"]         (futures ss)
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      ["768", "0", "64"]    futures   
- , Benchmark "src/sumeuler/"     ["38", "8000", "100"] futures
- , Benchmark "src/sorting/"      ["cpu", "24", "8192"] futures
+ , Benchmark "src/matmult/"      ["768", "0", "64"]    (futures ss)   
+ , Benchmark "src/sumeuler/"     ["38", "8000", "100"] (futures ss)
+ , Benchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
  ]
 
-bls_server :: [Benchmark DefaultParamMeaning]
-bls_server = []
+bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
+bls_server ss = []
 
 ----------------------------------------
 -- Old, disabled benchmarks:
@@ -200,15 +221,15 @@ test_metapar = False
 --------------------------------------------------------------------------------
 
 -- | Benchmarks that only require futures, not ivars.
-futures :: BenchSpace DefaultParamMeaning
-futures = defaultSettings$ varyThreads $
-          Or$ map sched $ Set.toList defaultSchedSet
+futures :: S.Set Sched -> BenchSpace DefaultParamMeaning
+futures ss = defaultSettings$ varyThreads $
+          Or$ map sched $ S.toList ss
 
 -- | Actually using ivars.  For now this just rules out the Sparks scheduler:
-ivars :: BenchSpace DefaultParamMeaning
-ivars   = defaultSettings$ varyThreads $
-          Or$ map sched $ Set.toList $
-          Set.delete Sparks defaultSchedSet
+ivars :: S.Set Sched -> BenchSpace DefaultParamMeaning
+ivars ss = defaultSettings$ varyThreads $
+          Or$ map sched $ S.toList $
+          S.delete Sparks ss  -- This is the only one that can't support IVars.
 
 defaultSettings :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 defaultSettings spc =
@@ -234,6 +255,7 @@ defaultSettings spc =
 data Sched 
    = Trace | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
+   | LVish
    | None
    -- | ContFree   -- Obsolete strawman.
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
@@ -242,36 +264,24 @@ data Sched
 sched :: Sched -> BenchSpace DefaultParamMeaning
 sched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
 
--- | By default, we usually don't test meta-par.
-defaultSchedSet :: Set.Set Sched
-defaultSchedSet = Set.difference
-                  (Set.fromList [minBound ..])
+-- | By default, we usually don't test meta-par or lvish:
+defaultSchedSet :: S.Set Sched
+defaultSchedSet = S.difference
+                  (S.fromList [minBound ..])
                   (if test_metapar
-                   then Set.singleton None
-                   else Set.fromList [NUMA, SMP, None])
-
--- TODO -- we really need to factor this out into a configuration file.
-schedToModule :: Sched -> String
-schedToModule s = 
-  case s of 
---   Trace    -> "Control.Monad.Par"
-   Trace    -> "Control.Monad.Par.Scheds.Trace"
-   Direct   -> "Control.Monad.Par.Scheds.Direct"
-   Sparks   -> "Control.Monad.Par.Scheds.Sparks"
-   SMP      -> "Control.Monad.Par.Meta.SMP"
-   NUMA     -> "Control.Monad.Par.Meta.NUMAOnly"
-   None     -> "qualified Control.Monad.Par as NotUsed"
+                   then S.fromList [None]
+                   else S.fromList [NUMA, SMP, None])
 
 schedToCabalFlag :: Sched -> String
 schedToCabalFlag s =
--- "--flags="  
   case s of
-    Trace -> "-ftrace"
+    Trace  -> "-ftrace"
     Direct -> "-fdirect"
     Sparks -> "-fsparks"
-    SMP -> "-fmeta-smp"
-    NUMA -> "-fmeta-numa"
-    None -> ""
+    SMP    -> "-fmeta-smp"
+    NUMA   -> "-fmeta-numa"
+    LVish  -> "-flvish" 
+    None   -> ""
 
 -- TODO: make this an option:
 threadSelection :: [Int]

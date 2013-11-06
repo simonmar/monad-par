@@ -83,8 +83,8 @@ cat >> $CABALFILE <<EOF
      cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.NUMAOnly
 
   if flag(lvish)
-     build-depends:   lvish >= 1.0.0.6
-     cpp-options:     -DPARSCHED="Control.LVish; import Data.LVar.IVar;"
+     build-depends:   lvish >= 1.1
+     cpp-options:     -DPARSCHED=Control.LVish
 
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
      || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
