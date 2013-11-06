@@ -21,32 +21,33 @@ BENCHES= src/mandel/ src/primes/ src/sorting/ src/nbody/ src/queens/ src/blacksc
 # disabling due to dependency hell with deepseq and containers:
 # src/cholesky/ 
 
+#================================================================================
+
+.PHONY: all gen_cabal runner test install clean deps validate linValidate winValidate tracevers directvers smpvers sparksvers allvers winhelper
+
 all: test
 
-install: 
-	./generate_cabal.sh
+install: gen_cabal
 	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
 	rm -rf bin *.hi *.o *.exe
 	$(CABAL) clean || echo 
 
-# This is a dependency but isn't yet published to hackage [2013.05.09]
-# UPDATE [2013.05.10]: Assume it's in the global path:
-HSBENCHER=hsbencher
-
 # This is a quick test that assumes dependencies are already there.
 # TODO -- should probably merge this with 'validate'.
 # But right now it's SOO much faster than using cabal that it's nice to have around:
-test: deps
-        # Building with no cabal should put the same executables in the same
-        # places as building with cabal:
-	SHORTRUN=1 THREADS="1" $(HSBENCHER) --par --no-cabal +RTS -N
+test: deps runner
+	./run_benchmark
 
-monad-par-examples.cabal:
+runner: dist/build/run_benchmark/run_benchmark
+dist/build/run_benchmark/run_benchmark: run_benchmark.hs run_benchmark.cabal
+	$(CABAL) build
+
+gen_cabal:
 	./generate_cabal.sh
 
-deps: monad-par-examples.cabal
+deps: gen_cabal
 	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --enable-tests --disable-documentation -j"
 
 #================================================================================
@@ -65,7 +66,7 @@ else
   MAINDEVDIR=..\\cabal-dev
 endif
 
-validate: monad-par-examples.cabal 
+validate: gen_cabal
 	$(MAKE) $(BUILDCMD)
 
 # This is just like a regular test but with cabal-dev.
@@ -73,7 +74,7 @@ validate: monad-par-examples.cabal
 #	$(MAKE) CABAL=$(CBLDEV) test
 
 # OR... we could build through cabal and forgo parallelism:
-linValidate: monad-par-examples.cabal
+linValidate: gen_cabal
 	$(MAKE) CABAL="$(CBLDEV)" deps
 	SHORTRUN=1 THREADS="1" $(HSBENCHER) --with-cabal-install="$(CBLDEV)" --with-ghc="$(GHC)"
 
