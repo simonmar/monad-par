@@ -23,9 +23,12 @@ BENCHES= src/mandel/ src/primes/ src/sorting/ src/nbody/ src/queens/ src/blacksc
 
 #================================================================================
 
-.PHONY: all gen_cabal runner test install clean deps validate linValidate winValidate tracevers directvers smpvers sparksvers allvers winhelper
+.PHONY: all build gen_cabal runner test install clean deps validate linValidate winValidate tracevers directvers smpvers sparksvers allvers winhelper
 
 all: test
+
+# Get everything ready to test/benchmark, but don't do it:
+build: gen_cabal deps runner
 
 install: gen_cabal
 	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)

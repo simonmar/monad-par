@@ -1,31 +1,71 @@
 
+{- | The benchmarking script:
+
+USAGE:
+
+   ./run_benchmark [mode] [hsbencher options]
+
+Where mode is 'desktop', 'server', or 'quick'.
+
+-}
+
 module Main where
 
 import qualified Data.Set as Set
 
-import GHC.Conc (getNumProcessors)
-import System.Environment (getEnvironment)
-import System.IO.Unsafe (unsafePerformIO)
-
+import GHC.Conc           (getNumProcessors)
+import System.Environment (getEnvironment, getArgs, withArgs)
+import System.IO.Unsafe   (unsafePerformIO)
+import System.Console.GetOpt
 
 import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..)
                        -- compileOptsOnly, enumerateBenchSpace, toCompileFlags,
                        -- makeBuildID, BuildID, 
                       )
-import HSBencher.App (defaultMainWithBechmarks)
+import HSBencher.App (defaultMainWithBechmarks, all_cli_options)
 
--- Temp:
--- import Text.PrettyPrint.GenericPretty (Out(doc,docPrec), Generic)
+--------------------------------------------------------------------------------
+-- Main Script
+--------------------------------------------------------------------------------
 
+data Mode = Server | Desktop | Quick      deriving (Show,Eq)
+data Flag = SetMode Mode | Help           deriving (Show,Eq)
+                
+options :: [OptDescr Flag]
+options =
+     [ Option [] ["server"]  (NoArg (SetMode Server))  "server-sized benchmarks"
+     , Option [] ["desktop"] (NoArg (SetMode Desktop)) "desktop-sized benchmarks"
+     , Option [] ["quick"]   (NoArg (SetMode Quick))   "(default) quick testing"
+     , Option ['h'] ["help"] (NoArg Help)              "report this help message"
+     ]
+    
 main :: IO ()
-main = defaultMainWithBechmarks bls
+main = do
+  args <- getArgs
+  let (opts,nonopts,unrecog,errs) = getOpt' Permute options args
+  -- The first arg is a kind of mode:
 
+  let help1 = usageInfo ("USAGE: run_benchmark [options]\n"++
+                        "\nFirst, specific options for this script are:\n")
+                options
+      help2 = usageInfo (help1++"\nAlso use the generic HSBencher options below:\n")
+                        (concat $ map snd all_cli_options)  
+  if Help `elem` opts || errs /= [] then
+    error help2
+   else  
+    withArgs (nonopts ++ unrecog) $ 
+     case args of
+       "desktop":_ -> defaultMainWithBechmarks bls_desktop
+       "server" :_ -> defaultMainWithBechmarks bls_server
+       "quick"  :_ -> defaultMainWithBechmarks bls_quick
+       _           -> defaultMainWithBechmarks bls_quick
+    
 --------------------------------------------------------------------------------
 -- Here are the actual benchmarks:
 --------------------------------------------------------------------------------
 
-bls :: [Benchmark DefaultParamMeaning]
-bls =
+bls_quick :: [Benchmark DefaultParamMeaning]
+bls_quick =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
@@ -40,19 +80,24 @@ bls =
  , Benchmark "src/sorting/"      []  futures
  ]
 
+bls_desktop :: [Benchmark DefaultParamMeaning]
+bls_desktop = 
  ------------------------------------------------------------  
  -- Desktop configuration:
  ------------------------------------------------------------  
- -- [ Benchmark "src/blackscholes/" ["10000","15000000"]  futures
- -- , Benchmark "src/nbody/"               ["13000"]             ivars
- -- , Benchmark "src/mandel/"             ["1024","1024","256"] futures
- -- , Benchmark "src/coins/"               ["8", "1250"]         futures
+ [ Benchmark "src/blackscholes/" ["10000","15000000"]  futures
+ , Benchmark "src/nbody/"        ["13000"]             ivars
+ , Benchmark "src/mandel/"       ["1024","1024","256"] futures
+ , Benchmark "src/coins/"        ["8", "1250"]         futures
 
- --   -- These don't match the naming convention at the moment:
- -- , Benchmark "src/matmult/"           ["768", "0", "64"]    futures   
- -- , Benchmark "src/sumeuler/"         ["38", "8000", "100"] futures
- -- , Benchmark "src/sorting/"         ["cpu", "24", "8192"] futures
- -- ]
+   -- These don't match the naming convention at the moment:
+ , Benchmark "src/matmult/"      ["768", "0", "64"]    futures   
+ , Benchmark "src/sumeuler/"     ["38", "8000", "100"] futures
+ , Benchmark "src/sorting/"      ["cpu", "24", "8192"] futures
+ ]
+
+bls_server :: [Benchmark DefaultParamMeaning]
+bls_server = []
 
 ----------------------------------------
 -- Old, disabled benchmarks:
