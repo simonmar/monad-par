@@ -13,7 +13,8 @@ executable $PREFIX-$NAME
   main-is:           $NAME.hs
 
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
+     || flag(lvish))
     buildable:       False
 
   build-depends:     $COMMON_DEPS
@@ -44,6 +45,9 @@ flag meta-smp
   default:           False
 
 flag meta-numa
+  default:           False
+
+flag lvish
   default:           False
 
 EOF
@@ -78,8 +82,13 @@ cat >> $CABALFILE <<EOF
      build-depends:   meta-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.NUMAOnly
 
+  if flag(lvish)
+     build-depends:   lvish >= 1.0.0.6
+     cpp-options:     -DPARSCHED="Control.LVish; import Data.LVar.IVar;"
+
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa))
+     || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
+     || flag(lvish))
      build-depends:   monad-par
      -- uses Control.Monad.Par by default
 
