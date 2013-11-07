@@ -25,6 +25,7 @@ import Prelude hiding (mapM, sequence, head,tail)
 
 #ifdef NEW_GENERIC
 import qualified       Control.Par.Class as PN
+import qualified       Control.Par.Class.Unsafe as PU
 #endif
 
 -- -----------------------------------------------------------------------------
@@ -61,6 +62,13 @@ instance PC.ParIVar IVar Par  where
 --  yield = yield
 
 #ifdef NEW_GENERIC
+instance PU.ParMonad Par where
+  fork = fork  
+  internalLiftIO io = Par (LiftIO io)
+
+instance PU.ParThreadSafe Par where
+  unsafeParIO io = Par (LiftIO io)  
+    
 instance PN.ParFuture Par where
   type Future Par = IVar
   type FutContents Par a = ()
@@ -70,7 +78,6 @@ instance PN.ParFuture Par where
   spawnP = spawnP
   
 instance PN.ParIVar Par  where
-  fork = fork
   new  = new
   put_ = put_
   newFull = newFull

@@ -49,6 +49,7 @@ import                 Control.Monad.Par.Scheds.DirectInternal
                         newHotVar, readHotVar, modifyHotVar, modifyHotVar_, writeHotVarRaw)
 #ifdef NEW_GENERIC
 import qualified       Control.Par.Class as PN
+import qualified       Control.Par.Class.Unsafe as PU
 #endif
 import Control.DeepSeq
 import qualified Data.Map as M
@@ -816,6 +817,13 @@ instance Applicative Par where
    pure  = return
 
 #ifdef NEW_GENERIC
+instance PU.ParMonad Par where
+  fork = fork  
+  internalLiftIO io = Par (lift $ lift io)
+
+instance PU.ParThreadSafe Par where
+  unsafeParIO io = Par (lift $ lift io)
+
 instance PN.ParFuture Par where
   type Future Par = IVar
   type FutContents Par a = ()
@@ -825,7 +833,6 @@ instance PN.ParFuture Par where
   spawnP = spawnP
   
 instance PN.ParIVar Par  where
-  fork = fork
   new  = new
   put_ = put_
   newFull = newFull
