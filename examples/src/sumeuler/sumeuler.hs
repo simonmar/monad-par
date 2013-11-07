@@ -22,7 +22,11 @@ import System.Environment (getArgs)
 import Control.Monad (when)
 import ListAux -- split/join functions, put in new module
 import SumEulerPrimes
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+#else
 import qualified Control.Monad.Par.Combinator as C
+#endif
 #ifdef PARSCHED 
 import PARSCHED
 #else

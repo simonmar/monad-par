@@ -5,8 +5,13 @@
 -- Author: Ryan Newton 
 
 import System.Environment
-import Control.Monad.Par.AList as A
+import qualified Control.Monad.Par.AList as A
+
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+#else
 import qualified Control.Monad.Par.Combinator as C
+#endif
 import Debug.Trace
 #ifdef PARSCHED 
 import PARSCHED
@@ -26,23 +31,23 @@ isPrime n = (prmlp 3 == n)
 
 -- Next, a CnC program that calls the serial test in parallel.
 
-primes :: Int -> Int -> Par (AList Int)
+primes :: Int -> Int -> Par (A.AList Int)
 primes start end = 
 -- parMapReduceRange (InclusiveRange start end)
  C.parMapReduceRangeThresh 100 (C.InclusiveRange start end)
 		   (\n -> if 
 		            -- TEMP: Need a strided range here:
                             (rem n 2 /= 0) && isPrime n 
-		          then return$ singleton n
-		          else return$ empty)
-		   (\ a b -> return (append a b))
-		   empty
+		          then return$ A.singleton n
+		          else return$ A.empty)
+		   (\ a b -> return (A.append a b))
+		   A.empty
 
 -- This version never builds up the list, it simply counts:
 -- countprimes :: Int -> Int -> Par Int
 -- countprimes start end = 
 		   
-
+main :: IO ()
 main = do args <- getArgs 
 	  let size = case args of 
 		      []  -> 1000 -- Should output 168

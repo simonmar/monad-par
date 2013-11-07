@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns, CPP #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 import Control.Monad
 import Control.DeepSeq
@@ -6,8 +7,10 @@ import Control.Exception
 import Data.Complex
 import System.Environment
 import System.IO
+#ifdef ALIST
 import Control.Monad.Par.AList as A
-import qualified Control.Monad.Par.Combinator as C
+#endif
+
 #ifdef PARSCHED 
 import PARSCHED
 #else
@@ -20,6 +23,18 @@ import qualified Data.Vector.Unboxed as V
 import Codec.Picture  -- JuicyPixels
 import qualified Data.Vector.Storable as V
 #endif
+
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+import qualified Data.Par.Range as C
+import Control.Par.Class
+parMapReduceRangeThresh :: (NFData a, ParFuture p, FutContents p a)
+                        => Int -> C.InclusiveRange -> (Int -> p a) -> (a -> a -> p a) -> a -> p a
+parMapReduceRangeThresh = C.parMapReduceThresh
+#else
+import Control.Monad.Par.Combinator as C
+#endif
+
 
 mandel :: Int -> Complex Double -> Int
 mandel max_depth c = loop 0 0
@@ -63,7 +78,7 @@ runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par Ve
 runMandel minX minY maxX maxY winX winY max_depth = do
   -- Auto-partitioning version.  A bit worse:
   -- C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
-  C.parMapReduceRangeThresh threshold (C.InclusiveRange 0 (winY-1)) 
+  parMapReduceRangeThresh threshold (C.InclusiveRange 0 (winY-1)) 
      (\y -> 
        do
           let vec = V.generate winX (\x -> mandelStep y x)
@@ -100,6 +115,7 @@ simple x y depth = runMandel (-2) (-2) 2 2 x y depth
 
 --------------------------------------------------------------------------------
 
+#ifdef ALIST
 -- A meaningless checksum.  This match the C++ CnC benchmark:
 mandelCheck :: AList [Int] -> Int -> Int -> Int
 mandelCheck als max_col max_depth = loop 0 als 0
@@ -111,6 +127,7 @@ mandelCheck als max_col max_depth = loop 0 als 0
  loop2 i j []    !sum = sum
  loop2 i j (h:t) !sum | h == max_depth = loop2 i (j+1) t (sum + i*max_col + j)
 		      | otherwise      = loop2 i (j+1) t  sum
+#endif
 
  -- This kind of checksum is much simpler:
 checkSum :: VecTree -> Int

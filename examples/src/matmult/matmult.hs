@@ -26,7 +26,12 @@ import System.Environment
 import Data.List hiding (foldl', foldl1')
 import ListAux
 import Control.DeepSeq
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+#else
 import qualified Control.Monad.Par.Combinator as C
+#endif
+
 #ifdef PARSCHED 
 import PARSCHED
 #else

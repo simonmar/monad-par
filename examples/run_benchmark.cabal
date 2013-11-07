@@ -4,7 +4,7 @@
 name:                run-benchmark
 version:             0.0.1
 build-type:          Simple
-default-language:    Haskll2010
+-- default-language:    Haskll2010
 -- We force a recent version to make sure we have sandboxes:
 cabal-version:       >=1.18
 

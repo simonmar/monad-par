@@ -15,8 +15,13 @@ ifeq ($(CABALDEV),)
   CABALDEV= cabal-dev
 endif
 
-BENCHES= src/mandel/ src/primes/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
-  src/randomGen/ src/sumeuler/ src/matmult/ src/minimax/ src/partree/ src/kmeans/
+ifeq ($(SCHED),)
+  SCHED= -ftrace
+endif
+
+
+BENCHES= src/mandel/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
+ src/sumeuler/ src/matmult/ src/minimax/ src/partree/ src/kmeans/  src/randomGen/ src/primes/
 
 # disabling due to dependency hell with deepseq and containers:
 # src/cholesky/ 
@@ -31,11 +36,11 @@ all: test
 build: gen_cabal deps runner
 
 install: gen_cabal
-	$(CABAL) install -j -fdirect --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
+	$(CABAL) install -j $(SCHED) --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
 	rm -rf bin *.hi *.o *.exe .cabal-sandbox/
-	find -name "cabal.sandbox.config" | xargs rm
+	find -name "cabal.sandbox.config" | xargs rm -f
 	$(CABAL) clean || echo 
 
 # This is a quick test that assumes dependencies are already there.

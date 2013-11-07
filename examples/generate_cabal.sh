@@ -2,7 +2,7 @@
 
 # This is a LAME way of eliminating boilerplate in our .cabal files.
 
-COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10, abstract-par, monad-par-extras"
+COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10"
 REGULAR_BENCHS="mandel/mandel sorting/mergesort"
 PREFIX=monad-par-test
 
@@ -18,6 +18,13 @@ executable $PREFIX-$NAME
     buildable:       False
 
   build-depends:     $COMMON_DEPS
+
+  if flag(newgeneric) {
+    build-depends:     par-classes, par-collections
+    cpp-options:      -DNEW_GENERIC
+  } else {
+    build-depends:     abstract-par, monad-par-extras
+  }
 EOF
 }
 
@@ -28,6 +35,9 @@ name:                $NAME
 version:             0.3.9
 build-type:          Simple
 cabal-version:       >=1.8
+
+flag newgeneric
+  default:           False
 
 flag trace
   default:           False

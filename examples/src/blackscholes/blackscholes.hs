@@ -39,7 +39,12 @@ import PARSCHED
 #else
 import Control.Monad.Par
 #endif
+
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+#else
 import qualified Control.Monad.Par.Combinator as C
+#endif
 -- import Control.Monad.Par.AList
 
 import Data.Array

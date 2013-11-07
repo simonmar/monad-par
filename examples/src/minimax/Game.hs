@@ -9,7 +9,11 @@ import Tree
 
 import Control.Parallel
 import Debug.Trace
+#ifdef NEW_GENERIC
+import qualified Data.Par as C
+#else
 import qualified Control.Monad.Par.Combinator as C
+#endif
 #ifdef PARSCHED
 import PARSCHED
 #else
