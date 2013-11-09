@@ -12,6 +12,5 @@ Executable run_benchmark
     Main-is: run_benchmark.hs
     Build-depends: base >= 4.6, containers >= 0.5,
                    GenericPretty >= 1.2.1,
-                   hsbencher >= 1.3.9 && < 1.4
+                   hsbencher >= 1.3.9 
     ghc-options: -threaded
-
