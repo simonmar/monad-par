@@ -95,35 +95,34 @@ bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ mkBenchmark "src/blackscholes/generated.cabal" []  (futures ss)
- , mkBenchmark "src/nbody/generated.cabal"        []  (ivars   ss)
- , mkBenchmark "src/mandel/generated.cabal"       []  (futures ss)
- , mkBenchmark "src/coins/generated.cabal"        []  (futures ss)
+ [ (mkBenchmark "src/blackscholes/generated.cabal" []  (futures ss)) { progname=Just "blackscholes" }
+ , (mkBenchmark "src/nbody/generated.cabal"        []  (ivars   ss)) { progname=Just "nbody" }
+ , (mkBenchmark "src/mandel/generated.cabal"       []  (futures ss)) { progname=Just "mandel" }
+ , (mkBenchmark "src/coins/generated.cabal"        []  (futures ss)) { progname=Just "coins" }
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/generated.cabal"      []  (futures ss)   
- , mkBenchmark "src/sumeuler/generated.cabal"     []  (futures ss)
- , mkBenchmark "src/sorting/generated.cabal"      []  (futures ss)
+ , (mkBenchmark "src/matmult/generated.cabal"      []  (futures ss)) { progname=Just "matmult" }
+ , (mkBenchmark "src/sumeuler/generated.cabal"     []  (futures ss)) { progname=Just "sumeuler" }
+ , (mkBenchmark "src/sorting/generated.cabal"      []  (futures ss)) { progname=Just "sorting" }
  ]
 
 bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
 bls_desktop ss = 
  ------------------------------------------------------------  
  -- Desktop configuration:
- ------------------------------------------------------------  
- [ mkBenchmark "src/blackscholes/generated.cabal" ["10000","15000000"]  (futures ss)
- , mkBenchmark "src/nbody/generated.cabal"        ["13000"]             (ivars   ss)
- , mkBenchmark "src/mandel/generated.cabal"       ["1024","1024","256"] (futures ss)
- , mkBenchmark "src/coins/generated.cabal"        ["8", "1250"]         (futures ss)
+ ------------------------------------------------------------
+ [ (mkBenchmark "src/blackscholes/generated.cabal" ["10000","15000000"]   (futures ss)) { progname=Just "blackscholes" }
+ , (mkBenchmark "src/nbody/generated.cabal"        ["13000"]              (ivars   ss)) { progname=Just "nbody" }
+ , (mkBenchmark "src/mandel/generated.cabal"       ["1024","1024","256"]  (futures ss)) { progname=Just "mandel" }
+ , (mkBenchmark "src/coins/generated.cabal"        ["8", "1250"]          (futures ss)) { progname=Just "coins" }
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/generated.cabal"      ["768", "0", "64"]    (futures ss)   
- , mkBenchmark "src/sumeuler/generated.cabal"     ["38", "8000", "100"] (futures ss)
- , mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"] (futures ss)
+ , (mkBenchmark "src/matmult/generated.cabal"      ["768", "0", "64"]     (futures ss)) { progname=Just "matmult" }
+ , (mkBenchmark "src/sumeuler/generated.cabal"     ["38", "8000", "100"]  (futures ss)) { progname=Just "sumeuler" }
+ , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]  (futures ss)) { progname=Just "sorting" }
  ]
 
-
--- # Version: server 1.5
+-- # Version: server 1.6
 -- # I'm attempting to keep track of changes to this config with the above number.
 -- # Note that changes to the benchmarks themselves also require changing
 -- # this version number.  However, ADDING new benchmarks does not require 
@@ -135,19 +134,20 @@ bls_desktop ss =
 -- # 1.3 - changed mandel implementation
 -- # 1.4 - removed path prefixes for new cabal build system -ACF
 -- # 1.5 - prefixes back
+-- # 1.6 - up meregesort
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
-bls_server ss = 
- [ mkBenchmark "src/blackscholes/generated.cabal" ["10000","30000000"]    (futures ss)
- , mkBenchmark "src/nbody/generated.cabal"        ["25000"]               (ivars   ss)
- , mkBenchmark "src/mandel/generated.cabal"       (words "1024 1024 512") (futures ss)
- , mkBenchmark "src/coins/generated.cabal"        ["8", "1600"]  (futures ss)
+bls_server ss =
+ [ (mkBenchmark "src/blackscholes/generated.cabal" ["10000","30000000"]    (futures ss)) { progname=Just "blackscholes" }
+ , (mkBenchmark "src/nbody/generated.cabal"        ["25000"]               (ivars   ss)) { progname=Just "nbody" }
+ , (mkBenchmark "src/mandel/generated.cabal"       (words "1024 1024 512") (futures ss)) { progname=Just "mandel" }
+ , (mkBenchmark "src/coins/generated.cabal"        ["8", "1600"]           (futures ss)) { progname=Just "coins" }
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/generated.cabal"      (words "1024 0 64")  (futures ss)   
- , mkBenchmark "src/sumeuler/generated.cabal"     (words "38 16000 100")  (futures ss)
- , mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]  (futures ss)
+ , (mkBenchmark "src/matmult/generated.cabal"      (words "1024 0 64")     (futures ss)) { progname=Just "matmult" }
+ , (mkBenchmark "src/sumeuler/generated.cabal"     (words "38 16000 100")  (futures ss)) { progname=Just "sumeuler" }
+-- , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]   (futures ss)) { progname=Just "sorting" }
+ , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "25", "8192"]   (futures ss)) { progname=Just "sorting" }   
  ]
-
 
 ----------------------------------------
 -- Old, disabled benchmarks:
