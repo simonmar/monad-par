@@ -95,15 +95,15 @@ bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ mkBenchmark "src/blackscholes/" []  (futures ss)
- , mkBenchmark "src/nbody/"        []  (ivars   ss)
- , mkBenchmark "src/mandel/"       []  (futures ss)
- , mkBenchmark "src/coins/"        []  (futures ss)
+ [ mkBenchmark "src/blackscholes/generated.cabal" []  (futures ss)
+ , mkBenchmark "src/nbody/generated.cabal"        []  (ivars   ss)
+ , mkBenchmark "src/mandel/generated.cabal"       []  (futures ss)
+ , mkBenchmark "src/coins/generated.cabal"        []  (futures ss)
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/"      []  (futures ss)   
- , mkBenchmark "src/sumeuler/"     []  (futures ss)
- , mkBenchmark "src/sorting/"      []  (futures ss)
+ , mkBenchmark "src/matmult/generated.cabal"      []  (futures ss)   
+ , mkBenchmark "src/sumeuler/generated.cabal"     []  (futures ss)
+ , mkBenchmark "src/sorting/generated.cabal"      []  (futures ss)
  ]
 
 bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
@@ -111,15 +111,15 @@ bls_desktop ss =
  ------------------------------------------------------------  
  -- Desktop configuration:
  ------------------------------------------------------------  
- [ mkBenchmark "src/blackscholes/" ["10000","15000000"]  (futures ss)
- , mkBenchmark "src/nbody/"        ["13000"]             (ivars   ss)
- , mkBenchmark "src/mandel/"       ["1024","1024","256"] (futures ss)
- , mkBenchmark "src/coins/"        ["8", "1250"]         (futures ss)
+ [ mkBenchmark "src/blackscholes/generated.cabal" ["10000","15000000"]  (futures ss)
+ , mkBenchmark "src/nbody/generated.cabal"        ["13000"]             (ivars   ss)
+ , mkBenchmark "src/mandel/generated.cabal"       ["1024","1024","256"] (futures ss)
+ , mkBenchmark "src/coins/generated.cabal"        ["8", "1250"]         (futures ss)
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/"      ["768", "0", "64"]    (futures ss)   
- , mkBenchmark "src/sumeuler/"     ["38", "8000", "100"] (futures ss)
- , mkBenchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
+ , mkBenchmark "src/matmult/generated.cabal"      ["768", "0", "64"]    (futures ss)   
+ , mkBenchmark "src/sumeuler/generated.cabal"     ["38", "8000", "100"] (futures ss)
+ , mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"] (futures ss)
  ]
 
 
@@ -137,15 +137,15 @@ bls_desktop ss =
 -- # 1.5 - prefixes back
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
 bls_server ss = 
- [ mkBenchmark "src/blackscholes/" ["10000","30000000"]    (futures ss)
- , mkBenchmark "src/nbody/"        ["25000"]               (ivars   ss)
- , mkBenchmark "src/mandel/"       (words "1024 1024 512") (futures ss)
- , mkBenchmark "src/coins/"        ["8", "1600"]  (futures ss)
+ [ mkBenchmark "src/blackscholes/generated.cabal" ["10000","30000000"]    (futures ss)
+ , mkBenchmark "src/nbody/generated.cabal"        ["25000"]               (ivars   ss)
+ , mkBenchmark "src/mandel/generated.cabal"       (words "1024 1024 512") (futures ss)
+ , mkBenchmark "src/coins/generated.cabal"        ["8", "1600"]  (futures ss)
 
    -- These don't match the naming convention at the moment:
- , mkBenchmark "src/matmult/"      (words "1024 0 64")  (futures ss)   
- , mkBenchmark "src/sumeuler/"     (words "38 16000 100")  (futures ss)
- , mkBenchmark "src/sorting/"      ["cpu", "24", "8192"]  (futures ss)
+ , mkBenchmark "src/matmult/generated.cabal"      (words "1024 0 64")  (futures ss)   
+ , mkBenchmark "src/sumeuler/generated.cabal"     (words "38 16000 100")  (futures ss)
+ , mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]  (futures ss)
  ]
 
 
