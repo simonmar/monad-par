@@ -4,7 +4,6 @@
 name:                run-benchmark
 version:             0.0.1
 build-type:          Simple
--- default-language:    Haskll2010
 -- We force a recent version to make sure we have sandboxes:
 cabal-version:       >=1.18
 
@@ -12,5 +11,6 @@ Executable run_benchmark
     Main-is: run_benchmark.hs
     Build-depends: base >= 4.6, containers >= 0.5,
                    GenericPretty >= 1.2.1,
-                   hsbencher >= 1.3.9 
+                   hsbencher >= 1.4 && < 1.5 
     ghc-options: -threaded
+    default-language:    Haskll2010

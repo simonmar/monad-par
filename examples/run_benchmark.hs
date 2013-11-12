@@ -20,9 +20,10 @@ import System.Environment (getEnvironment, getArgs, withArgs)
 import System.IO.Unsafe   (unsafePerformIO)
 import System.Console.GetOpt
 
-import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..)
+import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..),
                        -- compileOptsOnly, enumerateBenchSpace, toCompileFlags,
-                       -- makeBuildID, BuildID, 
+                       -- makeBuildID, BuildID,
+                       mkBenchmark
                       )
 import HSBencher.App (defaultMainWithBechmarks, all_cli_options)
 
@@ -94,15 +95,15 @@ bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ Benchmark "src/blackscholes/" []  (futures ss)
- , Benchmark "src/nbody/"        []  (ivars   ss)
- , Benchmark "src/mandel/"       []  (futures ss)
- , Benchmark "src/coins/"        []  (futures ss)
+ [ mkBenchmark "src/blackscholes/" []  (futures ss)
+ , mkBenchmark "src/nbody/"        []  (ivars   ss)
+ , mkBenchmark "src/mandel/"       []  (futures ss)
+ , mkBenchmark "src/coins/"        []  (futures ss)
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      []  (futures ss)   
- , Benchmark "src/sumeuler/"     []  (futures ss)
- , Benchmark "src/sorting/"      []  (futures ss)
+ , mkBenchmark "src/matmult/"      []  (futures ss)   
+ , mkBenchmark "src/sumeuler/"     []  (futures ss)
+ , mkBenchmark "src/sorting/"      []  (futures ss)
  ]
 
 bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
@@ -110,15 +111,15 @@ bls_desktop ss =
  ------------------------------------------------------------  
  -- Desktop configuration:
  ------------------------------------------------------------  
- [ Benchmark "src/blackscholes/" ["10000","15000000"]  (futures ss)
- , Benchmark "src/nbody/"        ["13000"]             (ivars   ss)
- , Benchmark "src/mandel/"       ["1024","1024","256"] (futures ss)
- , Benchmark "src/coins/"        ["8", "1250"]         (futures ss)
+ [ mkBenchmark "src/blackscholes/" ["10000","15000000"]  (futures ss)
+ , mkBenchmark "src/nbody/"        ["13000"]             (ivars   ss)
+ , mkBenchmark "src/mandel/"       ["1024","1024","256"] (futures ss)
+ , mkBenchmark "src/coins/"        ["8", "1250"]         (futures ss)
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      ["768", "0", "64"]    (futures ss)   
- , Benchmark "src/sumeuler/"     ["38", "8000", "100"] (futures ss)
- , Benchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
+ , mkBenchmark "src/matmult/"      ["768", "0", "64"]    (futures ss)   
+ , mkBenchmark "src/sumeuler/"     ["38", "8000", "100"] (futures ss)
+ , mkBenchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
  ]
 
 
@@ -136,15 +137,15 @@ bls_desktop ss =
 -- # 1.5 - prefixes back
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
 bls_server ss = 
- [ Benchmark "src/blackscholes/" ["10000","30000000"]    (futures ss)
- , Benchmark "src/nbody/"        ["25000"]               (ivars   ss)
- , Benchmark "src/mandel/"       (words "1024 1024 512") (futures ss)
- , Benchmark "src/coins/"        ["8", "1600"]  (futures ss)
+ [ mkBenchmark "src/blackscholes/" ["10000","30000000"]    (futures ss)
+ , mkBenchmark "src/nbody/"        ["25000"]               (ivars   ss)
+ , mkBenchmark "src/mandel/"       (words "1024 1024 512") (futures ss)
+ , mkBenchmark "src/coins/"        ["8", "1600"]  (futures ss)
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      (words "1024 0 64")  (futures ss)   
- , Benchmark "src/sumeuler/"     (words "38 16000 100")  (futures ss)
- , Benchmark "src/sorting/"      ["cpu", "24", "8192"]  (futures ss)
+ , mkBenchmark "src/matmult/"      (words "1024 0 64")  (futures ss)   
+ , mkBenchmark "src/sumeuler/"     (words "38 16000 100")  (futures ss)
+ , mkBenchmark "src/sorting/"      ["cpu", "24", "8192"]  (futures ss)
  ]
 
 
