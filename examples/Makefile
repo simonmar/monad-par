@@ -51,7 +51,7 @@ test: deps runner
 
 runner: dist/build/run_benchmark/run_benchmark
 dist/build/run_benchmark/run_benchmark: run_benchmark.hs run_benchmark.cabal
-	$(CABAL) install --only-dependencies -j --max-backjumps=1000
+	$(CABAL) install --only-dependencies -j 
 	$(CABAL) build
 
 sandbox:
@@ -62,7 +62,7 @@ gen_cabal:
 	./generate_cabal.sh
 
 deps: gen_cabal
-	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --disable-documentation -j"
+	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --disable-documentation -j --max-backjumps=1000"
 
 #================================================================================
 # Validation / regression testing:
