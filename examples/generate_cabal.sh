@@ -16,6 +16,7 @@ executable $PREFIX-$NAME
   hs-source-dirs:    . ../schedulers/
 
   if !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(trace-st) \
      || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
      || flag(lvish) || flag(lvish-state) || flag(lvish-rng)  )
     buildable:       False
@@ -23,14 +24,20 @@ executable $PREFIX-$NAME
   build-depends:     $COMMON_DEPS
 
   -- Select whether to use the newer or older (deprecated) generic interfaces:
-  if flag(newgeneric) || flag(lvish) || flag(lvish-state) || flag(lvish-rng) {
+  if (flag(newgeneric) \
+     || flag(trace-st) \
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng)  )
+  {
     build-depends:     par-classes, par-collections, par-transformers
     cpp-options:      -DNEW_GENERIC
   } else {
     build-depends:     abstract-par, monad-par-extras
   }
 
-  if (flag(lvish) || flag(lvish-state) || flag(lvish-rng)) {
+  if ( flag(lvish) || flag(lvish-state) || flag(lvish-rng) \
+     || flag(trace-st) \
+     )
+  {
     cpp-options:
   } else {
     cpp-options:      -DOLDTYPES
@@ -60,6 +67,10 @@ flag usegeneric
 
 flag trace
   default:           False
+
+flag trace-st
+  default:           False
+  description: Trace scheduler with ParST transformer on top.  
 
 flag direct
   default:           False
@@ -99,6 +110,10 @@ cat >> $CABALFILE <<EOF
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Trace
 
+  if flag(trace-st)
+     build-depends:   monad-par, par-classes, par-transformers
+     cpp-options:     -DPARSCHED=TracePlusParST
+
   if flag(direct)
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Direct
@@ -133,6 +148,7 @@ cat >> $CABALFILE <<EOF
 
   -- ELSE would be better here:
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+       || flag(trace-st)  \
        || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
        || flag(lvish) || flag(lvish-state) || flag(lvish-rng)   )
      build-depends:   monad-par
@@ -279,7 +295,10 @@ NAME=kmeans
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
+  build-depends:     array, bytestring, cereal, 
+-- [2013.11.12] Problems on Delta, relaxing version constraint here:
+                     cereal-vector >= 0.2.0.1, 
+                     mwc-random, 
                      parallel, time, transformers, vector
 EOF
 boilerplate 

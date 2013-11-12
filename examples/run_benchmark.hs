@@ -47,6 +47,7 @@ options =
      , Option [] ["sparks"]  (NoArg (SetSched Sparks)) "add this scheduler (default is all schedulers)"
      , Option [] ["direct"]  (NoArg (SetSched Direct)) "add this scheduler "       
      , Option [] ["trace"]   (NoArg (SetSched Trace))  "add this scheduler "
+     , Option [] ["trace-st"]   (NoArg (SetSched TraceST)) "scheduler with one transformer"
        
      , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "
      , Option [] ["lvish-state"] (NoArg (SetSched LVishState)) "scheduler with one transformer"
@@ -260,7 +261,8 @@ defaultSettings spc =
 
 -- | Monad par schedulers:
 data Sched 
-   = Trace | Direct | Sparks   -- Basic monad-par
+   = Trace | TraceST 
+   | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
    | LVish
    | LVishRNG | LVishState -- Add transformers...
@@ -284,6 +286,7 @@ schedToCabalFlag :: Sched -> String
 schedToCabalFlag s =
   case s of
     Trace  -> "-ftrace"
+    TraceST -> "-ftrace-st"
     Direct -> "-fdirect"
     Sparks -> "-fsparks"
     SMP    -> "-fmeta-smp"

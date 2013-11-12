@@ -20,8 +20,9 @@ ifeq ($(SCHED),)
 endif
 
 
-BENCHES= src/mandel/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
- src/sumeuler/ src/matmult/ src/minimax/ src/partree/ src/kmeans/  src/randomGen/ src/primes/
+BENCHES= src/mandel/ src/sorting/ src/nbody/ src/blackscholes/ src/sumeuler/ src/coins/  src/matmult/ \
+  src/parfib/ 
+#  src/queens/ src/minimax/ src/partree/ src/kmeans/  src/randomGen/ src/primes/
 
 # disabling due to dependency hell with deepseq and containers:
 # src/cholesky/ 
