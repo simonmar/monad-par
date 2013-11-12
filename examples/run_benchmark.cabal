@@ -13,4 +13,4 @@ Executable run_benchmark
                    GenericPretty >= 1.2.1,
                    hsbencher >= 1.4 && < 1.5 
     ghc-options: -threaded
-    default-language:    Haskll2010
+    default-language:  Haskell2010
