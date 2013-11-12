@@ -123,7 +123,18 @@ bls_desktop ss =
  , futbench "matmult"      ["768", "0", "64"] ss 
  , futbench "sumeuler"     ["38", "8000", "100"] ss 
  , futbench "sorting"      ["cpu", "24", "8192"] ss 
- ]  
+ ] ++ parfibRange ss
+
+-- | Parfib can vary wildly between schedulers. Thus we run it with a short timeout,
+-- and then we can simply look at what the maximum size each scheduler could handle
+-- under that threshold.
+parfibRange :: S.Set Sched -> [Benchmark DefaultParamMeaning]
+parfibRange ss =
+  [ (mkBenchmark ("src/parfib/generated.cabal") ["monad",arg] (futures ss)) 
+      { progname= Just "microbench_parfib"
+      , benchTimeOut= Just 6.0 }
+  | arg <- map show [30,31,32,33,34,35,36,37,38,39,40]
+  ]
 
 -- # Version: server 1.6
 -- # I'm attempting to keep track of changes to this config with the above number.
@@ -149,7 +160,7 @@ bls_server ss =
  , futbench "matmult"      (words "1024 0 64") ss 
  , futbench "sumeuler"     (words "38 16000 100") ss 
  , futbench "sorting"      ["cpu", "25", "8192"] ss 
- ]  
+ ] ++ parfibRange ss
 
 -- Factor out boilerplate:
 
