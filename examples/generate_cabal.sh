@@ -19,7 +19,7 @@ executable $PREFIX-$NAME
 
   build-depends:     $COMMON_DEPS
 
-  if flag(newgeneric) {
+  if flag(newgeneric) || flag(lvish) {
     build-depends:     par-classes, par-collections
     cpp-options:      -DNEW_GENERIC
   } else {
