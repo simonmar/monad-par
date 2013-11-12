@@ -48,7 +48,9 @@ options =
      , Option [] ["direct"]  (NoArg (SetSched Direct)) "add this scheduler "       
      , Option [] ["trace"]   (NoArg (SetSched Trace))  "add this scheduler "
        
-     , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "   
+     , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "
+     , Option [] ["lvish-state"] (NoArg (SetSched LVishState)) "scheduler with one transformer"
+     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer" 
      ]
 
 isSetSched (SetSched _) = True
@@ -261,6 +263,7 @@ data Sched
    = Trace | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
    | LVish
+   | LVishRNG | LVishState -- Add transformers...
    | None
    -- | ContFree   -- Obsolete strawman.
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
@@ -269,7 +272,7 @@ data Sched
 sched :: Sched -> BenchSpace DefaultParamMeaning
 sched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
 
--- | By default, we usually don't test meta-par or lvish:
+-- | By default, we usually don't test meta-par 
 defaultSchedSet :: S.Set Sched
 defaultSchedSet = S.difference
                   (S.fromList [minBound ..])
@@ -285,7 +288,9 @@ schedToCabalFlag s =
     Sparks -> "-fsparks"
     SMP    -> "-fmeta-smp"
     NUMA   -> "-fmeta-numa"
-    LVish  -> "-flvish" 
+    LVish  -> "-flvish"
+    LVishRNG   -> "-flvish-rng"
+    LVishState -> "-flvish-state"
     None   -> ""
 
 -- TODO: make this an option:

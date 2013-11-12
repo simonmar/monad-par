@@ -42,10 +42,15 @@ import Control.Monad.Par
 
 #ifdef NEW_GENERIC
 #warning "Using new generic interface."
-import Control.Par.Class
 import qualified Data.Par as C
+#ifdef USE_GENERIC
+import Control.Par.Class
+#endif
 #else
 import qualified Control.Monad.Par.Combinator as C
+#ifdef USE_GENERIC
+import Control.Monad.Par.Class
+#endif
 #endif
 -- import Control.Monad.Par.AList
 

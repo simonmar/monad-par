@@ -2,7 +2,7 @@
 
 # This is a LAME way of eliminating boilerplate in our .cabal files.
 
-COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10"
+COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10, mtl"
 REGULAR_BENCHS="mandel/mandel sorting/mergesort"
 PREFIX=monad-par-test
 
@@ -12,18 +12,32 @@ cat >> $CABALFILE <<EOF
 executable $PREFIX-$NAME
   main-is:           $NAME.hs
 
-  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+  -- Including a higher-up dir for schedulers:
+  hs-source-dirs:    . ../schedulers/
+
+  if !(flag(trace)  || flag(direct)   || flag(contfree)\
      || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-     || flag(lvish))
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng)  )
     buildable:       False
 
   build-depends:     $COMMON_DEPS
 
-  if flag(newgeneric) || flag(lvish) {
-    build-depends:     par-classes, par-collections
+  -- Select whether to use the newer or older (deprecated) generic interfaces:
+  if flag(newgeneric) || flag(lvish) || flag(lvish-state) || flag(lvish-rng) {
+    build-depends:     par-classes, par-collections, par-transformers
     cpp-options:      -DNEW_GENERIC
   } else {
     build-depends:     abstract-par, monad-par-extras
+  }
+
+  if (flag(lvish) || flag(lvish-state) || flag(lvish-rng)) {
+    cpp-options:
+  } else {
+    cpp-options:      -DOLDTYPES
+  }
+
+  if flag(usegeneric) {
+    cpp-options:  -DUSE_GENERIC
   }
 EOF
 }
@@ -38,6 +52,11 @@ cabal-version:       >=1.8
 
 flag newgeneric
   default:           False
+  description: Use new generic interfaces rather than old.
+
+flag usegeneric
+  default:           False
+  description: Use overloaded ivar and futures ops only.
 
 flag trace
   default:           False
@@ -59,7 +78,15 @@ flag meta-numa
 
 flag lvish
   default:           False
+  description:   Use the LVish implementation.
 
+flag lvish-state
+  default:           False
+  description:   Use LVish and one StateT transformer with unit state.
+
+flag lvish-rng
+  default:           False
+  description:   Use LVish and stack on an RNG transformer.
 EOF
 executable_header
 }
@@ -96,9 +123,18 @@ cat >> $CABALFILE <<EOF
      build-depends:   lvish >= 1.1
      cpp-options:     -DPARSCHED=Control.LVish
 
+  if flag(lvish-state)
+     build-depends:   lvish >= 1.1
+     cpp-options:     -DPARSCHED=LVishPlusStateT
+
+  if flag(lvish-rng)
+     build-depends:   lvish >= 1.1
+     cpp-options:     -DPARSCHED=LVishPlusRNG
+
+  -- ELSE would be better here:
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-     || flag(lvish))
+       || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
+       || flag(lvish) || flag(lvish-state) || flag(lvish-rng)   )
      build-depends:   monad-par
      -- uses Control.Monad.Par by default
 

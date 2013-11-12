@@ -150,7 +150,8 @@ cilkSeqMerge v1 v2 = unsafePerformIO $ do
 -- t is the threshold for using sequential merge (see merge)
 #ifdef OLDTYPES      
 cpuMergeSort :: Int -> (V.Vector ElmT -> Par (V.Vector ElmT)) -> V.Vector ElmT -> Par (V.Vector ElmT)
--- cpuMergeSort :: Int -> (V.Vector ElmT -> Par d s (V.Vector ElmT)) -> V.Vector ElmT -> Par d s (V.Vector ElmT)
+#else
+cpuMergeSort :: Int -> (V.Vector ElmT -> Par d s (V.Vector ElmT)) -> V.Vector ElmT -> Par d s (V.Vector ElmT)
 #endif
 cpuMergeSort t cpuMS vec = if V.length vec <= t
                            then cpuMS vec
