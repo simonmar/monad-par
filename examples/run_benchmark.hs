@@ -95,15 +95,15 @@ bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ (mkBenchmark "src/blackscholes/generated.cabal" []  (futures ss)) { progname=Just "blackscholes" }
- , (mkBenchmark "src/nbody/generated.cabal"        []  (ivars   ss)) { progname=Just "nbody" }
- , (mkBenchmark "src/mandel/generated.cabal"       []  (futures ss)) { progname=Just "mandel" }
- , (mkBenchmark "src/coins/generated.cabal"        []  (futures ss)) { progname=Just "coins" }
+ [ futbench "blackscholes" [] ss 
+ , ivbench  "nbody"        [] ss 
+ , futbench "mandel"       [] ss 
+ , futbench "coins"        [] ss 
 
    -- These don't match the naming convention at the moment:
- , (mkBenchmark "src/matmult/generated.cabal"      []  (futures ss)) { progname=Just "matmult" }
- , (mkBenchmark "src/sumeuler/generated.cabal"     []  (futures ss)) { progname=Just "sumeuler" }
- , (mkBenchmark "src/sorting/generated.cabal"      []  (futures ss)) { progname=Just "sorting" }
+ , futbench "matmult"      [] ss 
+ , futbench "sumeuler"     [] ss 
+ , futbench "sorting"      [] ss 
  ]
 
 bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
@@ -111,16 +111,16 @@ bls_desktop ss =
  ------------------------------------------------------------  
  -- Desktop configuration:
  ------------------------------------------------------------
- [ (mkBenchmark "src/blackscholes/generated.cabal" ["10000","15000000"]   (futures ss)) { progname=Just "blackscholes" }
- , (mkBenchmark "src/nbody/generated.cabal"        ["13000"]              (ivars   ss)) { progname=Just "nbody" }
- , (mkBenchmark "src/mandel/generated.cabal"       ["1024","1024","256"]  (futures ss)) { progname=Just "mandel" }
- , (mkBenchmark "src/coins/generated.cabal"        ["8", "1250"]          (futures ss)) { progname=Just "coins" }
+ [ futbench "blackscholes" ["10000","15000000"] ss 
+ , ivbench  "nbody"        ["13000"] ss 
+ , futbench "mandel"       ["1024","1024","256"] ss 
+ , futbench "coins"        ["8", "1250"] ss 
 
    -- These don't match the naming convention at the moment:
- , (mkBenchmark "src/matmult/generated.cabal"      ["768", "0", "64"]     (futures ss)) { progname=Just "matmult" }
- , (mkBenchmark "src/sumeuler/generated.cabal"     ["38", "8000", "100"]  (futures ss)) { progname=Just "sumeuler" }
- , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]  (futures ss)) { progname=Just "sorting" }
- ]
+ , futbench "matmult"      ["768", "0", "64"] ss 
+ , futbench "sumeuler"     ["38", "8000", "100"] ss 
+ , futbench "sorting"      ["cpu", "24", "8192"] ss 
+ ]  
 
 -- # Version: server 1.6
 -- # I'm attempting to keep track of changes to this config with the above number.
@@ -134,20 +134,30 @@ bls_desktop ss =
 -- # 1.3 - changed mandel implementation
 -- # 1.4 - removed path prefixes for new cabal build system -ACF
 -- # 1.5 - prefixes back
--- # 1.6 - up meregesort
+-- # 1.6 - up mergesort 24->25
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
 bls_server ss =
- [ (mkBenchmark "src/blackscholes/generated.cabal" ["10000","30000000"]    (futures ss)) { progname=Just "blackscholes" }
- , (mkBenchmark "src/nbody/generated.cabal"        ["25000"]               (ivars   ss)) { progname=Just "nbody" }
- , (mkBenchmark "src/mandel/generated.cabal"       (words "1024 1024 512") (futures ss)) { progname=Just "mandel" }
- , (mkBenchmark "src/coins/generated.cabal"        ["8", "1600"]           (futures ss)) { progname=Just "coins" }
+ [ futbench "blackscholes" ["10000","30000000"] ss 
+ , ivbench  "nbody"        ["25000"] ss 
+ , futbench "mandel"       (words "1024 1024 512") ss 
+ , futbench "coins"        ["8", "1600"] ss 
 
    -- These don't match the naming convention at the moment:
- , (mkBenchmark "src/matmult/generated.cabal"      (words "1024 0 64")     (futures ss)) { progname=Just "matmult" }
- , (mkBenchmark "src/sumeuler/generated.cabal"     (words "38 16000 100")  (futures ss)) { progname=Just "sumeuler" }
--- , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "24", "8192"]   (futures ss)) { progname=Just "sorting" }
- , (mkBenchmark "src/sorting/generated.cabal"      ["cpu", "25", "8192"]   (futures ss)) { progname=Just "sorting" }   
- ]
+ , futbench "matmult"      (words "1024 0 64") ss 
+ , futbench "sumeuler"     (words "38 16000 100") ss 
+ , futbench "sorting"      ["cpu", "25", "8192"] ss 
+ ]  
+
+-- Factor out boilerplate:
+
+futbench :: String -> [String] -> S.Set Sched -> Benchmark DefaultParamMeaning
+futbench dir args ss =
+   (mkBenchmark ("src/"++dir++"/generated.cabal")  args  (futures ss)) { progname=Just dir }   
+
+ivbench :: String -> [String] -> S.Set Sched -> Benchmark DefaultParamMeaning
+ivbench dir args ss =
+   (mkBenchmark ("src/"++dir++"/generated.cabal")  args  (ivars ss)) { progname=Just dir }   
+
 
 ----------------------------------------
 -- Old, disabled benchmarks:
