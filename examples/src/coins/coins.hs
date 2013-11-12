@@ -191,7 +191,7 @@ payN_mp depth val coins =
     runPar $ 
         payN_mpM depth val coins  
 
-payN_mpM :: Int -> Int -> [(Int,Int)] -> Par Int
+-- payN_mpM :: Int -> Int -> [(Int,Int)] -> Par Int
 payN_mpM 0     val coins  = return $ payN val coins
 payN_mpM _     0   coins  = return 1
 payN_mpM _     _   []     = return 0

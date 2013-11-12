@@ -737,10 +737,44 @@ When a thread enters runPar, either:
 
 
 
+[2013.11.12] {Found a nondeterministic failure in sorting after switching to LVish}
+-----------------------------------------------------------------------------------
+
+Namely this:
+
+    monad-par-test-mergesort: thread blocked indefinitely in an MVar operation
+
+Running 2^23 through on my laptop gives this behavior with lvish -N4:
+
+    SELFTIMED 1.799088
+      12,471,040,200 bytes allocated in the heap
+	  18,856,984 bytes copied during GC
+	 331,762,496 bytes maximum residency (21 sample(s))
+	 113,264,520 bytes maximum slop       
+       
+Maximum residency goes up with parallelism substantially.
+Here's the same thing running with the trace scheduler (-N4):
+
+    SELFTIMED 0.846114
+       5,539,016,888 bytes allocated in the heap
+	  14,921,576 bytes copied during GC
+	 100,744,416 bytes maximum residency (30 sample(s))
+	  42,264,096 bytes maximum slop
+		 258 MB total memory in use (27 MB lost due to fragmentation)
+
+Egad!  And -N1 for trace has much similar maximum residency:
+
+    SELFTIMED 2.111836
+       5,538,817,120 bytes allocated in the heap
+	  16,573,512 bytes copied during GC
+	  96,322,080 bytes maximum residency (29 sample(s))
+	  40,677,680 bytes maximum slop
 
 
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
+
+
 
 
 

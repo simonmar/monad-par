@@ -45,7 +45,8 @@ genVector tag = (tag' * 1.0, tag' * 0.2, tag' * 30.0)
 
 -- Only doing the O(N^2) part in parallel:
 -- This step computes the accelerations of the bodies.
-compute :: A.Array Int Float3D -> A.Array Int (IVar Float3D) -> Int -> Par ()
+         
+-- compute :: A.Array Int Float3D -> A.Array Int (IVar Float3D) -> Int -> Par ()
 compute vecList accels tag =
     do
        let myvector = vecList A.! (tag-1)

@@ -39,7 +39,7 @@ install: gen_cabal
 	$(CABAL) install -j $(SCHED) --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
-	rm -rf bin *.hi *.o *.exe .cabal-sandbox/
+	rm -rf bin *.hi *.o *.exe .cabal-sandbox/ src/*/bin
 	find -name "cabal.sandbox.config" | xargs rm -f
 	$(CABAL) clean || echo 
 

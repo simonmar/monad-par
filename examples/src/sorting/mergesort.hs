@@ -86,7 +86,9 @@ copyMV  x y   = MV.copy  x y
 -- import Random.MWC.Pure (seed, range_random)
 
 -- | Vector.Algorithms sort
+#ifdef OLDTYPES      
 seqsort :: V.Vector ElmT -> Par (V.Vector ElmT)
+#endif
 seqsort v = return $ V.create $ do 
 --                mut <- thawit v
                 mut <- V.thaw v
@@ -142,10 +144,14 @@ cilkSeqMerge v1 v2 = unsafePerformIO $ do
 --       return dest
        V.unsafeFreeze dest
 #endif
+-- End CILK block.
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
+#ifdef OLDTYPES      
 cpuMergeSort :: Int -> (V.Vector ElmT -> Par (V.Vector ElmT)) -> V.Vector ElmT -> Par (V.Vector ElmT)
+-- cpuMergeSort :: Int -> (V.Vector ElmT -> Par d s (V.Vector ElmT)) -> V.Vector ElmT -> Par d s (V.Vector ElmT)
+#endif
 cpuMergeSort t cpuMS vec = if V.length vec <= t
                            then cpuMS vec
                            else do
@@ -239,7 +245,9 @@ dynamicMergeSort cpuT gpuT cpuMS vec = do
 --   2. Split the lists at the median
 --   3. Merge each of the lefts and rights
 --   4. Append the merged lefts and the merged rights
+#ifdef OLDTYPES                 
 merge :: Int -> (V.Vector ElmT) -> (V.Vector ElmT) -> Par (V.Vector ElmT)
+#endif
 merge t left right =
         if V.length left  < t || 
            V.length right < t
@@ -433,13 +441,14 @@ main = do args <- getArgs
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
 #ifdef CILK_SEQ
-              cpuMS = cilkSeqSort
+              cpuMS x = cilkSeqSort x
 #elif defined(CILK_PAR)
-              cpuMS = cilkRuntimeSort
+              cpuMS x = cilkRuntimeSort x
 #else
-              cpuMS = seqsort
+              cpuMS x = seqsort x 
 #endif
 
+--              parComp :: V.Vector ElmT -> Par d s (V.Vector ElmT)
               parComp 
                       | mode == "cpu"     = cpuMergeSort t cpuMS
 #ifdef GPU_ENABLED

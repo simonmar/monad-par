@@ -51,6 +51,7 @@ threshold = 1
 
 data VecTree = Leaf (V.Vector Int)
 	     | MkNode VecTree VecTree
+  deriving (Eq,Show)
 
 #if 0
 instance V.Unbox a => NFData (V.Vector a) where
@@ -73,8 +74,8 @@ runMandel minX minY maxX maxY winX winY max_depth = do
           deepseq l (return l)
 
 #else
-runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
---runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par (V.Vector Int)
+-- RRN: Comment to handle LVish types too:
+-- runMandel :: Double -> Double -> Double -> Double -> Int -> Int -> Int -> Par VecTree
 runMandel minX minY maxX maxY winX winY max_depth = do
   -- Auto-partitioning version.  A bit worse:
   -- C.parMapReduceRange (C.InclusiveRange 0 (winY-1)) 
