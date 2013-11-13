@@ -252,10 +252,15 @@ ivars ss = defaultSettings$ varyThreads $
 
 defaultSettings :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 defaultSettings spc =
-  And [ Set NoMeaning (CompileParam "--disable-documentation")
-      , Set NoMeaning (CompileParam "--disable-library-profiling")
-      , Set NoMeaning (CompileParam "--disable-executable-profiling")
-      , Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS")
+  And [
+--        Set NoMeaning (CompileParam "--disable-documentation")
+--      , Set NoMeaning (CompileParam "--disable-library-profiling")
+--      , Set NoMeaning (CompileParam "--disable-executable-profiling")
+      , Or [
+             -- 512K is the default:
+             -- Set NoMeaning (RuntimeParam "+RTS -s -qa -A512K -RTS")
+             Set NoMeaning (RuntimeParam "+RTS -s -qa -A20M -RTS")
+           ]
       , spc]
 
       -- rts = gc_stats_flag ++" "++
