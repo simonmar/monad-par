@@ -242,12 +242,12 @@ test_metapar = False
 -- | Benchmarks that only require futures, not ivars.
 futures :: S.Set Sched -> BenchSpace DefaultParamMeaning
 futures ss = defaultSettings$ varyThreads $
-          Or$ map sched $ S.toList ss
+          Or$ map dosched $ S.toList ss
 
 -- | Actually using ivars.  For now this just rules out the Sparks scheduler:
 ivars :: S.Set Sched -> BenchSpace DefaultParamMeaning
 ivars ss = defaultSettings$ varyThreads $
-          Or$ map sched $ S.toList $
+          Or$ map dosched $ S.toList $
           S.delete Sparks ss  -- This is the only one that can't support IVars.
 
 defaultSettings :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
@@ -282,8 +282,8 @@ data Sched
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
 
 -- | Realize a scheduler selection via a compile flag.
-sched :: Sched -> BenchSpace DefaultParamMeaning
-sched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
+dosched :: Sched -> BenchSpace DefaultParamMeaning
+dosched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
 
 -- | By default, we usually don't test meta-par 
 defaultSchedSet :: S.Set Sched
