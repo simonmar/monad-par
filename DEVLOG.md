@@ -771,6 +771,37 @@ Egad!  And -N1 for trace has much similar maximum residency:
 	  40,677,680 bytes maximum slop
 
 
+[2013.11.13] {Testing -A20 systematically}
+
+This is build #62 where we're turning on -A20M:
+
+  http://tester-lin.soic.indiana.edu:8080/view/Benchmark/job/Benchmark_monad-par_Delta/62/
+
+I added that option, which now shows up in the RUNTIME_FLAGS column.
+I'm comparing these run IDs:
+
+    hive_1384348805 (-A20M)
+    hive_1384289972 (default 512K nursery)
+
+The -A20M does this on trace/parfib(33):
+
+   http://goo.gl/6zIQ7w   
+
+It's pretty bad.  Both high variance and not smoothly speeding up
+(jags).  But that's just parfib on a four socket machine.
+
+And then here's the default one.. It's also pretty bad.  Flat but
+zaggy, hovering around the 3 second line:
+
+   http://goo.gl/M8ho2t
+
+But the MINIMUM doesn't go as low as -A20M, and it's USUALLY worse
+than the -A20M version.
+
+
+
+
+
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
 

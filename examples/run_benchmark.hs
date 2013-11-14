@@ -258,8 +258,8 @@ defaultSettings spc =
 --      , Set NoMeaning (CompileParam "--disable-executable-profiling")
         Or [
              -- 512K is the default:
-             -- Set NoMeaning (RuntimeParam "+RTS -s -qa -A512K -RTS")
-             Set NoMeaning (RuntimeParam "+RTS -s -qa -A20M -RTS")
+             Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS") -- -A512K
+             -- Set NoMeaning (RuntimeParam "+RTS -s -qa -A20M -RTS")
            ]
       , spc]
 
