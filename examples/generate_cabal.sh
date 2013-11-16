@@ -18,7 +18,7 @@ executable $PREFIX-$NAME
   if !(flag(trace)  || flag(direct)   || flag(contfree)\
      || flag(trace-st) \
      || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-     || flag(lvish) || flag(lvish-state) || flag(lvish-rng)  )
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)  )
     buildable:       False
 
   build-depends:     $COMMON_DEPS
@@ -26,7 +26,7 @@ executable $PREFIX-$NAME
   -- Select whether to use the newer or older (deprecated) generic interfaces:
   if (flag(newgeneric) \
      || flag(trace-st) \
-     || flag(lvish) || flag(lvish-state) || flag(lvish-rng)  )
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)  )
   {
     build-depends:     par-classes, par-collections, par-transformers
     cpp-options:      -DNEW_GENERIC
@@ -34,7 +34,7 @@ executable $PREFIX-$NAME
     build-depends:     abstract-par, monad-par-extras
   }
 
-  if ( flag(lvish) || flag(lvish-state) || flag(lvish-rng) \
+  if ( flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel) \
      || flag(trace-st) \
      )
   {
@@ -98,6 +98,11 @@ flag lvish-state
 flag lvish-rng
   default:           False
   description:   Use LVish and stack on an RNG transformer.
+
+flag lvish-cancel
+  default:           False
+  description:   Use LVish and stack on an CancelT transformer.
+
 EOF
 executable_header
 }
@@ -146,11 +151,15 @@ cat >> $CABALFILE <<EOF
      build-depends:   lvish >= 1.1
      cpp-options:     -DPARSCHED=LVishPlusRNG
 
+  if flag(lvish-cancel)
+     build-depends:   lvish >= 1.1
+     cpp-options:     -DPARSCHED=LVishPlusCancel
+
   -- ELSE would be better here:
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
        || flag(trace-st)  \
        || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-       || flag(lvish) || flag(lvish-state) || flag(lvish-rng)   )
+       || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)   )
      build-depends:   monad-par
      -- uses Control.Monad.Par by default
 

@@ -51,7 +51,8 @@ options =
        
      , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "
      , Option [] ["lvish-state"] (NoArg (SetSched LVishState)) "scheduler with one transformer"
-     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer" 
+     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer"
+     , Option [] ["lvish-cancel"] (NoArg (SetSched LVishCancel)) "scheduler with one transformer"        
      ]
 
 isSetSched (SetSched _) = True
@@ -281,7 +282,9 @@ data Sched
    | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
    | LVish
-   | LVishRNG | LVishState -- Add transformers...
+   | LVishRNG
+   | LVishState -- Add transformers...
+   | LVishCancel  
    | None
    -- | ContFree   -- Obsolete strawman.
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
@@ -309,6 +312,7 @@ schedToCabalFlag s =
     NUMA   -> "-fmeta-numa"
     LVish  -> "-flvish"
     LVishRNG   -> "-flvish-rng"
+    LVishCancel   -> "-flvish-cancel" 
     LVishState -> "-flvish-state"
     None   -> ""
 
