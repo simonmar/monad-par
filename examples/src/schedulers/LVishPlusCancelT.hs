@@ -3,7 +3,7 @@
 -- | Test how much a (useless) StateT transformer screws up optimizations and adds
 -- overheads, if at all.
 
-module LVishPlusStateT
+module LVishPlusCancelT
        (
          runPar, Par,
          module Control.Par.Class 
