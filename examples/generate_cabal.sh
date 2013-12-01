@@ -153,7 +153,7 @@ cat >> $CABALFILE <<EOF
 
   if flag(lvish-cancel)
      build-depends:   lvish >= 1.1
-     cpp-options:     -DPARSCHED=LVishPlusCancel
+     cpp-options:     -DPARSCHED=LVishPlusCancelT
 
   -- ELSE would be better here:
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
