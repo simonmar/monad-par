@@ -161,7 +161,9 @@ Library
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
     main-is:    tests/AllTests.hs
-    ghc-options: -itests -rtsopts -threaded
+    hs-source-dirs: tests/ ./    
+    -- Run tests in parallel:
+    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4    
     build-depends: base >= 4 && < 5
                  , abstract-par, monad-par-extras
                  , array   >= 0.3
