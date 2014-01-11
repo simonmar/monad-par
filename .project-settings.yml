@@ -6,4 +6,5 @@ environment: default
 cabal-file: project.cabal
 version: 1
 ghc-args: []
-excluded-modules: []
+excluded-modules:
+- monad-par/Setup.hs
