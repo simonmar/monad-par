@@ -2,9 +2,13 @@ module-template: ! 'module MODULE_NAME where
 
 '
 extensions: {}
-environment: default
+environment: ghc-7.4.2-stable-13.09
 cabal-file: project.cabal
+hidden-packages: ''
 version: 1
+extra-packages: ! 'Hackage: rdtsc 1.3.0.0
+
+'
 ghc-args: []
 excluded-modules:
 - monad-par/Setup.hs

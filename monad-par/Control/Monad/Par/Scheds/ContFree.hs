@@ -5,7 +5,7 @@
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 {- |
-
+ 
   A monad-par tranfsormer which avoids continuation passing style by
   using actual IO threads to capture continuations (but only to
   capture continuations on blocking gets).
@@ -36,7 +36,6 @@ import qualified Control.Monad.Par.Class as PC
 import Control.DeepSeq
 import Data.IORef
 import qualified Data.Set as Set
-import Debug.Trace
 import GHC.IO (unsafePerformIO, unsafeDupablePerformIO)
 import GHC.Conc
 import System.Random.MWC as Random
@@ -607,3 +606,4 @@ instance Functor Par where
 instance Applicative Par where
    (<*>) = ap
    pure  = return
+
