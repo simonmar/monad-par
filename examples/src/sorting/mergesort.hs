@@ -31,15 +31,6 @@ import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Merge (sort)
 
-#ifdef PARSCHED
-import PARSCHED
-#elif 0
-import Control.Monad.Par.Meta.SMPMergeSort
-#define GPU_ENABLED
-#else
-import Control.Monad.Par
-#endif
-
 #ifdef GPU_ENABLED
 import Foreign.CUDA.Driver    (initialise)
 import Foreign.CUDA.Runtime.Device (reset, setFlags, DeviceFlag(..))
@@ -50,6 +41,19 @@ import Foreign.C.Types
 import Foreign.Marshal.Array (allocaArray)
 import System.IO.Unsafe(unsafePerformIO)
 
+#ifdef PARSCHED
+import PARSCHED
+#elif 0
+import Control.Monad.Par.Meta.SMPMergeSort
+#define GPU_ENABLED
+#else
+-- import Control.Monad.Par
+import Control.Monad.Par.IO
+import Control.Monad.Par.Class
+type Par a = ParIO a
+#endif
+
+--------------------------------------------------------------------------------
 
 -- Element type being sorted:
 type ElmT  = Word32
@@ -486,7 +490,7 @@ main = do args <- getArgs
 
           putStrLn "Executing monad-par based sort..."
           start <- getCurrentTime
-          let sorted = runPar $ parComp rands
+          sorted <- runParIO $ parComp rands
           putStr "Beginning of sorted list:\n  "
           print $ V.slice 0 8 sorted
           end   <- getCurrentTime
