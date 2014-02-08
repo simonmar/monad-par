@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3.4.6
+Version:             0.3.4.7
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -24,6 +24,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3.4.4  : Use the Trace scheduler in Control.Monad.Par.IO too
 --  0.3.4.5  : Extremely minor, fix to unit tests.
 --  0.3.4.6  : Add newgeneric flag, supporting the par-classes module.
+--  0.3.4.7  : Take the newgeneric behavior and make it mandatory.
 
 Description:
   The 'Par' monad offers a simple API for parallel programming.  The
@@ -81,10 +82,6 @@ Flag chaselev
    Description: Use Chase-Lev Deques for higher-perf work-stealing.
    Default: False
 
-Flag newgeneric
-   Description: Provide instances for the new par-classes generic Par programming interface.
-   Default: False
-
 Library
   Source-repository head
     type:     git
@@ -124,9 +121,9 @@ Library
     cpp-options: -DUSE_CHASELEV
     build-depends: chaselev-deque
 
-  if flag(newgeneric)
-    cpp-options: -DNEW_GENERIC
-    build-depends: par-classes
+  cpp-options: -DNEW_GENERIC
+  -- A newer replacement for abstract-par that is LVish-compatible:
+  build-depends: par-classes >= 1.1
 
   ghc-options: -O2
   Other-modules:
