@@ -51,7 +51,7 @@ options =
        
      , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "
      , Option [] ["lvish-state"] (NoArg (SetSched LVishState)) "scheduler with one transformer"
-     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer"
+--     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer"
      , Option [] ["lvish-cancel"] (NoArg (SetSched LVishCancel)) "scheduler with one transformer"        
      ]
 
