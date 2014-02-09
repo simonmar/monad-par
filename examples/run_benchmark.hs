@@ -282,7 +282,7 @@ data Sched
    | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
    | LVish
-   | LVishRNG
+--   | LVishRNG
    | LVishState -- Add transformers...
    | LVishCancel  
    | None
@@ -311,7 +311,7 @@ schedToCabalFlag s =
     SMP    -> "-fmeta-smp"
     NUMA   -> "-fmeta-numa"
     LVish  -> "-flvish"
-    LVishRNG   -> "-flvish-rng"
+--    LVishRNG   -> "-flvish-rng"
     LVishCancel   -> "-flvish-cancel" 
     LVishState -> "-flvish-state"
     None   -> ""
