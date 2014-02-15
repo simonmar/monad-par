@@ -873,7 +873,7 @@ dbgTakeMVar msg mv =
    doDebugStuff = do printf "This takeMVar blocked indefinitely!: %s\n" msg
                      error "failed"
 
--- | For debugging purposes.  This can help us figure out (but an ugly
+-- | For debugging purposes.  This can help us figure out (by an ugly
 --   process of elimination) which MVar reads are leading to a "Thread
 --   blocked indefinitely" exception.
 {-

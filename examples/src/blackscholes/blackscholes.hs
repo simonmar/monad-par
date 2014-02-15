@@ -41,6 +41,7 @@ import Control.Monad.Par
 #endif
 
 #ifdef NEW_GENERIC
+#warning "Using new generic interface."
 import qualified Data.Par as C
 #else
 import qualified Control.Monad.Par.Combinator as C

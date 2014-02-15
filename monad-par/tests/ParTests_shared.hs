@@ -25,6 +25,18 @@ three = 3
 par :: (Eq a, Show a) => a -> Par a -> Assertion
 par res m = res @=? runPar m
 
+-- | Make sure there's no problem with bringing the worker threads up and down many
+-- times.  10K runPar's takes about 6.3 seconds.
+case_lotsaRunPar :: Assertion
+case_lotsaRunPar = loop 2000
+  where 
+  loop 0 = putStrLn ""
+  loop i = do
+    -- We need to do runParIO to make sure the compiler does the runPar each time.
+    runParIO (return ())
+    putStr "."
+    loop (i-1)
+    
 case_justReturn :: Assertion
 case_justReturn = par three (return 3)
 

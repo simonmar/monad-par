@@ -22,7 +22,7 @@ import qualified Data.Serialize as Ser
 import Data.Typeable
 import qualified Data.Vector as V
 import qualified Data.Vector.Storable as SV
-import Data.Vector.Storable.UnsafeSerialize
+import Data.Vector.Storable.UnsafeSerialize 
 import Debug.Trace
 import Control.Parallel.Strategies as Strategies
 import System.Random.MWC

@@ -31,15 +31,6 @@ import Data.Time.Clock
 import Text.Printf
 import Data.Vector.Algorithms.Merge (sort)
 
-#ifdef PARSCHED
-import PARSCHED
-#elif 0
-import Control.Monad.Par.Meta.SMPMergeSort
-#define GPU_ENABLED
-#else
-import Control.Monad.Par
-#endif
-
 #ifdef GPU_ENABLED
 import Foreign.CUDA.Driver    (initialise)
 import Foreign.CUDA.Runtime.Device (reset, setFlags, DeviceFlag(..))
@@ -50,6 +41,19 @@ import Foreign.C.Types
 import Foreign.Marshal.Array (allocaArray)
 import System.IO.Unsafe(unsafePerformIO)
 
+#ifdef PARSCHED
+import PARSCHED
+#elif 0
+import Control.Monad.Par.Meta.SMPMergeSort
+#define GPU_ENABLED
+#else
+-- import Control.Monad.Par
+import Control.Monad.Par.IO
+import Control.Monad.Par.Class
+type Par a = ParIO a
+#endif
+
+--------------------------------------------------------------------------------
 
 -- Element type being sorted:
 type ElmT  = Word32
@@ -86,7 +90,9 @@ copyMV  x y   = MV.copy  x y
 -- import Random.MWC.Pure (seed, range_random)
 
 -- | Vector.Algorithms sort
+#ifdef OLDTYPES      
 seqsort :: V.Vector ElmT -> Par (V.Vector ElmT)
+#endif
 seqsort v = return $ V.create $ do 
 --                mut <- thawit v
                 mut <- V.thaw v
@@ -142,10 +148,15 @@ cilkSeqMerge v1 v2 = unsafePerformIO $ do
 --       return dest
        V.unsafeFreeze dest
 #endif
+-- End CILK block.
 
 -- Merge sort for a Vector using the Par monad
 -- t is the threshold for using sequential merge (see merge)
+#ifdef OLDTYPES      
 cpuMergeSort :: Int -> (V.Vector ElmT -> Par (V.Vector ElmT)) -> V.Vector ElmT -> Par (V.Vector ElmT)
+#else
+cpuMergeSort :: Int -> (V.Vector ElmT -> Par d s (V.Vector ElmT)) -> V.Vector ElmT -> Par d s (V.Vector ElmT)
+#endif
 cpuMergeSort t cpuMS vec = if V.length vec <= t
                            then cpuMS vec
                            else do
@@ -239,7 +250,9 @@ dynamicMergeSort cpuT gpuT cpuMS vec = do
 --   2. Split the lists at the median
 --   3. Merge each of the lefts and rights
 --   4. Append the merged lefts and the merged rights
+#ifdef OLDTYPES                 
 merge :: Int -> (V.Vector ElmT) -> (V.Vector ElmT) -> Par (V.Vector ElmT)
+#endif
 merge t left right =
         if V.length left  < t || 
            V.length right < t
@@ -433,13 +446,14 @@ main = do args <- getArgs
               gpuTlo = 2 ^ lo
               gpuT   = (gpuTlo, gpuThi)
 #ifdef CILK_SEQ
-              cpuMS = cilkSeqSort
+              cpuMS x = cilkSeqSort x
 #elif defined(CILK_PAR)
-              cpuMS = cilkRuntimeSort
+              cpuMS x = cilkRuntimeSort x
 #else
-              cpuMS = seqsort
+              cpuMS x = seqsort x 
 #endif
 
+--              parComp :: V.Vector ElmT -> Par d s (V.Vector ElmT)
               parComp 
                       | mode == "cpu"     = cpuMergeSort t cpuMS
 #ifdef GPU_ENABLED
@@ -476,7 +490,7 @@ main = do args <- getArgs
 
           putStrLn "Executing monad-par based sort..."
           start <- getCurrentTime
-          let sorted = runPar $ parComp rands
+          sorted <- runParIO $ parComp rands
           putStr "Beginning of sorted list:\n  "
           print $ V.slice 0 8 sorted
           end   <- getCurrentTime

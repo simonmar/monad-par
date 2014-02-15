@@ -2,7 +2,7 @@
 
 # This is a LAME way of eliminating boilerplate in our .cabal files.
 
-COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10"
+COMMON_DEPS="base == 4.*, deepseq == 1.3.*, vector >= 0.10, mtl"
 REGULAR_BENCHS="mandel/mandel sorting/mergesort"
 PREFIX=monad-par-test
 
@@ -12,18 +12,39 @@ cat >> $CABALFILE <<EOF
 executable $PREFIX-$NAME
   main-is:           $NAME.hs
 
-  if  !(flag(trace)  || flag(direct)   || flag(contfree)\
+  -- Including a higher-up dir for schedulers:
+  hs-source-dirs:    . ../schedulers/
+
+  if !(flag(trace)  || flag(direct)   || flag(contfree)\
+     || flag(trace-st) \
      || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-     || flag(lvish))
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)  )
     buildable:       False
 
   build-depends:     $COMMON_DEPS
 
-  if flag(newgeneric) {
-    build-depends:     par-classes, par-collections
+  -- Select whether to use the newer or older (deprecated) generic interfaces:
+  if (flag(newgeneric) \
+     || flag(trace-st) \
+     || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)  )
+  {
+    build-depends:     par-classes, par-collections, par-transformers
     cpp-options:      -DNEW_GENERIC
   } else {
     build-depends:     abstract-par, monad-par-extras
+  }
+
+  if ( flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel) \
+     || flag(trace-st) \
+     )
+  {
+    cpp-options:
+  } else {
+    cpp-options:      -DOLDTYPES
+  }
+
+  if flag(usegeneric) {
+    cpp-options:  -DUSE_GENERIC
   }
 EOF
 }
@@ -38,9 +59,18 @@ cabal-version:       >=1.8
 
 flag newgeneric
   default:           False
+  description: Use new generic interfaces rather than old.
+
+flag usegeneric
+  default:           False
+  description: Use overloaded ivar and futures ops only.
 
 flag trace
   default:           False
+
+flag trace-st
+  default:           False
+  description: Trace scheduler with ParST transformer on top.  
 
 flag direct
   default:           False
@@ -59,6 +89,19 @@ flag meta-numa
 
 flag lvish
   default:           False
+  description:   Use the LVish implementation.
+
+flag lvish-state
+  default:           False
+  description:   Use LVish and one StateT transformer with unit state.
+
+flag lvish-rng
+  default:           False
+  description:   Use LVish and stack on an RNG transformer.
+
+flag lvish-cancel
+  default:           False
+  description:   Use LVish and stack on an CancelT transformer.
 
 EOF
 executable_header
@@ -71,6 +114,10 @@ cat >> $CABALFILE <<EOF
   if flag(trace)
      build-depends:   monad-par
      cpp-options:     -DPARSCHED=Control.Monad.Par.Scheds.Trace
+
+  if flag(trace-st)
+     build-depends:   monad-par, par-classes, par-transformers
+     cpp-options:     -DPARSCHED=TracePlusParST
 
   if flag(direct)
      build-depends:   monad-par
@@ -93,12 +140,26 @@ cat >> $CABALFILE <<EOF
      cpp-options:     -DPARSCHED=Control.Monad.Par.Meta.NUMAOnly
 
   if flag(lvish)
-     build-depends:   lvish >= 1.1
+     build-depends:   lvish >= 1.1.1.5
      cpp-options:     -DPARSCHED=Control.LVish
 
+  if flag(lvish-state)
+     build-depends:   lvish >= 1.1.1.5
+     cpp-options:     -DPARSCHED=LVishPlusStateT
+
+  if flag(lvish-rng)
+     build-depends:   lvish >= 1.1.1.5
+     cpp-options:     -DPARSCHED=LVishPlusRNG
+
+  if flag(lvish-cancel)
+     build-depends:   lvish >= 1.1.1.5
+     cpp-options:     -DPARSCHED=LVishPlusCancelT
+
+  -- ELSE would be better here:
   if  !(flag(trace)  || flag(direct)   || flag(contfree)\
-     || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
-     || flag(lvish))
+       || flag(trace-st)  \
+       || flag(sparks) || flag(meta-smp) || flag(meta-numa)\
+       || flag(lvish) || flag(lvish-state) || flag(lvish-rng) || flag(lvish-cancel)   )
      build-depends:   monad-par
      -- uses Control.Monad.Par by default
 
@@ -243,7 +304,10 @@ NAME=kmeans
 DIR=src/$NAME
 header
 cat >> $CABALFILE <<EOF
-  build-depends:     array, bytestring, cereal, cereal-vector >= 0.2.0.0, mwc-random, 
+  build-depends:     array, bytestring, cereal, 
+-- [2013.11.12] Problems on Delta, relaxing version constraint here:
+                     cereal-vector >= 0.2.0.1, 
+                     mwc-random, 
                      parallel, time, transformers, vector
 EOF
 boilerplate 

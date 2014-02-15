@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3.4.5
+Version:             0.3.4.6
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -23,6 +23,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3.4.3  : Bugfix, Trace scheduler is now the default
 --  0.3.4.4  : Use the Trace scheduler in Control.Monad.Par.IO too
 --  0.3.4.5  : Extremely minor, fix to unit tests.
+--  0.3.4.6  : Add newgeneric flag, supporting the par-classes module.
 
 Description:
   The 'Par' monad offers a simple API for parallel programming.  The
@@ -160,7 +161,9 @@ Library
 Test-Suite test-monad-par
     type:       exitcode-stdio-1.0
     main-is:    tests/AllTests.hs
-    ghc-options: -itests -rtsopts -threaded
+    hs-source-dirs: tests/ ./    
+    -- Run tests in parallel:
+    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4    
     build-depends: base >= 4 && < 5
                  , abstract-par, monad-par-extras
                  , array   >= 0.3

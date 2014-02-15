@@ -20,9 +20,10 @@ import System.Environment (getEnvironment, getArgs, withArgs)
 import System.IO.Unsafe   (unsafePerformIO)
 import System.Console.GetOpt
 
-import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..)
+import HSBencher.Types(BenchSpace(..), Benchmark(..), ParamSetting(..), DefaultParamMeaning(..),
                        -- compileOptsOnly, enumerateBenchSpace, toCompileFlags,
-                       -- makeBuildID, BuildID, 
+                       -- makeBuildID, BuildID,
+                       mkBenchmark
                       )
 import HSBencher.App (defaultMainWithBechmarks, all_cli_options)
 
@@ -46,8 +47,12 @@ options =
      , Option [] ["sparks"]  (NoArg (SetSched Sparks)) "add this scheduler (default is all schedulers)"
      , Option [] ["direct"]  (NoArg (SetSched Direct)) "add this scheduler "       
      , Option [] ["trace"]   (NoArg (SetSched Trace))  "add this scheduler "
+     , Option [] ["trace-st"]   (NoArg (SetSched TraceST)) "scheduler with one transformer"
        
-     , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "   
+     , Option [] ["lvish"]   (NoArg (SetSched LVish))  "add this scheduler "
+     , Option [] ["lvish-state"] (NoArg (SetSched LVishState)) "scheduler with one transformer"
+     , Option [] ["lvish-rng"] (NoArg (SetSched LVishRNG)) "scheduler with one transformer"
+     , Option [] ["lvish-cancel"] (NoArg (SetSched LVishCancel)) "scheduler with one transformer"        
      ]
 
 isSetSched (SetSched _) = True
@@ -94,35 +99,45 @@ bls_quick ss =
  ------------------------------------------------------------  
  -- Quick-test configuration:
  ------------------------------------------------------------    
- [ Benchmark "src/blackscholes/" []  (futures ss)
- , Benchmark "src/nbody/"        []  (ivars   ss)
- , Benchmark "src/mandel/"       []  (futures ss)
- , Benchmark "src/coins/"        []  (futures ss)
+ [ futbench "blackscholes" [] ss 
+ , ivbench  "nbody"        [] ss 
+ , futbench "mandel"       [] ss 
+ , futbench "coins"        [] ss 
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      []  (futures ss)   
- , Benchmark "src/sumeuler/"     []  (futures ss)
- , Benchmark "src/sorting/"      []  (futures ss)
+ , futbench "matmult"      [] ss 
+ , futbench "sumeuler"     [] ss 
+ , futbench "sorting"      [] ss 
  ]
 
 bls_desktop :: S.Set Sched -> [Benchmark DefaultParamMeaning]
 bls_desktop ss = 
  ------------------------------------------------------------  
  -- Desktop configuration:
- ------------------------------------------------------------  
- [ Benchmark "src/blackscholes/" ["10000","15000000"]  (futures ss)
- , Benchmark "src/nbody/"        ["13000"]             (ivars   ss)
- , Benchmark "src/mandel/"       ["1024","1024","256"] (futures ss)
- , Benchmark "src/coins/"        ["8", "1250"]         (futures ss)
+ ------------------------------------------------------------
+ [ futbench "blackscholes" ["10000","15000000"] ss 
+ , ivbench  "nbody"        ["13000"] ss 
+ , futbench "mandel"       ["1024","1024","256"] ss 
+ , futbench "coins"        ["8", "1250"] ss 
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      ["768", "0", "64"]    (futures ss)   
- , Benchmark "src/sumeuler/"     ["38", "8000", "100"] (futures ss)
- , Benchmark "src/sorting/"      ["cpu", "24", "8192"] (futures ss)
- ]
+ , futbench "matmult"      ["768", "0", "64"] ss 
+ , futbench "sumeuler"     ["38", "8000", "100"] ss 
+ , futbench "sorting"      ["cpu", "24", "8192"] ss 
+ ] ++ parfibRange ss
 
+-- | Parfib can vary wildly between schedulers. Thus we run it with a short timeout,
+-- and then we can simply look at what the maximum size each scheduler could handle
+-- under that threshold.
+parfibRange :: S.Set Sched -> [Benchmark DefaultParamMeaning]
+parfibRange ss =
+  [ (mkBenchmark ("src/parfib/generated.cabal") ["monad",arg] (futures ss)) 
+      { progname= Just "microbench_parfib"
+      , benchTimeOut= Just 6.0 }
+  | arg <- map show [30,31,32,33,34,35,36,37,38,39,40]
+  ]
 
--- # Version: server 1.5
+-- # Version: server 1.6
 -- # I'm attempting to keep track of changes to this config with the above number.
 -- # Note that changes to the benchmarks themselves also require changing
 -- # this version number.  However, ADDING new benchmarks does not require 
@@ -134,18 +149,29 @@ bls_desktop ss =
 -- # 1.3 - changed mandel implementation
 -- # 1.4 - removed path prefixes for new cabal build system -ACF
 -- # 1.5 - prefixes back
+-- # 1.6 - up mergesort 24->25
 bls_server :: S.Set Sched -> [Benchmark DefaultParamMeaning]
-bls_server ss = 
- [ Benchmark "src/blackscholes/" ["10000","30000000"]    (futures ss)
- , Benchmark "src/nbody/"        ["25000"]               (ivars   ss)
- , Benchmark "src/mandel/"       (words "1024 1024 512") (futures ss)
- , Benchmark "src/coins/"        ["8", "1600"]  (futures ss)
+bls_server ss =
+ [ futbench "blackscholes" ["10000","30000000"] ss 
+ , ivbench  "nbody"        ["25000"] ss 
+ , futbench "mandel"       (words "1024 1024 512") ss 
+ , futbench "coins"        ["8", "1600"] ss 
 
    -- These don't match the naming convention at the moment:
- , Benchmark "src/matmult/"      (words "1024 0 64")  (futures ss)   
- , Benchmark "src/sumeuler/"     (words "38 16000 100")  (futures ss)
- , Benchmark "src/sorting/"      ["cpu", "24", "8192"]  (futures ss)
- ]
+ , futbench "matmult"      (words "1024 0 64") ss 
+ , futbench "sumeuler"     (words "38 16000 100") ss 
+ , futbench "sorting"      ["cpu", "25", "8192"] ss 
+ ] ++ parfibRange ss
+
+-- Factor out boilerplate:
+
+futbench :: String -> [String] -> S.Set Sched -> Benchmark DefaultParamMeaning
+futbench dir args ss =
+   (mkBenchmark ("src/"++dir++"/generated.cabal")  args  (futures ss)) { progname=Just dir }   
+
+ivbench :: String -> [String] -> S.Set Sched -> Benchmark DefaultParamMeaning
+ivbench dir args ss =
+   (mkBenchmark ("src/"++dir++"/generated.cabal")  args  (ivars ss)) { progname=Just dir }   
 
 
 ----------------------------------------
@@ -217,20 +243,25 @@ test_metapar = False
 -- | Benchmarks that only require futures, not ivars.
 futures :: S.Set Sched -> BenchSpace DefaultParamMeaning
 futures ss = defaultSettings$ varyThreads $
-          Or$ map sched $ S.toList ss
+          Or$ map dosched $ S.toList ss
 
 -- | Actually using ivars.  For now this just rules out the Sparks scheduler:
 ivars :: S.Set Sched -> BenchSpace DefaultParamMeaning
 ivars ss = defaultSettings$ varyThreads $
-          Or$ map sched $ S.toList $
+          Or$ map dosched $ S.toList $
           S.delete Sparks ss  -- This is the only one that can't support IVars.
 
 defaultSettings :: BenchSpace DefaultParamMeaning -> BenchSpace DefaultParamMeaning
 defaultSettings spc =
-  And [ Set NoMeaning (CompileParam "--disable-documentation")
-      , Set NoMeaning (CompileParam "--disable-library-profiling")
-      , Set NoMeaning (CompileParam "--disable-executable-profiling")
-      , Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS")
+  And [
+--        Set NoMeaning (CompileParam "--disable-documentation")
+--      , Set NoMeaning (CompileParam "--disable-library-profiling")
+--      , Set NoMeaning (CompileParam "--disable-executable-profiling")
+        Or [
+             -- 512K is the default:
+             Set NoMeaning (RuntimeParam "+RTS -s -qa -RTS") -- -A512K
+             -- Set NoMeaning (RuntimeParam "+RTS -s -qa -A20M -RTS")
+           ]
       , spc]
 
       -- rts = gc_stats_flag ++" "++
@@ -247,18 +278,22 @@ defaultSettings spc =
 
 -- | Monad par schedulers:
 data Sched 
-   = Trace | Direct | Sparks   -- Basic monad-par
+   = Trace | TraceST 
+   | Direct | Sparks   -- Basic monad-par
    | SMP | NUMA                -- Meta-par
    | LVish
+   | LVishRNG
+   | LVishState -- Add transformers...
+   | LVishCancel  
    | None
    -- | ContFree   -- Obsolete strawman.
  deriving (Eq, Show, Read, Ord, Enum, Bounded)
 
 -- | Realize a scheduler selection via a compile flag.
-sched :: Sched -> BenchSpace DefaultParamMeaning
-sched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
+dosched :: Sched -> BenchSpace DefaultParamMeaning
+dosched s = Set (Variant$ show s) $ CompileParam $ schedToCabalFlag s
 
--- | By default, we usually don't test meta-par or lvish:
+-- | By default, we usually don't test meta-par 
 defaultSchedSet :: S.Set Sched
 defaultSchedSet = S.difference
                   (S.fromList [minBound ..])
@@ -270,11 +305,15 @@ schedToCabalFlag :: Sched -> String
 schedToCabalFlag s =
   case s of
     Trace  -> "-ftrace"
+    TraceST -> "-ftrace-st"
     Direct -> "-fdirect"
     Sparks -> "-fsparks"
     SMP    -> "-fmeta-smp"
     NUMA   -> "-fmeta-numa"
-    LVish  -> "-flvish" 
+    LVish  -> "-flvish"
+    LVishRNG   -> "-flvish-rng"
+    LVishCancel   -> "-flvish-cancel" 
+    LVishState -> "-flvish-state"
     None   -> ""
 
 -- TODO: make this an option:

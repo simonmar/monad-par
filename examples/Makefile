@@ -20,8 +20,9 @@ ifeq ($(SCHED),)
 endif
 
 
-BENCHES= src/mandel/ src/sorting/ src/nbody/ src/queens/ src/blackscholes/ src/coins/ src/parfib/ \
- src/sumeuler/ src/matmult/ src/minimax/ src/partree/ src/kmeans/  src/randomGen/ src/primes/
+BENCHES= src/mandel/ src/sorting/ src/nbody/ src/blackscholes/ src/sumeuler/ src/coins/  src/matmult/ \
+  src/parfib/ 
+#  src/queens/ src/minimax/ src/partree/ src/kmeans/  src/randomGen/ src/primes/
 
 # disabling due to dependency hell with deepseq and containers:
 # src/cholesky/ 
@@ -39,7 +40,7 @@ install: gen_cabal
 	$(CABAL) install -j $(SCHED) --prefix=`pwd` $(BENCHES) $(CABAL_ARGS)
 
 clean:
-	rm -rf bin *.hi *.o *.exe .cabal-sandbox/
+	rm -rf bin *.hi *.o *.exe .cabal-sandbox/ src/*/bin
 	find -name "cabal.sandbox.config" | xargs rm -f
 	$(CABAL) clean || echo 
 
@@ -51,7 +52,7 @@ test: deps runner
 
 runner: dist/build/run_benchmark/run_benchmark
 dist/build/run_benchmark/run_benchmark: run_benchmark.hs run_benchmark.cabal
-	$(CABAL) install --only-dependencies -j
+	$(CABAL) install --only-dependencies -j 
 	$(CABAL) build
 
 sandbox:
@@ -62,7 +63,7 @@ gen_cabal:
 	./generate_cabal.sh
 
 deps: gen_cabal
-	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --disable-documentation -j"
+	$(MAKE) install CABAL_ARGS="--only-dependencies --disable-library-profiling --disable-documentation -j --max-backjumps=1000"
 
 #================================================================================
 # Validation / regression testing:

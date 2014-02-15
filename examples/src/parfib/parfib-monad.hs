@@ -7,9 +7,6 @@ import GHC.Conc
 import PARSCHED
 #else
 import Control.Monad.Par
--- import Control.Monad.Par.Scheds.ContFree
--- import Control.Monad.Par.Scheds.IOThreads
--- import Control.Monad.Par.Scheds.Direct
 #endif
 
 type FibType = Int64
@@ -20,9 +17,14 @@ fib 0 = 1
 fib 1 = 1
 fib x = fib (x-2) + fib (x-1)
 
+#ifdef OLDTYPES
+#define PAR Par
+#else
+#define PAR Par d s
+#endif
 
 -- Par monad version:
-parfib1 :: FibType -> Par FibType
+parfib1 :: FibType -> PAR FibType
 parfib1 n | n < 2 = return 1
 parfib1 n = do 
 --    xf <- spawn1_ parfib1 (n-1)
@@ -32,7 +34,7 @@ parfib1 n = do
     return (x+y)
 
 -- Par monad version, with threshold:
-parfib1B :: FibType -> FibType -> Par FibType
+parfib1B :: FibType -> FibType -> PAR FibType
 parfib1B n c | n <= c = return $ fib n
 parfib1B n c = do 
     xf <- spawn_$ parfib1B (n-1) c
@@ -41,7 +43,7 @@ parfib1B n c = do
     return (x+y)
 
 -- Gratuitously nested Par monad version:
-parfibNest :: FibType -> FibType -> Par FibType
+parfibNest :: FibType -> FibType -> PAR FibType
 parfibNest n c | n <= c = return $ fib n
 parfibNest n c = do 
     xf <- spawnP $ runPar $ helper (n-1) c
@@ -51,7 +53,7 @@ parfibNest n c = do
     return (x+y)
  where 
   -- Alternate between nesting and regular spawning:
-  helper :: FibType -> FibType -> Par FibType
+  helper :: FibType -> FibType -> PAR FibType
   helper n c | n <= c = return $ fib n
   helper n c = do 
     xf <- spawn_$ parfibNest (n-1) c
@@ -60,6 +62,7 @@ parfibNest n c = do
     return (x+y)
 
 
+main :: IO ()
 main = do 
     args <- getArgs
     let (version, size, cutoff) = case args of 

@@ -39,10 +39,12 @@ data Cluster = Cluster
                   clCent  :: !Point
                } deriving (Show,Read,Typeable,Data,Eq)
 
+{-
 instance Ser.Serialize Cluster where
   put Cluster{ clId, clCount, clSum, clCent } =
     Ser.put clId >> Ser.put clCount >> Ser.put clSum >> Ser.put clCent
   get = Cluster <$> Ser.get <*> Ser.get <*> Ser.get <*> Ser.get
+-}
 
 instance NFData Cluster  -- default should be fine
 
