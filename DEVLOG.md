@@ -737,10 +737,30 @@ When a thread enters runPar, either:
 
 
 
+[2013.11.21] {Examining fusion table benchmark data}
+------------------------------------------------------------
+
+Looking through this data yields some interesting discrepancies.
+For example, just narrowing to th eruns on 2013-05-28:
+
+  * coins - all 3 (direct,trace,sparks) track closely and are fine
+  * nbody, blackscholes, mandel, sumeuler - ditto
+  * mergesort - missing some data, what's there looks fine.
+  * MatMult - Direct/Trace are fine, but Sparks falls apart.
+
+Oh, was matmult the weird one that was written with unsafePerformIO,
+or no, that was cholesky?
+
+Much later on, 2013-11-14, 
+
+  * runID d007_1384410470 looks suspicious for sparks/coins.
+ 
 
 
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
+
+
 
 
 
