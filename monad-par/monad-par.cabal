@@ -82,11 +82,11 @@ Flag chaselev
    Description: Use Chase-Lev Deques for higher-perf work-stealing.
    Default: False
 
-Library
-  Source-repository head
-    type:     git
-    location: https://github.com/simonmar/monad-par
+Source-repository head
+  type:     git
+  location: https://github.com/simonmar/monad-par
 
+Library
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
@@ -123,7 +123,7 @@ Library
 
   cpp-options: -DNEW_GENERIC
   -- A newer replacement for abstract-par that is LVish-compatible:
-  build-depends: par-classes >= 1.1
+  build-depends: par-classes >= 1.0
 
   ghc-options: -O2
   Other-modules:
