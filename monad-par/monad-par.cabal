@@ -85,11 +85,11 @@ Flag newgeneric
    Description: Provide instances for the new par-classes generic Par programming interface.
    Default: False
 
-Library
-  Source-repository head
-    type:     git
-    location: https://github.com/simonmar/monad-par
+Source-repository head
+  type:     git
+  location: https://github.com/simonmar/monad-par
 
+Library
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
