@@ -13,11 +13,11 @@
   @(f x)@ and @(g x)@ in parallel, and returns a pair of their results:
 
   >  runPar $ do
-  >      fx <- spawn (return (f x))  -- start evaluating (f x)
-  >      gx <- spawn (return (g x))  -- start evaluating (g x)
-  >      a <- get fx       -- wait for fx
-  >      b <- get gx       -- wait for gx
-  >      return (a,b)      -- return results
+  >      fx <- spawnP (f x)  -- start evaluating (f x)
+  >      gx <- spawnP (g x)  -- start evaluating (g x)
+  >      a  <- get fx        -- wait for fx
+  >      b  <- get gx        -- wait for gx
+  >      return (a,b)        -- return results
 
   @Par@ can be used for specifying pure parallel computations in
   which the order of the computation is not known beforehand.
