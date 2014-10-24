@@ -817,11 +817,24 @@ But the MINIMUM doesn't go as low as -A20M, and it's USUALLY worse
 than the -A20M version.
 
 
+[2014.10.23] {Criterion Microbenchmarking}
+------------------------------------------
 
+Adding simple microbenchmarks for "return ()" and fork.  The NOOP
+benchmark takes 18.5 ns if the "benchPar" helper is not inlined.
+Adding inlining drops it down to one iteration/cycle, e.g. "283
+ps"/iter.
+
+Also dramatically, inlining benchPar drops the fork microbenchmork
+from 1.6 microseconds / 751 bytes, to 389ns/600-bytes.  That
+allocation is still high enough that it's not completely deforesting
+the Trace structure...
 
 
 TEMP / SCRAP:
 --------------------------------------------------------------------------------
+
+
 
 
 
