@@ -1,0 +1,19 @@
+
+-- | This is split out from the parent package only to break the
+-- dependency cycle.
+
+Name: bench-monad-par
+Version: 0.0.0.1
+Cabal-version:       >=1.8
+Build-type: Simple
+Executable bench-monad-par
+    main-is:        Bench.hs
+    build-depends: monad-par
+    build-depends: base >= 4.6 && <= 4.8
+--                   , containers >= 0.5
+--                   , vector >=0.10
+--                   , random
+    build-depends: criterion >= 1.0
+
+    -- For we duplicate these flag-dependent options:
+    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4
