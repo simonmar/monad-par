@@ -41,7 +41,7 @@ import Data.Concurrent.Deque.Reference as R
 -- computations return nothing.
 --
 newtype Par a = Par { unPar :: C.ContT () ROnly a }
-    deriving (Monad, MonadCont, RD.MonadReader Sched)
+    deriving (Functor, Applicative, Monad, MonadCont, RD.MonadReader Sched)
 type ROnly = RD.ReaderT Sched IO
 
 type SessionID = Word64

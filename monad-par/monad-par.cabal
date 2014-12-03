@@ -1,5 +1,5 @@
 Name:                monad-par
-Version:             0.3.4.6
+Version:             0.3.4.7
 Synopsis:            A library for parallel programming based on a monad
 
 
@@ -24,6 +24,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.3.4.4  : Use the Trace scheduler in Control.Monad.Par.IO too
 --  0.3.4.5  : Extremely minor, fix to unit tests.
 --  0.3.4.6  : Add newgeneric flag, supporting the par-classes module.
+--  0.3.4.7  : bugfix #38 for GHC 7.10
 
 Description:
   The 'Par' monad offers a simple API for parallel programming.  The

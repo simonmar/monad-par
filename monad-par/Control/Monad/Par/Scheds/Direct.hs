@@ -809,12 +809,7 @@ instance UN.ParUnsafe IVar Par  where
   unsafeParIO  = unsafeParIO
 #endif
 
-instance Functor Par where
-   fmap f xs = xs >>= return . f
 
-instance Applicative Par where
-   (<*>) = ap
-   pure  = return
 
 #ifdef NEW_GENERIC
 instance PU.ParMonad Par where
