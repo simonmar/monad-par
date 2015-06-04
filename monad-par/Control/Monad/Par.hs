@@ -61,7 +61,7 @@
   available processors.
 
   Unlike @Control.Parallel@, in @Control.Monad.Par@ parallelism is
-  not combined with laziness, so sharing and granulairty are
+  not combined with laziness, so sharing and granularity are
   completely under the control of the programmer.  New units of
   parallel work are only created by @fork@ and a few other
   combinators.
