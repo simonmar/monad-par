@@ -97,7 +97,7 @@ module Control.Monad.Par
   runPar, runParIO,
 
   fork,
-  -- | forks a computation to happen in parallel.  The forked
+  -- | Forks a computation to happen in parallel.  The forked
   -- computation may exchange values with other computations using
   -- @IVar@s.
 
@@ -105,21 +105,21 @@ module Control.Monad.Par
   IVar,
 
   new, 
-  -- | creates a new @IVar@
+  -- creates a new @IVar@
 
   newFull, 
-  -- | creates a new @IVar@ that contains a value
+  -- creates a new @IVar@ that contains a value
 
   newFull_, 
-  -- | creates a new @IVar@ that contains a value (head-strict only)
+  -- creates a new @IVar@ that contains a value (head-strict only)
 
   get, 
-  -- | read the value in an @IVar@.  'get' can only return when the
+  -- read the value in an @IVar@.  'get' can only return when the
   -- value has been written by a prior or parallel @put@ to the same
   -- @IVar@.
 
   put, 
-  -- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
+  -- put a value into an @IVar@.  Multiple 'put's to the same @IVar@
   -- are not allowed, and result in a runtime error.
   --
   -- 'put' fully evaluates its argument, which therefore must be an
@@ -132,11 +132,11 @@ module Control.Monad.Par
   --
 
   put_,
-  -- | like 'put', but only head-strict rather than fully-strict.
+  -- like 'put', but only head-strict rather than fully-strict.
 
   -- * Operations
   spawn,
-  -- | Like 'fork', but returns a @IVar@ that can be used to query the
+  -- | Like 'fork', but returns an @IVar@ that can be used to query the
   -- result of the forked computataion.  Therefore @spawn@ provides /futures/ or /promises/.
   --
   -- >  spawn p = do

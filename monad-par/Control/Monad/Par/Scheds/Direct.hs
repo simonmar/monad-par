@@ -439,13 +439,13 @@ baseSessionID = 1000
 --------------------------------------------------------------------------------
 
 {-# INLINE new  #-}
--- | creates a new @IVar@
+-- | Creates a new @IVar@
 new :: Par (IVar a)
 new  = io$ do r <- newIORef Empty
               return (IVar r)
 
 {-# INLINE get  #-}
--- | read the value in a @IVar@.  The 'get' can only return when the
+-- | Read the value in an @IVar@.  The 'get' operation can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
 get (IVar vr) =  do
