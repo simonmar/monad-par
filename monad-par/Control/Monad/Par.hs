@@ -119,7 +119,7 @@ module Control.Monad.Par
   -- @IVar@.
 
   put, 
-  -- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
+  -- | put a value into an @IVar@.  Multiple 'put's to the same @IVar@
   -- are not allowed, and result in a runtime error.
   --
   -- 'put' fully evaluates its argument, which therefore must be an
@@ -136,7 +136,7 @@ module Control.Monad.Par
 
   -- * Operations
   spawn,
-  -- | Like 'fork', but returns a @IVar@ that can be used to query the
+  -- | Like 'fork', but returns an @IVar@ that can be used to query the
   -- result of the forked computataion.  Therefore @spawn@ provides /futures/ or /promises/.
   --
   -- >  spawn p = do

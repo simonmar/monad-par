@@ -445,7 +445,7 @@ new  = io$ do r <- newIORef Empty
               return (IVar r)
 
 {-# INLINE get  #-}
--- | read the value in a @IVar@.  The 'get' can only return when the
+-- | read the value in an @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
 get (IVar vr) =  do

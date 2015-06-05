@@ -89,7 +89,7 @@ spawn_ p = do
   fork (p >>= put_ r)
   return r
 
--- | Like 'fork', but returns a @IVar@ that can be used to query the
+-- | Like 'fork', but returns an @IVar@ that can be used to query the
 -- result of the forked computataion.
 spawn :: NFData a => Par a -> Par (IVar a)
 spawn p = do

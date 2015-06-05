@@ -275,7 +275,7 @@ newFull x = deepseq x (Par $ New (Full x))
 newFull_ :: a -> Par (IVar a)
 newFull_ !x = Par $ New (Full x)
 
--- | read the value in a @IVar@.  The 'get' can only return when the
+-- | read the value in an @IVar@.  The 'get' can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
 get :: IVar a -> Par a
@@ -285,7 +285,7 @@ get v = Par $ \c -> Get v c
 put_ :: IVar a -> a -> Par ()
 put_ v !a = Par $ \c -> Put v a (c ())
 
--- | put a value into a @IVar@.  Multiple 'put's to the same @IVar@
+-- | put a value into an @IVar@.  Multiple 'put's to the same @IVar@
 -- are not allowed, and result in a runtime error.
 --
 -- 'put' fully evaluates its argument, which therefore must be an
