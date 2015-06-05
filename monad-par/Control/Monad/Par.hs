@@ -97,7 +97,7 @@ module Control.Monad.Par
   runPar, runParIO,
 
   fork,
-  -- | forks a computation to happen in parallel.  The forked
+  -- | Forks a computation to happen in parallel.  The forked
   -- computation may exchange values with other computations using
   -- @IVar@s.
 
