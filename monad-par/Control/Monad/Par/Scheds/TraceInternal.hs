@@ -275,7 +275,7 @@ newFull x = deepseq x (Par $ New (Full x))
 newFull_ :: a -> Par (IVar a)
 newFull_ !x = Par $ New (Full x)
 
--- | Read the value in an @IVar@.  The 'get' can only return when the
+-- | Read the value in an @IVar@.  The 'get' operation can only return when the
 -- value has been written by a prior or parallel @put@ to the same
 -- @IVar@.
 get :: IVar a -> Par a
