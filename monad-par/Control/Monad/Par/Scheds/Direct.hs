@@ -205,8 +205,8 @@ popWork Sched{ workpool, no } = do
   mb <- R.tryPopL workpool
   when dbg $ case mb of
          Nothing -> return ()
-	 Just _  -> do sn <- makeStableName mb
-	 	       printf " [%d]                                   -> POP work unit %d\n" no (hashStableName sn)
+         Just _  -> do sn <- makeStableName mb
+                       printf " [%d]                                   -> POP work unit %d\n" no (hashStableName sn)
   return mb
 
 {-# INLINE pushWork #-}
@@ -214,7 +214,7 @@ pushWork :: Sched -> Par () -> IO ()
 pushWork Sched { workpool, idle, no, isMain } task = do
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
-		printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
+                printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
 #if  defined(IDLING_ON) && defined(WAKEIDLE)
   --when isMain$    -- Experimenting with reducing contention by doing this only from a single thread.
                     -- TODO: We need to have a proper binary wakeup-tree.
@@ -415,11 +415,11 @@ makeScheds main = do
    activeSessions  <- newHotVar S.empty
    sessionCounter  <- newHotVar (baseSessionID + 1)
    let allscheds = [ Sched { no=x, idle, isMain= (x==main),
-			     workpool=wp, scheds=allscheds, rng=rng,
+                             workpool=wp, scheds=allscheds, rng=rng,
                              sessions = stck,
                              activeSessions=activeSessions,
                              sessionCounter=sessionCounter
-			   }
+                           }
                    --  | (x,wp,rng,stck) <- zip4 [0..] workpools rngs sessionStacks
                    | x   <- [0 .. numCapabilities-1]
                    | wp  <- workpools
@@ -453,8 +453,8 @@ get (IVar vr) =  do
     do
        e  <- io$ readIORef vr
        case e of
-	  Full a -> return a
-	  _ -> do
+          Full a -> return a
+          _ -> do
             sch <- RD.ask
 #  ifdef DEBUG_DIRECT
             sn <- io$ makeStableName vr  -- Should probably do the MutVar inside...
@@ -462,14 +462,14 @@ get (IVar vr) =  do
 #else
             let resched =
 #  endif
-			  longjmpSched -- Invariant: kont must not be lost.
+                          longjmpSched -- Invariant: kont must not be lost.
             -- Because we continue on the same processor the Sched stays the same:
             -- TODO: Try NOT using monadic values as first class.  Check for performance effect:
-	    r <- io$ atomicModifyIORef vr $ \x -> case x of
-		      Empty      -> (Blocked [pushWork sch . kont], resched)
-		      Full a     -> (Full a, return a) -- kont is implicit here.
-		      Blocked ks -> (Blocked (pushWork sch . kont:ks), resched)
-	    r
+            r <- io$ atomicModifyIORef vr $ \x -> case x of
+                      Empty      -> (Blocked [pushWork sch . kont], resched)
+                      Full a     -> (Full a, return a) -- kont is implicit here.
+                      Blocked ks -> (Blocked (pushWork sch . kont:ks), resched)
+            r
 
 -- | NOTE unsafePeek is NOT exposed directly through this module.  (So
 -- this module remains SAFE in the Safe Haskell sense.)  It can only
@@ -512,13 +512,13 @@ unsafeTryPut (IVar vr) !content = do
    sched <- RD.ask
    (ks,res) <- io$ do
       pr <- atomicModifyIORef vr $ \e -> case e of
-		   Empty      -> (Full content, ([], content))
-		   Full x     -> (Full x, ([], x))
-		   Blocked ks -> (Full content, (ks, content))
+                   Empty      -> (Full content, ([], content))
+                   Full x     -> (Full x, ([], x))
+                   Blocked ks -> (Full content, (ks, content))
 #ifdef DEBUG_DIRECT
       sn <- makeStableName vr
       printf " [%d] unsafeTryPut: value %s in IVar %d.  Waking up %d continuations.\n"
-	     (no sched) (show content) (hashStableName sn) (length (fst pr))
+             (no sched) (show content) (hashStableName sn) (length (fst pr))
 #endif
       return pr
    wakeUp sched ks content
@@ -615,7 +615,7 @@ rescheduleR cnt kont = do
     Nothing -> do
                   (Session _ finRef):_ <- liftIO$ readIORef $ sessions mysched
                   fin <- liftIO$ readIORef finRef
-		  if fin
+                  if fin
                    then do when (dbglvl >= 1) $ liftIO $ do
                              tid <- myThreadId
                              sess <- readSessions mysched
@@ -633,22 +633,22 @@ rescheduleR cnt kont = do
                      --     sess <- readSessions mysched
                      --     printf " [%d %s]  -    Apparently NOT finished with head session... trying to steal, all sessions %s\n"
                      --            (no mysched) (show tid) (show sess)
-		     liftIO$ steal mysched
+                     liftIO$ steal mysched
 #ifdef WAKEIDLE
 --                     io$ tryWakeIdle (idle mysched)
 #endif
                      liftIO yield
-		     rescheduleR (cnt+1) kont
+                     rescheduleR (cnt+1) kont
     Just task -> do
        -- When popping work from our own queue the Sched (Reader value) stays the same:
        when dbg $ do sn <- liftIO$ makeStableName task
-		     liftIO$ printf " [%d] popped work %d from own queue\n" (no mysched) (hashStableName sn)
+                     liftIO$ printf " [%d] popped work %d from own queue\n" (no mysched) (hashStableName sn)
        let C.ContT fn = unPar task
        -- Run the stolen task with a continuation that returns to the scheduler if the task exits normally:
        fn (\ _ -> do
            sch <- RD.ask
            when dbg$ liftIO$ printf "  + task finished successfully on cpu %d, calling reschedule continuation..\n" (no sch)
-	   rescheduleR 0 kont)
+           rescheduleR 0 kont)
 
 
 -- | Attempt to steal work or, failing that, give up and go idle.
@@ -684,7 +684,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          return ()
                        else do
                          when dbg$ printf " [%d]  | woken up\n" my_no
-			 i <- getnext (-1::Int)
+                         i <- getnext (-1::Int)
                          go maxtries i
 
     -- We need to return from this loop to check sessionFinished and exit the scheduler if necessary.
@@ -693,7 +693,7 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
     ----------------------------------------
     go tries i
       | i == my_no = do i' <- getnext i
-			go (tries-1) i'
+                        go (tries-1) i'
 
       | otherwise     = do
          -- We ONLY go through the global sched array to access victims:
@@ -707,16 +707,16 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
          case r of
            Just task  -> do
               when dbg$ do sn <- makeStableName task
-			   printf " [%d]  | stole work (unit %d) from cpu %d\n" my_no (hashStableName sn) (no schd)
-	      runReaderWith mysched $
-		C.runContT (unPar task)
-		 (\_ -> do
-		   when dbg$ do sn <- liftIO$ makeStableName task
-		                liftIO$ printf " [%d]  | DONE running stolen work (unit %d) from %d\n" my_no (hashStableName sn) (no schd)
-		   return ())
+                           printf " [%d]  | stole work (unit %d) from cpu %d\n" my_no (hashStableName sn) (no schd)
+              runReaderWith mysched $
+                C.runContT (unPar task)
+                 (\_ -> do
+                   when dbg$ do sn <- liftIO$ makeStableName task
+                                liftIO$ printf " [%d]  | DONE running stolen work (unit %d) from %d\n" my_no (hashStableName sn) (no schd)
+                   return ())
 
            Nothing -> do i' <- getnext i
-			 go (tries-1) i'
+                         go (tries-1) i'
 
 -- | The continuation which should not be called.
 errK :: t
@@ -728,7 +728,7 @@ trivialCont str _ = do
 --                trace (str ++" trivialCont evaluated!")
                 liftIO$ printf " !! trivialCont evaluated, msg: %s\n" str
 #endif
-		return ()
+                return ()
 
 ----------------------------------------------------------------------------------------------------
 
@@ -749,8 +749,8 @@ spawn1_ f x =
 
 -- The following is usually inefficient!
 newFull_ a = do v <- new
-		put_ v a
-		return v
+                put_ v a
+                return v
 
 newFull a = deepseq a (newFull_ a)
 
@@ -813,7 +813,7 @@ instance UN.ParUnsafe IVar Par  where
 
 #ifdef NEW_GENERIC
 instance PU.ParMonad Par where
-  fork = fork  
+  fork = fork
   internalLiftIO io = Par (lift $ lift io)
 
 instance PU.ParThreadSafe Par where
@@ -826,14 +826,14 @@ instance PN.ParFuture Par where
   spawn  = spawn
   spawn_ = spawn_
   spawnP = spawnP
-  
+
 instance PN.ParIVar Par  where
   new  = new
   put_ = put_
   newFull = newFull
   newFull_ = newFull_
 #endif
-   
+
 -- </boilerplate>
 --------------------------------------------------------------------------------
 
@@ -898,7 +898,7 @@ forkIO_Suppress whre action =
                        _ -> do
                                putStrLn$"CAUGHT child thread exception: "++show e
                                return ()
-		    )
+                    )
            action
 
 
@@ -909,14 +909,14 @@ forkWithExceptions forkit descr action = do
    forkit $ do
       tid <- myThreadId
       E.catch action
-	 (\ e ->
+         (\ e ->
            case E.fromException e of
              Just E.ThreadKilled -> printf -- hPrintf stderr
                                     "\nThreadKilled exception inside child thread, %s (not propagating!): %s\n" (show tid) (show descr)
-	     _  -> do printf -- hPrintf stderr
+             _  -> do printf -- hPrintf stderr
                         "\nException inside child thread %s, %s: %s\n" (show descr) (show tid) (show e)
                       E.throwTo parent (e :: E.SomeException)
-	 )
+         )
 
 
 -- Do all the memory reads to snapshot the current session stack:
@@ -925,5 +925,3 @@ readSessions sched = do
   ls <- readIORef (sessions sched)
   bools <- mapM (\ (Session _ r) -> readIORef r) ls
   return (zip (map (\ (Session sid _) -> sid) ls) bools)
-
-

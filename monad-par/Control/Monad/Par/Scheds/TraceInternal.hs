@@ -74,22 +74,22 @@ sched _doSync queue t = loop t
          loop parent
     Done ->
          if _doSync
-	 then reschedule queue
+         then reschedule queue
 -- We could fork an extra thread here to keep numCapabilities workers
 -- even when the main thread returns to the runPar caller...
          else do putStrLn " [par] Forking replacement thread..\n"
                  forkIO (reschedule queue); return ()
 -- But even if we don't we are not orphaning any work in this
 -- threads work-queue because it can be stolen by other threads.
---	 else return ()
+--       else return ()
 
     Yield parent -> do
         -- Go to the end of the worklist:
         let Sched { workpool } = queue
         -- TODO: Perhaps consider Data.Seq here.
-	-- This would also be a chance to steal and work from opposite ends of the queue.
+        -- This would also be a chance to steal and work from opposite ends of the queue.
         atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
-	reschedule queue
+        reschedule queue
     LiftIO io c -> do
         r <- io
         loop (c r)
