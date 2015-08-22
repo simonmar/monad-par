@@ -25,8 +25,11 @@ import System.IO.Unsafe
 import Control.Concurrent hiding (yield)
 import GHC.Conc (numCapabilities)
 import Control.DeepSeq
-import Control.Applicative
 -- import Text.Printf
+
+#if !MIN_VERSION_base(4,8,0)
+import Control.Applicative
+#endif
 
 #if __GLASGOW_HASKELL__ <= 700
 import GHC.Conc (forkOnIO)
