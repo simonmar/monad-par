@@ -8,15 +8,15 @@ module Control.Monad.Par.Pedigree
  (
    pedigree, ParPedigreeT
  , unpack, runParPedigree
- ) 
- where 
+ )
+ where
 
 import Control.Monad.Par.Class
 import Control.Monad.Par.State
-import Control.Monad.Trans.State.Strict as S 
+import Control.Monad.Trans.State.Strict as S
 
 -- It's running slightly better with normal lists for parfib:
-#if 0 
+#if 0
 import Data.BitList
 type BList = BitList
 #else
@@ -33,13 +33,13 @@ type ParPedigreeT p a = S.StateT Pedigree p a
 -- instance SplittableState Pedigree where
 --   splitState bl = (cons False bl, cons True bl)
 
-data Pedigree = 
-      Pedigree { ivarCounter :: {-# UNPACK #-} !Int, 
-	         treePath    :: !BList }
+data Pedigree =
+      Pedigree { ivarCounter :: {-# UNPACK #-} !Int,
+                 treePath    :: !BList }
 
 instance SplittableState Pedigree where
-  splitState (Pedigree cnt bl) = 
-    (Pedigree cnt (cons False bl), 
+  splitState (Pedigree cnt bl) =
+    (Pedigree cnt (cons False bl),
      Pedigree cnt (cons True bl))
 
 pedigree :: ParFuture iv p => S.StateT Pedigree p Pedigree

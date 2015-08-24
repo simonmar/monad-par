@@ -1,9 +1,9 @@
 {-# LANGUAGE BangPatterns #-}
-{-| 
+{-|
     A collection of useful parallel combinators based on top of a 'Par' monad.
 
     In particular, this module provides higher order functions for
-     traversing data structures in parallel.  
+     traversing data structures in parallel.
 
 -}
 
@@ -14,7 +14,7 @@ module Control.Monad.Par.Combinator
     InclusiveRange(..),
     parFor
   )
-where 
+where
 
 import Control.DeepSeq
 import Data.Traversable
@@ -85,17 +85,17 @@ parMapReduceRangeThresh threshold (InclusiveRange min max) fn binop init
  where
   loop min max
     | max - min <= threshold =
-	let mapred a b = do x <- fn b;
-			    result <- a `binop` x
-			    return result
-	in foldM mapred init [min..max]
+        let mapred a b = do x <- fn b;
+                            result <- a `binop` x
+                            return result
+        in foldM mapred init [min..max]
 
     | otherwise  = do
-	let mid = min + ((max - min) `quot` 2)
-	rght <- spawn $ loop (mid+1) max
-	l  <- loop  min    mid
-	r  <- get rght
-	l `binop` r
+        let mid = min + ((max - min) `quot` 2)
+        rght <- spawn $ loop (mid+1) max
+        l  <- loop  min    mid
+        r  <- get rght
+        l `binop` r
 
 -- How many tasks per process should we aim for?  Higher numbers
 -- improve load balance but put more pressure on the scheduler.
@@ -104,24 +104,24 @@ auto_partition_factor = 4
 
 -- | \"Auto-partitioning\" version of 'parMapReduceRangeThresh' that chooses the threshold based on
 --    the size of the range and the number of processors..
-parMapReduceRange :: (NFData a, ParFuture iv p) => 
-		     InclusiveRange -> (Int -> p a) -> (a -> a -> p a) -> a -> p a
+parMapReduceRange :: (NFData a, ParFuture iv p) =>
+                     InclusiveRange -> (Int -> p a) -> (a -> a -> p a) -> a -> p a
 parMapReduceRange (InclusiveRange start end) fn binop init =
    loop (length segs) segs
  where
   segs = splitInclusiveRange (auto_partition_factor * numCapabilities) (start,end)
   loop 1 [(st,en)] =
      let mapred a b = do x <- fn b;
-			 result <- a `binop` x
-			 return result
+                         result <- a `binop` x
+                         return result
      in foldM mapred init [st..en]
   loop n segs =
      let half = n `quot` 2
-	 (left,right) = splitAt half segs in
+         (left,right) = splitAt half segs in
      do l  <- spawn$ loop half left
         r  <- loop (n-half) right
-	l' <- get l
-	l' `binop` r
+        l' <- get l
+        l' `binop` r
 
 
 -- TODO: A version that works for any splittable input domain.  In this case
@@ -133,7 +133,7 @@ parMapReduceRange (InclusiveRange start end) fn binop init =
 
 -- | Parallel for-loop over an inclusive range.  Semantically equivalent
 -- to
--- 
+--
 -- > parFor (InclusiveRange n m) f = forM_ [n..m] f
 --
 -- except that the implementation will split the work into an
@@ -180,4 +180,4 @@ for_ start end _fn | start > end = error "for_: start is greater than end"
 for_ start end fn = loop start
   where
    loop !i | i == end  = return ()
-	   | otherwise = do fn i; loop (i+1)
+           | otherwise = do fn i; loop (i+1)

@@ -60,7 +60,7 @@ class Monad m => ParFuture future m | m -> future where
   -- >    return r
   --
   spawn  :: NFData a => m a -> m (future a)
-  
+
   -- | Like 'spawn', but the result is only head-strict, not fully-strict.
   spawn_ :: m a -> m (future a)
 
@@ -105,8 +105,8 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
   --
   put  :: NFData a => ivar a -> a -> m ()
   put v a = deepseq a (put_ v a)
-  
-  -- | like 'put', but only head-strict rather than fully-strict.  
+
+  -- | like 'put', but only head-strict rather than fully-strict.
   put_ :: ivar a -> a -> m ()
 
   -- Extra API routines that have default implementations:
@@ -119,8 +119,8 @@ class ParFuture ivar m  => ParIVar ivar m | m -> ivar where
   newFull_ ::  a -> m (ivar a)
   newFull_ a = do v <- new
                   -- This is usually inefficient!
-		  put_ v a
-		  return v
+                  put_ v a
+                  return v
 
 --------------------------------------------------------------------------------
 
