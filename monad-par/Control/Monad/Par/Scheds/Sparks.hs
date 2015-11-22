@@ -55,7 +55,7 @@ get (Future a) = a `pseq` return a
 -- <boilerplate>
 
 instance Monad Par where
-  return x = Done x
+  return = pure
   Done x >>= k = k x
 
 instance PC.ParFuture Future Par  where 
@@ -69,7 +69,7 @@ instance Functor Par where
 
 instance Applicative Par where
    (<*>) = ap
-   pure  = return
+   pure  = Done
 
 #ifdef NEW_GENERIC
 doio :: IO a -> Par a

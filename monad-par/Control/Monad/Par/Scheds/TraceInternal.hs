@@ -175,12 +175,12 @@ instance Functor Par where
     fmap f m = Par $ \c -> runCont m (c . f)
 
 instance Monad Par where
-    return a = Par ($ a)
+    return = pure
     m >>= k  = Par $ \c -> runCont m $ \a -> runCont (k a) c
 
 instance Applicative Par where
    (<*>) = ap
-   pure  = return
+   pure a = Par ($ a)
 
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))
