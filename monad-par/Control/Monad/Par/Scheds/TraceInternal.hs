@@ -250,11 +250,20 @@ runPar_internal _doSync x = do
      _ -> error "no result"
 
 
+-- | Run a parallel, deterministic computation and return its result.
+-- 
+--   Note: you must NOT return an IVar in the output of the parallel
+--   computation.  This is unfortunately not enforced, as it is with
+--   `runST` or with newer libraries that export a Par monad, such as
+--   `lvish`.
 runPar :: Par a -> a
 runPar = unsafePerformIO . runPar_internal True
 
 -- | A version that avoids an internal `unsafePerformIO` for calling
 --   contexts that are already in the `IO` monad.
+--
+--   Returning any value containing IVar is still disallowed, as it
+--   can compromise type safety.
 runParIO :: Par a -> IO a
 runParIO = runPar_internal True
 
