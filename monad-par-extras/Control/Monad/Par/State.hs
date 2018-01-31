@@ -13,7 +13,6 @@ module Control.Monad.Par.State
   )
   where
 
-import Control.Monad
 import qualified Control.Monad.Par.Class as PC
 import Control.Monad.Trans
 import qualified Control.Monad.Trans.State.Strict as S
@@ -61,7 +60,7 @@ instance (SplittableState s, PC.ParIVar iv p)
               do s <- S.get
                  let (s1,s2) = splitState s
                  S.put s2
-                 lift$ PC.fork $ do S.runStateT task s1; return ()
+                 lift$ PC.fork $ do _ <- S.runStateT task s1; return ()
 
   new      = lift PC.new
   put_ v x = lift$ PC.put_ v x
@@ -103,7 +102,7 @@ instance (SplittableState s, PC.ParIVar iv p)
               do s <- SL.get
                  let (s1,s2) = splitState s
                  SL.put s2
-                 lift$ PC.fork $ do SL.runStateT task s1; return ()
+                 lift$ PC.fork $ do _ <- SL.runStateT task s1; return ()
 
   new      = lift PC.new
   put_ v x = lift$ PC.put_ v x

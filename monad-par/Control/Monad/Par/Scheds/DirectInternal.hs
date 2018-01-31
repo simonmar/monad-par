@@ -23,9 +23,6 @@ import Data.Concurrent.Deque.Class (WSDeque)
 #warning "Note: using Chase-Lev lockfree workstealing deques..."
 import Data.Concurrent.Deque.ChaseLev.DequeInstance
 import Data.Concurrent.Deque.ChaseLev as R
-#else
-import Data.Concurrent.Deque.Reference.DequeInstance
-import Data.Concurrent.Deque.Reference as R
 #endif
 
 -- Our monad stack looks like this:
@@ -112,10 +109,12 @@ modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
 readHotVar    = readIORef
 writeHotVar   = writeIORef
 instance Show (IORef a) where
-  show ref = "<ioref>"
+  show _ref = "<ioref>"
 
+writeHotVarRaw :: HotVar a -> a -> IO ()
 -- hotVarTransaction = id
 hotVarTransaction = error "Transactions not currently possible for IO refs"
+readHotVarRaw :: HotVar a -> IO a
 readHotVarRaw  = readHotVar
 writeHotVarRaw = writeHotVar
 
@@ -130,7 +129,7 @@ modifyHotVar_ v fn = modifyMVar_ v (return . fn)
 readHotVar    = readMVar
 writeHotVar v x = do swapMVar v x; return ()
 instance Show (MVar a) where
-  show ref = "<mvar>"
+  show _ref = "<mvar>"
 
 -- hotVarTransaction = id
 -- We could in theory do this by taking the mvar to grab the lock.

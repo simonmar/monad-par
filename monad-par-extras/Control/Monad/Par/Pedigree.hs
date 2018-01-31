@@ -21,8 +21,11 @@ import Data.BitList
 type BList = BitList
 #else
 type BList = [Bool]
+unpack :: Pedigree -> BList
 unpack (Pedigree _ x) = x
+cons :: x -> [x] -> [x]
 cons = (:)
+empty :: [x]
 empty = []
 #endif
 
@@ -34,8 +37,8 @@ type ParPedigreeT p a = S.StateT Pedigree p a
 --   splitState bl = (cons False bl, cons True bl)
 
 data Pedigree =
-      Pedigree { ivarCounter :: {-# UNPACK #-} !Int,
-                 treePath    :: !BList }
+      Pedigree { _ivarCounter :: {-# UNPACK #-} !Int,
+                 _treePath    :: !BList }
 
 instance SplittableState Pedigree where
   splitState (Pedigree cnt bl) =
