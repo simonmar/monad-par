@@ -39,7 +39,6 @@ import GHC.Conc           (numCapabilities,yield)
 import           "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
 import qualified       System.Random.MWC as Random
--- import                 System.IO  (stderr)
 import                 System.IO.Unsafe (unsafePerformIO)
 import                 System.Mem.StableName (makeStableName, hashStableName)
 import qualified       Control.Monad.Par.Class  as PC
@@ -917,9 +916,9 @@ forkWithExceptions forkit descr action = do
       E.catch action
          (\ e ->
            case E.fromException e of
-             Just E.ThreadKilled -> printf -- hPrintf stderr
+             Just E.ThreadKilled -> printf
                                     "\nThreadKilled exception inside child thread, %s (not propagating!): %s\n" (show tid) (show descr)
-             _  -> do printf -- hPrintf stderr
+             _  -> do printf
                         "\nException inside child thread %s, %s: %s\n" (show descr) (show tid) (show e)
                       E.throwTo parent (e :: E.SomeException)
          )
