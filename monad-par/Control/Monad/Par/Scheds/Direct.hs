@@ -34,12 +34,11 @@ module Control.Monad.Par.Scheds.Direct (
 import Control.Applicative
 import Control.Concurrent hiding (yield)
 import Data.IORef         (IORef,newIORef,readIORef,writeIORef,atomicModifyIORef)
-import Text.Printf        (printf, hPrintf)
+import Text.Printf        (printf)
 import GHC.Conc           (numCapabilities,yield)
 import           "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
 import qualified       System.Random.MWC as Random
-import                 System.IO  (stderr)
 import                 System.IO.Unsafe (unsafePerformIO)
 import                 System.Mem.StableName (makeStableName, hashStableName)
 import qualified       Control.Monad.Par.Class  as PC
@@ -52,12 +51,14 @@ import qualified       Control.Par.Class as PN
 import qualified       Control.Par.Class.Unsafe as PU
 #endif
 import Control.DeepSeq
+#ifdef NESTED_SCHEDS
 import qualified Data.Map as M
+#endif
 import qualified Data.Set as S
 import Data.Maybe (catMaybes)
 import Data.Word (Word64)
 
-import Data.Concurrent.Deque.Class (WSDeque)
+-- import Data.Concurrent.Deque.Class (WSDeque)
 #ifdef USE_CHASELEV
 #warning "Note: using Chase-Lev lockfree workstealing deques..."
 import Data.Concurrent.Deque.ChaseLev.DequeInstance
@@ -166,8 +167,10 @@ io = unsafeParIO -- shorthand used below
 -- `runPar` instantiations.  This is used to detect nested invocations
 -- of `runPar` and avoid reinitialization.
 -- globalWorkerPool :: IORef (Data.IntMap ())
+#ifdef NESTED_SCHEDS
 globalWorkerPool :: IORef (M.Map ThreadId Sched)
 globalWorkerPool = unsafePerformIO $ newIORef M.empty
+#endif
 -- TODO! Make this semi-local! (not shared between "top-level" runPars)
 
 {-# INLINE amINested #-}
@@ -211,7 +214,7 @@ popWork Sched{ workpool, no } = do
 
 {-# INLINE pushWork #-}
 pushWork :: Sched -> Par () -> IO ()
-pushWork Sched { workpool, idle, no, isMain } task = do
+pushWork Sched { workpool, idle, no } task = do
   R.pushL workpool task
   when dbg $ do sn <- makeStableName task
                 printf " [%d]                                   -> PUSH work unit %d\n" no (hashStableName sn)
@@ -538,7 +541,7 @@ wakeUp _sched ks arg = loop ks
      -- continuation until its completion.
      if _PARPUTS then
        -- We do NOT force the putting thread to postpone its continuation.
-       do spawn_$ pMap kont rest
+       do _ <- spawn_$ pMap kont rest
           return ()
        -- case rest of
        --   [] -> spawn_$ io$ kont arg
@@ -558,7 +561,7 @@ wakeUp _sched ks arg = loop ks
 
    pMap kont [] = io$ kont arg
    pMap kont (more:rest) =
-     do spawn_$ io$ kont arg
+     do _ <- spawn_$ io$ kont arg
         pMap more rest
 
    -- parchain [kont] = kont arg
@@ -581,7 +584,7 @@ fork task =
          -- Then execute the child task and return to the scheduler when it is complete:
          task
          -- If we get to this point we have finished the child task:
-         longjmpSched -- We reschedule to pop the cont we pushed.
+         _ <- longjmpSched -- We reschedule to pop the cont we pushed.
          -- TODO... OPTIMIZATION: we could also try the pop directly, and if it succeeds return normally....
          io$ printf " !!! ERROR: Should never reach this point #1\n"
 
@@ -719,14 +722,16 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                          go (tries-1) i'
 
 -- | The continuation which should not be called.
-errK :: t
-errK = error "Error cont: this closure shouldn't be used"
+_errK :: t
+_errK = error "Error cont: this closure shouldn't be used"
 
 trivialCont :: String -> a -> ROnly ()
-trivialCont str _ = do
 #ifdef DEBUG_DIRECT
+trivialCont str _ = do
 --                trace (str ++" trivialCont evaluated!")
                 liftIO$ printf " !! trivialCont evaluated, msg: %s\n" str
+#else
+trivialCont _str _ = do
 #endif
                 return ()
 
@@ -849,8 +854,8 @@ runReaderWith state m = RD.runReaderT m state
 --------------------------------------------------------------------------------
 
 -- Make sure there is no work left in any deque after exiting.
-sanityCheck :: [Sched] -> IO ()
-sanityCheck allscheds = do
+_sanityCheck :: [Sched] -> IO ()
+_sanityCheck allscheds = do
   forM_ allscheds $ \ Sched{no, workpool} -> do
      b <- R.nullQ workpool
      when (not b) $ do
@@ -860,8 +865,8 @@ sanityCheck allscheds = do
 
 
 -- | This tries to localize the blocked-indefinitely exception:
-dbgTakeMVar :: String -> MVar a -> IO a
-dbgTakeMVar msg mv =
+_dbgTakeMVar :: String -> MVar a -> IO a
+_dbgTakeMVar msg mv =
 --  catch (takeMVar mv) ((\_ -> doDebugStuff) :: BlockedIndefinitelyOnMVar -> IO a)
   E.catch (takeMVar mv) (\(_::IOError) -> doDebugStuff)
  where
@@ -890,8 +895,8 @@ busyTakeMVar msg mv = try (10 * 1000 * 1000)
 
 -- | Fork a thread but ALSO set up an error handler that suppresses
 --   MVar exceptions.
-forkIO_Suppress :: Int -> IO () -> IO ThreadId
-forkIO_Suppress whre action =
+_forkIO_Suppress :: Int -> IO () -> IO ThreadId
+_forkIO_Suppress whre action =
   forkOn whre $
            E.handle (\e ->
                       case (e :: E.BlockedIndefinitelyOnMVar) of
@@ -911,9 +916,9 @@ forkWithExceptions forkit descr action = do
       E.catch action
          (\ e ->
            case E.fromException e of
-             Just E.ThreadKilled -> printf -- hPrintf stderr
+             Just E.ThreadKilled -> printf
                                     "\nThreadKilled exception inside child thread, %s (not propagating!): %s\n" (show tid) (show descr)
-             _  -> do printf -- hPrintf stderr
+             _  -> do printf
                         "\nException inside child thread %s, %s: %s\n" (show descr) (show tid) (show e)
                       E.throwTo parent (e :: E.SomeException)
          )

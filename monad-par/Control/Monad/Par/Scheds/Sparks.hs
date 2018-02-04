@@ -18,11 +18,11 @@ import Control.DeepSeq
 import Control.Parallel
 import qualified Control.Monad.Par.Class as PC
 -- import Control.Parallel.Strategies (rpar)
-import System.IO.Unsafe (unsafePerformIO)
 
 #ifdef NEW_GENERIC
 import qualified       Control.Par.Class as PN
 import qualified       Control.Par.Class.Unsafe as PU
+import System.IO.Unsafe (unsafePerformIO)
 #endif
 
 

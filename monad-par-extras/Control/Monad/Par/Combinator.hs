@@ -19,7 +19,7 @@ where
 import Control.DeepSeq
 import Data.Traversable
 import Control.Monad as M hiding (mapM, sequence, join)
-import Prelude hiding (mapM, sequence, head,tail)
+import Prelude hiding (mapM, sequence, head, tail, min, max, init)
 import GHC.Conc (numCapabilities)
 
 import Control.Monad.Par.Class
@@ -80,8 +80,8 @@ parMapReduceRangeThresh
       -> a                              -- ^ initial result
       -> p a
 
-parMapReduceRangeThresh threshold (InclusiveRange min max) fn binop init
- = loop min max
+parMapReduceRangeThresh threshold (InclusiveRange min' max') fn binop init
+ = loop min' max'
  where
   loop min max
     | max - min <= threshold =
@@ -115,9 +115,9 @@ parMapReduceRange (InclusiveRange start end) fn binop init =
                          result <- a `binop` x
                          return result
      in foldM mapred init [st..en]
-  loop n segs =
+  loop n segs' =
      let half = n `quot` 2
-         (left,right) = splitAt half segs in
+         (left,right) = splitAt half segs' in
      do l  <- spawn$ loop half left
         r  <- loop (n-half) right
         l' <- get l
