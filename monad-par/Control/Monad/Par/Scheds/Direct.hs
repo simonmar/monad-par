@@ -681,7 +681,9 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                      writeHotVarRaw idle []
                      mapM_ (\vr -> putMVar vr True) r
                   else do
-                    done <- takeMVar m
+                    (Session _ finRef):_ <- readIORef $ sessions mysched
+                    fin <- readIORef finRef
+                    done <- if fin then pure True else takeMVar m
                     if done
                        then do
                          when dbg$ printf " [%d]  | shutting down\n" my_no
