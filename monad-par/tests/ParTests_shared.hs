@@ -25,6 +25,30 @@ three = 3
 par :: (Eq a, Show a) => a -> Par a -> Assertion
 par res m = res @=? runPar m
 
+-- From https://github.com/simonmar/monad-par/pull/49
+case_parallelFilter :: Assertion
+case_parallelFilter = run 200 where
+  run 0 = pure ()
+  run i = do
+    par result (parfilter p xs)
+    run (i-1)
+
+  p x = x `mod` 2 == 0
+  xs = [0..10] :: [Int]
+  result = filter p xs
+
+  parfilter _ []  = pure []
+  parfilter f [x] = pure (if f x then [x] else [])
+  parfilter f xs  = do
+    let (as, bs) = halve xs
+    v1 <- spawn $ parfilter f as
+    v2 <- spawn $ parfilter f bs
+    left  <- get v1
+    right <- get v2
+    pure (left ++ right)
+
+  halve xs = splitAt (length xs `div` 2) xs
+
 -- | Make sure there's no problem with bringing the worker threads up and down many
 -- times.  10K runPar's takes about 6.3 seconds.
 case_lotsaRunPar :: Assertion

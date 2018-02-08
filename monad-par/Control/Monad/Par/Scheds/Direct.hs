@@ -677,10 +677,13 @@ steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
                r <- modifyHotVar idle $ \is -> (m:is, is)
                if length r == numCapabilities - 1
                   then do
-                     when dbg$ printf " [%d]  | initiating shutdown\n" my_no
+                     when dbg$ printf " [%d]  | waking up all threads\n" my_no
+                     writeHotVarRaw idle []
                      mapM_ (\vr -> putMVar vr True) r
                   else do
-                    done <- takeMVar m
+                    (Session _ finRef):_ <- readIORef $ sessions mysched
+                    fin <- readIORef finRef
+                    done <- if fin then pure True else takeMVar m
                     if done
                        then do
                          when dbg$ printf " [%d]  | shutting down\n" my_no
