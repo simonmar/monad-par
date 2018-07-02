@@ -26,7 +26,7 @@ module Control.Monad.Par.Scheds.Direct (
     new, get, put_, fork,
     newFull, newFull_, put,
     spawn, spawn_, spawnP,
-    spawn1_
+    spawn1_, fixPar, FixParException (..)
 --   runParAsync, runParAsyncHelper,
 --   yield,
  ) where
@@ -45,7 +45,8 @@ import qualified       Control.Monad.Par.Class  as PC
 import qualified       Control.Monad.Par.Unsafe as UN
 import                 Control.Monad.Par.Scheds.DirectInternal
                        (Par(..), Sched(..), HotVar, SessionID, Session(Session),
-                        newHotVar, readHotVar, modifyHotVar, modifyHotVar_, writeHotVarRaw)
+                        newHotVar, readHotVar, modifyHotVar, modifyHotVar_,
+                        writeHotVarRaw, fixPar, FixParException (..))
 #ifdef NEW_GENERIC
 import qualified       Control.Par.Class as PN
 import qualified       Control.Par.Class.Unsafe as PU

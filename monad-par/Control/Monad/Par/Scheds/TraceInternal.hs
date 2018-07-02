@@ -14,7 +14,7 @@ module Control.Monad.Par.Scheds.TraceInternal (
    runPar, runParIO, runParAsync,
    -- runParAsyncHelper,
    new, newFull, newFull_, get, put_, put,
-   pollIVar, yield,
+   pollIVar, yield, fixPar, FixParException (..)
  ) where
 
 
@@ -22,9 +22,13 @@ import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
+import GHC.IO (unsafeDupableInterleaveIO)
 import Control.Concurrent hiding (yield)
 import GHC.Conc (numCapabilities)
 import Control.DeepSeq
+import Control.Monad.Fix (MonadFix (mfix))
+import Control.Exception (Exception, throwIO, BlockedIndefinitelyOnMVar (..),
+                          catch)
 -- import Text.Printf
 
 #if !MIN_VERSION_base(4,8,0)
@@ -46,6 +50,7 @@ data Trace = forall a . Get (IVar a) (a -> Trace)
            | Done
            | Yield Trace
            | forall a . LiftIO (IO a) (a -> Trace)
+           | forall a . FixPar (a -> Par a) (a -> Trace)
 
 -- | The main scheduler loop.
 sched :: Bool -> Sched -> Trace -> IO ()
@@ -55,6 +60,7 @@ sched _doSync queue t = loop t
     New a f -> do
       r <- newIORef a
       loop (f (IVar r))
+
     Get (IVar v) c -> do
       e <- readIORef v
       case e of
@@ -65,6 +71,7 @@ sched _doSync queue t = loop t
                         Full a   -> (Full a,      loop (c a))
                         Blocked cs -> (Blocked (c:cs), reschedule queue)
            r
+
     Put (IVar v) a t  -> do
       cs <- atomicModifyIORef v $ \e -> case e of
                Empty    -> (Full a, [])
@@ -72,9 +79,11 @@ sched _doSync queue t = loop t
                Blocked cs -> (Full a, cs)
       mapM_ (pushWork queue. ($a)) cs
       loop t
+
     Fork child parent -> do
          pushWork queue child
          loop parent
+
     Done ->
          if _doSync
          then reschedule queue
@@ -93,9 +102,21 @@ sched _doSync queue t = loop t
         -- This would also be a chance to steal and work from opposite ends of the queue.
         atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
         reschedule queue
+
     LiftIO io c -> do
         r <- io
         loop (c r)
+
+    FixPar f c -> do
+        mv <- newEmptyMVar
+        ans <- unsafeDupableInterleaveIO (readMVar mv
+                 `catch` \ ~BlockedIndefinitelyOnMVar ->
+                                    throwIO FixParException)
+        case f ans of
+          Par q -> loop $ q $ \a -> LiftIO (putMVar mv a) (const (c a))
+
+data FixParException = FixParException deriving Show
+instance Exception FixParException
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -181,6 +202,15 @@ instance Monad Par where
 instance Applicative Par where
    (<*>) = ap
    pure a = Par ($ a)
+
+instance MonadFix Par where
+   mfix = fixPar
+
+-- | Take the monadic fixpoint of a 'Par' computation. This is
+-- the definition of 'mfix' for 'Par'. Throws 'FixParException'
+-- if the result is demanded strictly within the computation.
+fixPar :: (a -> Par a) -> Par a
+fixPar f = Par $ FixPar f
 
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))

@@ -9,6 +9,7 @@ module Control.Monad.Par.Scheds.DirectInternal where
 import Control.Applicative
 import "mtl" Control.Monad.Cont as C
 import qualified "mtl" Control.Monad.Reader as RD
+import Control.Monad.IO.Class (liftIO)
 
 import qualified System.Random.MWC as Random
 
@@ -18,12 +19,17 @@ import Data.IORef
 import qualified Data.Set as S
 import Data.Word (Word64)
 import Data.Concurrent.Deque.Class (WSDeque)
+import Control.Monad.Fix (MonadFix (mfix))
+import GHC.IO (unsafeDupableInterleaveIO)
 
 #ifdef USE_CHASELEV
 #warning "Note: using Chase-Lev lockfree workstealing deques..."
 import Data.Concurrent.Deque.ChaseLev.DequeInstance
 import Data.Concurrent.Deque.ChaseLev as R
 #endif
+
+import Control.Exception (Exception, throwIO, BlockedIndefinitelyOnMVar (..),
+                          catch)
 
 -- Our monad stack looks like this:
 --      ---------
@@ -40,6 +46,23 @@ import Data.Concurrent.Deque.ChaseLev as R
 newtype Par a = Par { unPar :: C.ContT () ROnly a }
     deriving (Functor, Applicative, Monad, MonadCont, RD.MonadReader Sched)
 type ROnly = RD.ReaderT Sched IO
+
+instance MonadFix Par where
+  mfix = fixPar
+
+-- | Take the monadic fixpoint of a 'Par' computation. This is
+-- the definition of 'mfix' for 'Par'. Throws 'FixParException'
+-- if the result is demanded strictly within the computation.
+fixPar :: (a -> Par a) -> Par a
+fixPar f = Par $ ContT $ \ar -> RD.ReaderT $ \sched -> do
+  mv <- newEmptyMVar
+  ans <- unsafeDupableInterleaveIO (readMVar mv `catch`
+      \ ~BlockedIndefinitelyOnMVar -> throwIO FixParException)
+  flip RD.runReaderT sched $
+    runContT (unPar (f ans)) $ \a -> liftIO (putMVar mv a) >> ar a
+
+data FixParException = FixParException deriving Show
+instance Exception FixParException
 
 type SessionID = Word64
 
