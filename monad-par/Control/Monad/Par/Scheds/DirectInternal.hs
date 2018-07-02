@@ -54,6 +54,11 @@ instance MonadFix Par where
 -- the definition of 'mfix' for 'Par'. Throws 'FixParException'
 -- if the result is demanded strictly within the computation.
 fixPar :: (a -> Par a) -> Par a
+-- We do this IO-style, rather than ST-style, in order to get a
+-- consistent exception type. Using the ST-style mfix, a strict
+-- argument could lead us to *either* a <<loop>> exception *or*
+-- (if the wrong sort of computation gets re-run) a "multiple-put"
+-- error.
 fixPar f = Par $ ContT $ \ar -> RD.ReaderT $ \sched -> do
   mv <- newEmptyMVar
   ans <- unsafeDupableInterleaveIO (readMVar mv `catch`
