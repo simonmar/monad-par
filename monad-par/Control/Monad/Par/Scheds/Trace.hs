@@ -19,6 +19,8 @@ module Control.Monad.Par.Scheds.Trace (
 
 import qualified Control.Monad.Par.Class as PC
 import Control.Monad.Par.Scheds.TraceInternal
+  ( IVar, Par (..), Trace (..), get, new, put
+  , put_, newFull, newFull_, runCont, runPar, runParIO)
 import Control.DeepSeq
 import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
