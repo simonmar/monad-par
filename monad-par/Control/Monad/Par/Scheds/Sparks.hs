@@ -76,10 +76,7 @@ instance MonadFix Par where
    mfix = fixPar
 
 -- | Take the monadic fixpoint of a 'Par' computation. This is
--- the definition of 'mfix' for 'Par'. This throws
--- an exception if the result is demanded strictly within
--- the computation, but the implementation does not currently
--- guarantee precisely which exception that will be.
+-- the definition of 'mfix' for 'Par'.
 fixPar :: (a -> Par a) -> Par a
 fixPar f =
   let fr = f (case fr of Done x -> x)

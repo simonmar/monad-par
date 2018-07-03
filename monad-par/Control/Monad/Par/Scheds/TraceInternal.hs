@@ -22,7 +22,11 @@ import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
-import GHC.IO (unsafeDupableInterleaveIO)
+#if MIN_VERSION_base(4,4,0)
+import GHC.IO.Unsafe (unsafeDupableInterleaveIO)
+#else
+import GHC.IO.Unsafe (unsafeInterleaveIO)
+#endif
 import Control.Concurrent hiding (yield)
 import GHC.Conc (numCapabilities)
 import Control.DeepSeq
@@ -208,6 +212,11 @@ fixPar f = Par $ \ c ->
              `catch` \ ~BlockedIndefinitelyOnMVar -> throwIO FixParException)
     case f ans of
       Par q -> pure $ q $ \a -> LiftIO (putMVar mv a) (\ ~() -> c a)) id
+
+#if !MIN_VERSION_base(4,4,0)
+unsafeDupableInterleaveIO :: IO a -> IO a
+unsafeDupableInterleaveIO = unsafeInterleaveIO
+#endif
 
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))

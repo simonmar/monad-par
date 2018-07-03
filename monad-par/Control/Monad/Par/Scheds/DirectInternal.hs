@@ -20,7 +20,11 @@ import qualified Data.Set as S
 import Data.Word (Word64)
 import Data.Concurrent.Deque.Class (WSDeque)
 import Control.Monad.Fix (MonadFix (mfix))
-import GHC.IO (unsafeDupableInterleaveIO)
+#if MIN_VERSION_base(4,4,0)
+import GHC.IO.Unsafe (unsafeDupableInterleaveIO)
+#else
+import GHC.IO.Unsafe (unsafeInterleaveIO)
+#endif
 
 #ifdef USE_CHASELEV
 #warning "Note: using Chase-Lev lockfree workstealing deques..."
@@ -65,6 +69,11 @@ fixPar f = Par $ ContT $ \ar -> RD.ReaderT $ \sched -> do
       \ ~BlockedIndefinitelyOnMVar -> throwIO FixParException)
   flip RD.runReaderT sched $
     runContT (unPar (f ans)) $ \a -> liftIO (putMVar mv a) >> ar a
+
+#if !MIN_VERSION_base(4,4,0)
+unsafeDupableInterleaveIO :: IO a -> IO a
+unsafeDupableInterleaveIO = unsafeInterleaveIO
+#endif
 
 data FixParException = FixParException deriving Show
 instance Exception FixParException
