@@ -108,8 +108,8 @@ modifyHotVar  = atomicModifyIORef
 modifyHotVar_ v fn = atomicModifyIORef v (\a -> (fn a, ()))
 readHotVar    = readIORef
 writeHotVar   = writeIORef
-instance Show (IORef a) where
-  show _ref = "<ioref>"
+--instance Show (IORef a) where
+--  show _ref = "<ioref>"
 
 writeHotVarRaw :: HotVar a -> a -> IO ()
 -- hotVarTransaction = id
@@ -128,8 +128,8 @@ modifyHotVar  v fn = modifyMVar  v (return . fn)
 modifyHotVar_ v fn = modifyMVar_ v (return . fn)
 readHotVar    = readMVar
 writeHotVar v x = do swapMVar v x; return ()
-instance Show (MVar a) where
-  show _ref = "<mvar>"
+--instance Show (MVar a) where
+--  show _ref = "<mvar>"
 
 -- hotVarTransaction = id
 -- We could in theory do this by taking the mvar to grab the lock.
@@ -151,8 +151,8 @@ modifyHotVar  tv fn = atomically (do x <- readTVar tv
 modifyHotVar_ tv fn = atomically (do x <- readTVar tv; writeTVar tv (fn x))
 readHotVar x = atomically $ readTVar x
 writeHotVar v x = atomically $ writeTVar v x
-instance Show (TVar a) where
-  show ref = "<tvar>"
+--instance Show (TVar a) where
+--  show ref = "<tvar>"
 
 hotVarTransaction = atomically
 readHotVarRaw  = readTVar
