@@ -14,7 +14,7 @@ module Control.Monad.Par.Scheds.TraceInternal (
    runPar, runParIO, runParAsync,
    -- runParAsyncHelper,
    new, newFull, newFull_, get, put_, put,
-   pollIVar, yield,
+   pollIVar, yield, fixPar, FixParException (..)
  ) where
 
 
@@ -22,9 +22,17 @@ import Control.Monad as M hiding (mapM, sequence, join)
 import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
+#if MIN_VERSION_base(4,4,0)
+import GHC.IO.Unsafe (unsafeDupableInterleaveIO)
+#else
+import GHC.IO.Unsafe (unsafeInterleaveIO)
+#endif
 import Control.Concurrent hiding (yield)
 import GHC.Conc (numCapabilities)
 import Control.DeepSeq
+import Control.Monad.Fix (MonadFix (mfix))
+import Control.Exception (Exception, throwIO, BlockedIndefinitelyOnMVar (..),
+                          catch)
 -- import Text.Printf
 
 #if !MIN_VERSION_base(4,8,0)
@@ -96,6 +104,9 @@ sched _doSync queue t = loop t
     LiftIO io c -> do
         r <- io
         loop (c r)
+
+data FixParException = FixParException deriving Show
+instance Exception FixParException
 
 -- | Process the next item on the work queue or, failing that, go into
 --   work-stealing mode.
@@ -181,6 +192,31 @@ instance Monad Par where
 instance Applicative Par where
    (<*>) = ap
    pure a = Par ($ a)
+
+instance MonadFix Par where
+   mfix = fixPar
+
+-- | Take the monadic fixpoint of a 'Par' computation. This is
+-- the definition of 'mfix' for 'Par'. Throws 'FixParException'
+-- if the result is demanded strictly within the computation.
+fixPar :: (a -> Par a) -> Par a
+-- We do this IO-style, rather than ST-style, in order to get a
+-- consistent exception type. Using the ST-style mfix, a strict
+-- argument could lead us to *either* a <<loop>> exception *or*
+-- (if the wrong sort of computation gets re-run) a "multiple-put"
+-- error.
+fixPar f = Par $ \ c ->
+  LiftIO (do
+    mv <- newEmptyMVar
+    ans <- unsafeDupableInterleaveIO (readMVar mv
+             `catch` \ ~BlockedIndefinitelyOnMVar -> throwIO FixParException)
+    case f ans of
+      Par q -> pure $ q $ \a -> LiftIO (putMVar mv a) (\ ~() -> c a)) id
+
+#if !MIN_VERSION_base(4,4,0)
+unsafeDupableInterleaveIO :: IO a -> IO a
+unsafeDupableInterleaveIO = unsafeInterleaveIO
+#endif
 
 newtype IVar a = IVar (IORef (IVarContents a))
 -- data IVar a = IVar (IORef (IVarContents a))

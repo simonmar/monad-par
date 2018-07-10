@@ -8,7 +8,7 @@ module Control.Monad.Par.Scheds.Sparks
  (
    Par(..), Future(..),
    runPar, 
-   get, spawn, spawn_, spawnP
+   get, spawn, spawn_, spawnP, fixPar
  ) 
 where 
 
@@ -17,6 +17,7 @@ import Control.Monad
 import Control.DeepSeq
 import Control.Parallel
 import qualified Control.Monad.Par.Class as PC
+import Control.Monad.Fix (MonadFix (mfix))
 -- import Control.Parallel.Strategies (rpar)
 
 #ifdef NEW_GENERIC
@@ -70,6 +71,16 @@ instance Functor Par where
 instance Applicative Par where
    (<*>) = ap
    pure  = Done
+
+instance MonadFix Par where
+   mfix = fixPar
+
+-- | Take the monadic fixpoint of a 'Par' computation. This is
+-- the definition of 'mfix' for 'Par'.
+fixPar :: (a -> Par a) -> Par a
+fixPar f =
+  let fr = f (case fr of Done x -> x)
+  in fr
 
 #ifdef NEW_GENERIC
 doio :: IO a -> Par a

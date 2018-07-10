@@ -19,10 +19,11 @@ import qualified Control.Monad.Par.Scheds.TraceInternal as Internal
 import Control.Monad.Par.Class
 import Control.Applicative
 import Control.Monad.Trans (liftIO, MonadIO)
+import Control.Monad.Fix (MonadFix)
 
 -- | A wrapper around an underlying Par type which allows IO.
 newtype ParIO a = ParIO (Par a)
-  deriving (Functor, Applicative, Monad, ParFuture IVar, ParIVar IVar)
+  deriving (Functor, Applicative, Monad, ParFuture IVar, ParIVar IVar, MonadFix)
 
 -- | A run method which allows actual IO to occur on top of the Par
 --   monad.  Of course this means that all the normal problems of
