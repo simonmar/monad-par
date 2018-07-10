@@ -281,7 +281,14 @@ new  = Par $ New Empty
 
 -- | Creates a new @IVar@ that contains a value
 newFull :: NFData a => a -> Par (IVar a)
-newFull x = deepseq x (Par $ New (Full x))
+-- What are we doing here? We're manually raising the arity
+-- of newFull from 2 to 3, which seems like it's probably what
+-- we want most of the time. Notably, fmapping over the result
+-- gives really awful-looking Core if we don't do this.
+-- Regardless, I think we logically want to force the
+-- value when it's installed in the IVar rather than
+-- when we create the action to install it in the IVar.
+newFull x = Par $ \c -> x `deepseq` New (Full x) c
 
 -- | Creates a new @IVar@ that contains a value (head-strict only)
 newFull_ :: a -> Par (IVar a)
@@ -309,7 +316,11 @@ put_ v !a = Par $ \c -> Put v a (c ())
 -- Sometimes partial strictness is more appropriate: see 'put_'.
 --
 put :: NFData a => IVar a -> a -> Par ()
-put v a = deepseq a (Par $ \c -> Put v a (c ()))
+-- Manually raise the arity, which seems likely to be what
+-- we want most of the time. We really want to force the
+-- value when it's installed in the IVar, not when we
+-- create the Par action to install it in the IVar.
+put v a = Par $ \c -> a `deepseq` Put v a (c ())
 
 -- | Allows other parallel computations to progress.  (should not be
 -- necessary in most cases).
