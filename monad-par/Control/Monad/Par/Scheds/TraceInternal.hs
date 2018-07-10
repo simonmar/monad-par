@@ -189,9 +189,8 @@ newtype IVar a = IVar (IORef (IVarContents a))
 instance Eq (IVar a) where
   (IVar r1) == (IVar r2) = r1 == r2
 
--- Forcing evaluation of a IVar is fruitless.
 instance NFData (IVar a) where
-  rnf _ = ()
+  rnf !_ = ()
 
 
 -- From outside the Par computation we can peek.  But this is nondeterministic.

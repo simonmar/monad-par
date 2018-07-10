@@ -245,7 +245,7 @@ rand ref = Random.uniformR (0, numCapabilities-1) =<< readHotVar ref
 --------------------------------------------------------------------------------
 
 instance NFData (IVar a) where
-  rnf _ = ()
+  rnf !_ = ()
 
 {-# NOINLINE runPar #-}
 runPar = unsafePerformIO . runParIO
