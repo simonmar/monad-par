@@ -1,15 +1,12 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
              ExistentialQuantification, CPP, ScopedTypeVariables,
-             TypeSynonymInstances, MultiParamTypeClasses,
+             MultiParamTypeClasses,
              GeneralizedNewtypeDeriving, PackageImports,
              ParallelListComp #-}
+{-# LANGUAGE Trustworthy #-}
 
 
 {- OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind -}
-
--- {- LANGUAGE Trustworthy -}
--- TODO: Before declaring this module TRUSTWORTHY/SAFE, we need to
--- make the IVar type abstract.
 
 {-# LANGUAGE TypeFamilies #-}
 
@@ -18,17 +15,13 @@
 -- trace data structure).
 
 module Control.Monad.Par.Scheds.Direct (
-   Sched(..),
-   Par, -- abstract: Constructor not exported.
-   IVar(..), IVarContents(..),
---    sched,
-    runPar, runParIO,
-    new, get, put_, fork,
-    newFull, newFull_, put,
-    spawn, spawn_, spawnP,
-    spawn1_
---   runParAsync, runParAsyncHelper,
---   yield,
+   Par  -- abstract: Constructor not exported.
+ , IVar
+ , runPar, runParIO
+ , new, get, put_, fork
+ , newFull, newFull_, put
+ , spawn, spawn_, spawnP
+ , spawn1_
  ) where
 
 import Control.Applicative
@@ -458,7 +451,7 @@ get (IVar vr) =  do
        case e of
           Full a -> return a
           _ -> do
-            sch <- RD.ask
+            sch <- Par RD.ask
 #  ifdef DEBUG_DIRECT
             sn <- io$ makeStableName vr  -- Should probably do the MutVar inside...
             let resched = trace (" ["++ show (no sch) ++ "]  - Rescheduling on unavailable ivar "++show (hashStableName sn)++"!")
@@ -490,7 +483,7 @@ unsafePeek (IVar v) = do
 -- | @put_@ is a version of @put@ that is head-strict rather than fully-strict.
 --   In this scheduler, puts immediately execute woken work in the current thread.
 put_ (IVar vr) !content = do
-   sched <- RD.ask
+   sched <- Par RD.ask
    ks <- io$ do
       ks <- atomicModifyIORef vr $ \e -> case e of
                Empty      -> (Full content, [])
@@ -512,7 +505,7 @@ put_ (IVar vr) !content = do
 {-# INLINE unsafeTryPut #-}
 unsafeTryPut (IVar vr) !content = do
    -- Head strict rather than fully strict.
-   sched <- RD.ask
+   sched <- Par RD.ask
    (ks,res) <- io$ do
       pr <- atomicModifyIORef vr $ \e -> case e of
                    Empty      -> (Full content, ([], content))
@@ -577,7 +570,7 @@ fork task =
   -- fork rather than the task argument for stealing:
   case _FORKPARENT of
     True -> do
-      sched <- RD.ask
+      sched <- Par RD.ask
       callCC$ \parent -> do
          let wrapped = parent ()
          io$ pushWork sched wrapped
@@ -589,12 +582,12 @@ fork task =
          io$ printf " !!! ERROR: Should never reach this point #1\n"
 
       when dbg$ do
-       sched2 <- RD.ask
+       sched2 <- Par RD.ask
        io$ printf "  -  called parent continuation... was on worker [%d] now on worker [%d]\n" (no sched) (no sched2)
        return ()
 
     False -> do
-      sch <- RD.ask
+      sch <- Par RD.ask
       when dbg$ io$ printf " [%d] forking task...\n" (no sch)
       io$ pushWork sch task
 
