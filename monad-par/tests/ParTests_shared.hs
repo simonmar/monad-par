@@ -109,12 +109,15 @@ case_test_diamond :: Assertion
 case_test_diamond = 9 @=? (m :: Int)
  where 
   m = runPar $ do
-      [a,b,c,d] <- sequence [new,new,new,new]
-      fork $ do x <- get a; put b (x+1)
-      fork $ do x <- get a; put c (x+2)
-      fork $ do x <- get b; y <- get c; put d (x+y)
-      fork $ do put a 3
-      get d
+      abcd <- sequence [new,new,new,new]
+      case abcd of
+          [a,b,c,d] -> do
+              fork $ do x <- get a; put b (x+1)
+              fork $ do x <- get a; put c (x+2)
+              fork $ do x <- get b; y <- get c; put d (x+y)
+              fork $ do put a 3
+              get d
+          _ -> error "Oops"
 
 -- | Violate IVar single-assignment:
 --
