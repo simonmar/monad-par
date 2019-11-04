@@ -1,5 +1,5 @@
 {-# LANGUAGE RankNTypes, NamedFieldPuns, BangPatterns,
-             ExistentialQuantification, CPP #-}
+             ExistentialQuantification, CPP, DeriveDataTypeable #-}
 {-# OPTIONS_GHC -Wall -fno-warn-name-shadowing -fno-warn-unused-do-bind #-}
 
 -- | This module exposes the internals of the @Par@ monad so that you
@@ -17,15 +17,19 @@ module Control.Monad.Par.Scheds.TraceInternal (
    pollIVar, yield, fixPar, FixParException (..)
  ) where
 
+#if MIN_VERSION_base(4,6,0)
+import Prelude hiding (mapM, sequence, head,tail)
+#else
+import Prelude hiding (mapM, sequence, head,tail,catch)
+#endif
 
 import Control.Monad as M hiding (mapM, sequence, join)
-import Prelude hiding (mapM, sequence, head,tail)
 import Data.IORef
 import System.IO.Unsafe
-#if MIN_VERSION_base(4,4,0)
+#if MIN_VERSION_base(4,9,0)
 import GHC.IO.Unsafe (unsafeDupableInterleaveIO)
 #else
-import GHC.IO.Unsafe (unsafeInterleaveIO)
+import System.IO.Unsafe (unsafeInterleaveIO)
 #endif
 import Control.Concurrent hiding (yield)
 import GHC.Conc (numCapabilities)
@@ -33,6 +37,7 @@ import Control.DeepSeq
 import Control.Monad.Fix (MonadFix (mfix))
 import Control.Exception (Exception, throwIO, BlockedIndefinitelyOnMVar (..),
                           catch)
+import Data.Typeable (Typeable)
 -- import Text.Printf
 
 #if !MIN_VERSION_base(4,8,0)
@@ -105,7 +110,7 @@ sched _doSync queue t = loop t
         r <- io
         loop (c r)
 
-data FixParException = FixParException deriving Show
+data FixParException = FixParException deriving (Show, Typeable)
 instance Exception FixParException
 
 -- | Process the next item on the work queue or, failing that, go into
@@ -213,7 +218,7 @@ fixPar f = Par $ \ c ->
     case f ans of
       Par q -> pure $ q $ \a -> LiftIO (putMVar mv a) (\ ~() -> c a)) id
 
-#if !MIN_VERSION_base(4,4,0)
+#if !MIN_VERSION_base(4,9,0)
 unsafeDupableInterleaveIO :: IO a -> IO a
 unsafeDupableInterleaveIO = unsafeInterleaveIO
 #endif
