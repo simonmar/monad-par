@@ -165,7 +165,7 @@ Test-Suite test-monad-par
     hs-source-dirs: tests/ ./    
     -- Run tests in parallel:
     ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4    
-    build-depends: base >= 4 && < 5
+    build-depends: base >= 4.3 && < 5
                  , abstract-par, monad-par-extras
                  , array   >= 0.3
                  , deepseq >= 1.2
