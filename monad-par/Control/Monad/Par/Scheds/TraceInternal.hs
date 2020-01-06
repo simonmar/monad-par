@@ -104,7 +104,7 @@ sched _doSync queue t = loop t
         let Sched { workpool } = queue
         -- TODO: Perhaps consider Data.Seq here.
         -- This would also be a chance to steal and work from opposite ends of the queue.
-        atomicModifyIORef workpool $ \ts -> (ts++[parent], ())
+        atomicModifyIORef workpool $ \(ts,wts) -> ((ts,parent:wts), ())
         reschedule queue
     LiftIO io c -> do
         r <- io
@@ -119,8 +119,10 @@ reschedule :: Sched -> IO ()
 reschedule queue@Sched{ workpool } = do
   e <- atomicModifyIORef workpool $ \ts ->
          case ts of
-           []      -> ([], Nothing)
-           (t:ts') -> (ts', Just t)
+           ([],wts)     -> case reverse wts of
+                          [] -> (([],[]), Nothing)
+                          t:ts' -> ((ts',[]), Just t)
+           (t:ts',wts)  -> ((ts',wts), Just t)
   case e of
     Nothing -> steal queue
     Just t  -> sched True queue t
@@ -156,8 +158,10 @@ steal q@Sched{ idle, scheds, no=my_no } = do
       | otherwise     = do
          r <- atomicModifyIORef (workpool x) $ \ ts ->
                  case ts of
-                    []     -> ([], Nothing)
-                    (x:xs) -> (xs, Just x)
+                    ([],wxs) -> case reverse wxs of
+                                  [] -> (([],[]), Nothing)
+                                  x:xs -> ((xs,[]), Just x)
+                    (x:xs,wxs) -> ((xs,wxs), Just x)
          case r of
            Just t  -> do
               -- printf "cpu %d got work from cpu %d\n" my_no (no x)
@@ -167,7 +171,7 @@ steal q@Sched{ idle, scheds, no=my_no } = do
 -- | If any worker is idle, wake one up and give it work to do.
 pushWork :: Sched -> Trace -> IO ()
 pushWork Sched { workpool, idle } t = do
-  atomicModifyIORef workpool $ \ts -> (t:ts, ())
+  atomicModifyIORef workpool $ \(ts,wts) -> ((ts,t:wts), ())
   idles <- readIORef idle
   when (not (null idles)) $ do
     r <- atomicModifyIORef idle (\is -> case is of
@@ -177,7 +181,7 @@ pushWork Sched { workpool, idle } t = do
 
 data Sched = Sched
     { no       :: {-# UNPACK #-} !Int,
-      workpool :: IORef [Trace],
+      workpool :: IORef ([Trace],[Trace]),
       idle     :: IORef [MVar Bool],
       scheds   :: [Sched] -- Global list of all per-thread workers.
     }
@@ -249,7 +253,7 @@ data IVarContents a = Full a | Empty | Blocked [a -> Trace]
 {-# INLINE runPar_internal #-}
 runPar_internal :: Bool -> Par a -> IO a
 runPar_internal _doSync x = do
-   workpools <- replicateM numCapabilities $ newIORef []
+   workpools <- replicateM numCapabilities $ newIORef ([],[])
    idle <- newIORef []
    let states = [ Sched { no=x, workpool=wp, idle, scheds=states }
                 | (x,wp) <- zip [0..] workpools ]
