@@ -83,10 +83,10 @@ sched _doSync queue t = loop t
                Empty    -> (Full a, [])
                Full _   -> error "multiple put"
                Blocked cs -> (Full a, cs)
-      mapM_ (pushWork queue. ($a)) cs
+      mapM_ (pushWork True queue. ($a)) cs
       loop t
     Fork child parent -> do
-         pushWork queue child
+         pushWork False queue child
          loop parent
     Done ->
          if _doSync
@@ -169,9 +169,10 @@ steal q@Sched{ idle, scheds, no=my_no } = do
            Nothing -> go xs
 
 -- | If any worker is idle, wake one up and give it work to do.
-pushWork :: Sched -> Trace -> IO ()
-pushWork Sched { workpool, idle } t = do
-  atomicModifyIORef workpool $ \(ts,wts) -> ((ts,t:wts), ())
+pushWork :: Bool -> Sched -> Trace -> IO ()
+pushWork toBeginning Sched { workpool, idle } t = do
+  if toBeginning then atomicModifyIORef workpool $ \(ts,wts) -> ((t:ts,wts), ())
+             else atomicModifyIORef workpool $ \(ts,wts) -> ((ts,t:wts), ())
   idles <- readIORef idle
   when (not (null idles)) $ do
     r <- atomicModifyIORef idle (\is -> case is of
