@@ -171,10 +171,8 @@ Test-Suite test-monad-par
                  , deepseq >= 1.2
                  , time
                  , QuickCheck, HUnit
-                 , test-framework-hunit
-                 , test-framework-quickcheck2 >= 0.3 
-                 , test-framework, test-framework-th
-
+                 , tasty, tasty-hunit
+                 , tasty-quickcheck, tasty-th
                  , abstract-deque >= 0.1.4
                  , mwc-random >= 0.11
                  , mtl >= 2.0.1.0

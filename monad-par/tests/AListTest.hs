@@ -1,10 +1,9 @@
 
 module AListTest ( tests ) where
 
-import Test.Framework (defaultMain, testGroup)
-import Test.Framework.Providers.HUnit
-import Test.Framework.Providers.QuickCheck2 (testProperty)
-import Test.HUnit
+import Test.Tasty (defaultMain, testGroup)
+import Test.Tasty.HUnit
+import Test.Tasty.QuickCheck (testProperty)
 import Test.QuickCheck
 
 import Control.Monad.Par.AList as A
@@ -53,7 +52,7 @@ showDbg (AList  l)   = show l
 
 --------------------------------------------------------------------------------
 
-tests = [
+tests = testGroup "AList Tests" [
   -- testGroup "AList HUnit Tests" (hUnitTestToTests alist_tests),
 
   testGroup "AList HUnit Tests" [

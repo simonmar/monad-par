@@ -5,11 +5,10 @@ import GHC.Conc (numCapabilities)
 import Control.Exception (evaluate)
 -- import System.IO.Unsafe
 -- import Data.IORef
-import Test.HUnit        (Assertion, (@=?))
-import Test.Framework.TH (testGroupGenerator)
+import Test.Tasty
+import Test.Tasty.HUnit
+import Test.Tasty.TH     (testGroupGenerator)
 -- import Test.Framework (defaultMain, testGroup)
-import qualified Test.Framework as TF
-import           Test.Framework.Providers.HUnit 
 -- import Test.Framework.Providers.QuickCheck2 (testProperty)
 import System.Timeout (timeout)
 
@@ -201,6 +200,6 @@ disabled_case_async_test1 =
 
 ------------------------------------------------------------
 
-tests :: [TF.Test]
-tests = [ $(testGroupGenerator) ]
+tests :: TestTree
+tests = $(testGroupGenerator)
 
