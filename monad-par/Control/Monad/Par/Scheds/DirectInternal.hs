@@ -1,7 +1,7 @@
 {-# LANGUAGE PackageImports, CPP, GeneralizedNewtypeDeriving,
              DeriveDataTypeable #-}
 
--- | Type definiton and some helpers.  This is used mainly by
+-- | Type definition and some helpers.  This is used mainly by
 -- Direct.hs but can also be used by other modules that want access to
 -- the internals of the scheduler (i.e. the private `Par` type constructor).
 

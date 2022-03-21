@@ -10,7 +10,7 @@ import Tree
 import System.Random
 import Data.List
 
--- First arg decaffinates game
+-- First arg decaffeinates game
 prog :: Int -> String
 prog decaf = showMove (head game)
 	       --"OXO\n" ++

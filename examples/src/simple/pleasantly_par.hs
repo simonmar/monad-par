@@ -1,6 +1,6 @@
 {-# LANGUAGE BangPatterns, OverloadedStrings #-}
 
--- Embarassingly parallel.
+-- Embarrassingly parallel.
 -- If this doesn't get a speedup nothing will!
 
 -- Note: This program is an example of a dependence on "put" being
@@ -39,7 +39,7 @@ work offset (!i) (!n) = work offset (i-1) (n + 1 / fromIntegral (i+offset))
 runit :: Int -> Int -> IO ()
 runit total partitions = evaluate $ runPar $ 
    do 
-      prnt$ "Running embarassingly parallel benchmark."
+      prnt$ "Running embarrassingly parallel benchmark."
       prnt$ "Running "++ show total ++" total iterations"
       prnt$ "Spawning "++show partitions++" tasks..."
       results <- mapM (spawn_ . kernel) [0 .. partitions-1] 

@@ -27,7 +27,7 @@ _waste_time n = loop n 1.00111
     loop !n !x             = loop (n-1) (x + x * 0.5011)
 
 -- This version watches the clock so it uses a constant amount of time
--- regadless of compile/interpret mode an opt lvl.
+-- regardless of compile/interpret mode an opt lvl.
 waste_time :: Double -> IO Double
 waste_time seconds = 
     do strt <- getCurrentTime

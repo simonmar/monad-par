@@ -27,7 +27,7 @@ newtype ParIO a = ParIO (Par a)
 
 -- | A run method which allows actual IO to occur on top of the Par
 --   monad.  Of course this means that all the normal problems of
---   parallel IO computations are present, including nondeterminsm.
+--   parallel IO computations are present, including nondeterminism.
 --
 --   A simple example program:
 --
