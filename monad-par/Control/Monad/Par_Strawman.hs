@@ -90,7 +90,7 @@ spawn_ p = do
   return r
 
 -- | Like 'fork', but returns an @IVar@ that can be used to query the
--- result of the forked computataion.
+-- result of the forked computation.
 spawn :: NFData a => Par a -> Par (IVar a)
 spawn p = do
   r <- new

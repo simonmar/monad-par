@@ -228,7 +228,7 @@ pushWork Sched { workpool, idle, no } task = do
 
 tryWakeIdle :: HotVar [MVar Bool] -> IO ()
 tryWakeIdle idle = do
--- NOTE: I worry about having the idle var hammmered by all threads on their spawn-path:
+-- NOTE: I worry about having the idle var hammered by all threads on their spawn-path:
   -- If any worker is idle, wake one up and give it work to do.
   idles <- readHotVar idle -- Optimistically do a normal read first.
   when (not (Prelude.null idles)) $ do
@@ -658,7 +658,7 @@ rescheduleR cnt kont = do
 -- | Attempt to steal work or, failing that, give up and go idle.
 --
 --   The current policy is to do a burst of of N tries without
---   yielding or pausing inbetween.
+--   yielding or pausing in between.
 steal :: Sched -> IO ()
 steal mysched@Sched{ idle, scheds, rng, no=my_no } = do
   when (dbglvl>=2)$ do tid <- myThreadId

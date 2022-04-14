@@ -33,7 +33,7 @@ import Debug.Trace
 -- Types
 --------------------------------------------------------------------------------
 
--- Co-routines built on IVars communitate by passing IVars back and forth.  For the
+-- Co-routines built on IVars communicate by passing IVars back and forth.  For the
 -- parallel engine abstraction, we communication is between parent and child
 -- threads. Each time an engine checks in with its parent it gets both more fuel and
 -- another IVar to use for the next round.
@@ -76,7 +76,7 @@ data EngCheckin = Finished [OutStanding]
                  -- fuel.  Still return any children.
 
 -- | Outstanding threads, on the other hand, may or may not be finished with their
--- work; we find out when they checkin.
+-- work; we find out when they check in.
 newtype OutStanding = OutStanding (P.IVar EngCheckin)
 
 -- | An engine result may or may not be ready yet.  Either way it returns handles for
