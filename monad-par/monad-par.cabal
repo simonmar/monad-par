@@ -61,7 +61,7 @@ Copyright:           (c) Simon Marlow 2011
 Stability:           Experimental
 Category:            Control,Parallelism,Monads
 Build-type:          Simple
-Cabal-version:       >=1.8
+Cabal-version:       >=1.10
 
 extra-source-files:
      tests/AListTest.hs
@@ -91,6 +91,7 @@ Source-repository head
   location: https://github.com/simonmar/monad-par
 
 Library
+  Default-Language: Haskell98
   Exposed-modules: 
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
@@ -160,6 +161,7 @@ Library
 
 
 Test-Suite test-monad-par
+    Default-Language: Haskell98
     type:       exitcode-stdio-1.0
     main-is:    tests/AllTests.hs
     hs-source-dirs: tests/ ./    
