@@ -5,9 +5,9 @@ module AsyncTest (tests, manual_main) where
 import Control.Exception 
 import Control.Monad.Par.Scheds.Trace
 import Control.Monad.Par.Scheds.TraceInternal (Par(..),Trace(Fork),runCont,runParAsync)
-import Test.Framework.TH (testGroupGenerator)
-import Test.Framework (defaultMain, testGroup)
-import Test.Framework.Providers.HUnit
+import Test.Tasty.TH (testGroupGenerator)
+import Test.Tasty (defaultMain, testGroup)
+import Test.Tasty.HUnit
 
 import TestHelpers
 
