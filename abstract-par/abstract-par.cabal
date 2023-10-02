@@ -34,7 +34,7 @@ extra-source-files:
 
 
 Library
-  Exposed-modules: 
+  Exposed-modules:
            -- A class generalizing different levels of monad-par functionality:
            Control.Monad.Par.Class
 

@@ -5,8 +5,8 @@ Synopsis:            A library for parallel programming based on a monad
 
 -- Version history:
 --  0.1      : First release
---  0.1.0.1  : 
---  0.1.0.2  : 
+--  0.1.0.1  :
+--  0.1.0.2  :
 --  0.1.1.0  : module reorganization, moving ParClass
 
 --  0.2      : Bumped for new class-based API
@@ -14,7 +14,7 @@ Synopsis:            A library for parallel programming based on a monad
 --  0.2.2    : incorporation of real deque package
 --  0.2.3    : Restricted module export for 0.2 release.
 
---  0.3      : Factored/reorganized modules and packages.  
+--  0.3      : Factored/reorganized modules and packages.
 --             *This* package is the original, core monad-par.
 --  0.3.1    : fix for ghc 7.6.1, expose Par.IO
 --  0.3.4    : switch to direct scheduler as default (only 1-level nesting allowed)
@@ -29,7 +29,7 @@ Synopsis:            A library for parallel programming based on a monad
 Description:
   The 'Par' monad offers a simple API for parallel programming.  The
   library works for parallelising both pure and @IO@ computations,
-  although only the pure version is deterministic.  The default 
+  although only the pure version is deterministic.  The default
   implementation provides a work-stealing scheduler and supports
   forking tasks that are much lighter weight than IO-threads.
   .
@@ -92,7 +92,7 @@ Source-repository head
 
 Library
   Default-Language: Haskell98
-  Exposed-modules: 
+  Exposed-modules:
                  -- The classic, simple monad-par interface:
                    Control.Monad.Par
                  , Control.Monad.Par.IO
@@ -111,7 +111,7 @@ Library
 
   Build-depends: base >= 4.9 && < 5
                -- This provides the interface which monad-par implements:
-               , abstract-par 
+               , abstract-par
                , abstract-deque >= 0.1.4
                -- Extras such as parMap, RNG, State
                , monad-par-extras >= 0.3
@@ -148,7 +148,7 @@ Library
                Control.Monad.Par.Scheds.DirectInternal
 
                ------------------------------------------------------------
-               --                   Data Structures                      -- 
+               --                   Data Structures                      --
                ------------------------------------------------------------
 
                -- ILists are internal:
@@ -164,9 +164,9 @@ Test-Suite test-monad-par
     Default-Language: Haskell98
     type:       exitcode-stdio-1.0
     main-is:    tests/AllTests.hs
-    hs-source-dirs: tests/ ./    
+    hs-source-dirs: tests/ ./
     -- Run tests in parallel:
-    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4    
+    ghc-options: -O2 -threaded -rtsopts -with-rtsopts=-N4
     build-depends: base >= 4.3 && < 5
                  , abstract-par, monad-par-extras
                  , array   >= 0.3
