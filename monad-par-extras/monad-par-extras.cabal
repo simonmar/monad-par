@@ -4,7 +4,7 @@ Synopsis:            Combinators and extra features for Par monads
 
 
 -- Version history:
---  0.3      : Factored/reorganized modules.  This module is a spinoff of 
+--  0.3      : Factored/reorganized modules.  This module is a spinoff of
 --             the original monad-par
 --  0.3.2    : Relax depends.
 
@@ -27,8 +27,21 @@ Category:            Control,Parallelism,Monads
 Build-type:          Simple
 Cabal-version:       >=1.8
 
+tested-with:
+  GHC == 9.8.0
+  GHC == 9.6.3
+  GHC == 9.4.7
+  GHC == 9.2.8
+  GHC == 9.0.2
+  GHC == 8.10.7
+  GHC == 8.8.4
+  GHC == 8.6.5
+  GHC == 8.4.4
+  GHC == 8.2.2
+  GHC == 8.0.2
+
 Library
-  Exposed-modules: 
+  Exposed-modules:
                  -- A collection of combinators for common parallel
                  -- patterns and data structure traversals:
                  Control.Monad.Par.Combinator,
@@ -38,7 +51,7 @@ Library
 
                  -- State on top of Par is generally useful, but experimental
                  Control.Monad.Par.State,
- 
+
                  -- Deterministic RNG needs more testing.
                  Control.Monad.Par.RNG
 
