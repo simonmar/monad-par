@@ -1,0 +1,4 @@
+packages:
+  monad-par
+  monad-par-extras
+  abstract-par
