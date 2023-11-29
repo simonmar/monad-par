@@ -81,12 +81,11 @@
 
       * The wiki\/tutorial (<http://www.haskell.org/haskellwiki/Par_Monad:_A_Parallelism_Tutorial>)
 
-      * The original paper (<http://www.cs.indiana.edu/~rrnewton/papers/haskell2011_monad-par.pdf>)
+      * The original paper ( [S. Marlow,R. Newton,and S. P. Jones, "A Monad for Deterministic Parallelism,"in Proceedings of the Fourth ACM SIGPLAN Symposium on Haskell, Tokyo, Japan, ACM, 2011, pp. 71-82](http://simonmar.github.io/bib/papers/monad-par.pdf) )
 
-      * Tutorial slides (<http://community.haskell.org/~simonmar/slides/CUFP.pdf>)
+      * Tutorial slides (<https://www.cse.unt.edu/~tarau/teaching/parpro/papers/CUFP.pdf>)
 
-      * Other slides: (<http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>,
-                      <http://www.cs.indiana.edu/~rrnewton/talks/2011_HaskellSymposium_ParMonad.pdf>)
+      * Other slides: (<http://www.cs.ox.ac.uk/ralf.hinze/WG2.8/28/slides/simon.pdf>)
 
  -}
 
